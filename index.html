@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oncewise AI — Privacy Policy</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f2328; background: #fff; margin: 0; }
+  main { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; line-height: 1.65; }
+  h1 { font-size: 1.7rem; border-bottom: 1px solid #d8dee4; padding-bottom: .5rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid #d8dee4; padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  li { margin: .3rem 0; }
+  hr { border: 0; border-top: 1px solid #d8dee4; margin: 3rem 0; }
+  p { margin: .7rem 0; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Oncewise AI — Privacy Policy / 隐私政策</h1>
+
+<h2>English</h2>
+
+<p><strong>Oncewise AI Browser Extension — Privacy Policy</strong></p>
+<p>Effective date: 2026-09-28</p>
+
+<h3>Overview</h3>
+<p>Oncewise AI is a self-service browser automation extension. It turns web page operations you specify into automation rules ("constrained workflows") and runs them on the target pages you choose. The extension is local-first: your data is processed in your browser, and the extension developer does not collect, receive, or sell any of your data.</p>
+
+<h3>What the extension stores on your device</h3>
+<ul>
+  <li>Automation rules/workflows and their settings, kept in the extension's local storage (<code>chrome.storage</code>).</li>
+  <li>Import history entries for rule files you import (local files only).</li>
+  <li>Short-lived session data used to prevent duplicate submissions on the same business instance (business identifiers only, cleared when the browser session ends).</li>
+</ul>
+<p>Data read from web pages during a rule run is processed in memory to execute that workflow; it is not persisted by the extension beyond the rule definitions above.</p>
+
+<h3>Data transmission</h3>
+<p>The extension makes network requests to exactly one kind of destination, and only when you configure it:</p>
+<ul>
+  <li><strong>A sync server you configure.</strong> If you set up synchronization, the extension sends your rules/scripts and related configuration to the oncewise-ai-sync server URL you enter, authenticated with the space key you provide. That server is operated by you or whoever you trust with the URL. The extension developer operates no server in this loop and never sees your data.</li>
+</ul>
+<p>There is no analytics, telemetry, advertising, or tracking of any kind, and the extension contains no remotely hosted code.</p>
+
+<h3>Permissions and why they are needed</h3>
+<ul>
+  <li><code>storage</code> — persist your rules and settings locally.</li>
+  <li><code>scripting</code> and host permissions for all http/https sites — every rule targets a site that you choose. Because targets cannot be known at install time, the permission must be requested up front; in practice, content scripts are registered only for the origins that actually carry your rules, and are removed when the last rule for a site is deleted.</li>
+</ul>
+
+<h3>Retention and deletion</h3>
+<ul>
+  <li>Uninstalling the extension deletes all locally stored rules and settings.</li>
+  <li>Data previously synced to a sync server is governed by the operator of that server; remove it with that server's own means (or stop using it).</li>
+</ul>
+
+<h3>Changes</h3>
+<p>If this policy changes, the updated version will be published at the same URL with a new effective date.</p>
+
+<h3>Contact</h3>
+<p>zsy.evan@gmail.com</p>
+
+<hr>
+
+<h2>中文</h2>
+
+<p><strong>Oncewise AI 浏览器扩展 — 隐私政策</strong></p>
+<p>生效日期：2026-09-28</p>
+
+<h3>概述</h3>
+<p>Oncewise AI 是一个自助浏览器自动化扩展。它把你指定的网页操作固化为自动化规则（受约束工作流），并只在你选择的目标页面上运行。扩展以本地优先方式工作：数据在你的浏览器内处理，扩展开发者不收集、不接收、不出售你的任何数据。</p>
+
+<h3>扩展在设备上存储的内容</h3>
+<ul>
+  <li>自动化规则/工作流及其设置，保存在扩展本地存储（<code>chrome.storage</code>）中。</li>
+  <li>你导入的规则文件（仅本地文件）的导入记录。</li>
+  <li>用于防止同一业务实例重复提交的短期会话数据（仅业务标识，浏览器会话结束即清除）。</li>
+</ul>
+<p>规则运行期间从网页读取的数据仅在内存中用于执行该工作流；除上述规则定义外，扩展不会将其持久化。</p>
+
+<h3>数据传输</h3>
+<p>扩展只向一类目的地发起网络请求，且仅在你主动配置时发生：</p>
+<ul>
+  <li><strong>你配置的同步服务器。</strong> 若你启用同步，扩展会把你的规则/脚本及相关配置发送到你填写的 oncewise-ai-sync 服务器地址，并使用你提供的空间密钥认证。该服务器由你或你信任的地址运营者管理；扩展开发者在链路中不运营任何服务器，也永远看不到你的数据。</li>
+</ul>
+<p>扩展不含任何分析、遥测、广告或追踪代码，也不含远程托管代码。</p>
+
+<h3>权限及必要性</h3>
+<ul>
+  <li><code>storage</code> — 在本地保存你的规则和设置。</li>
+  <li><code>scripting</code> 与全站 http/https 主机权限 — 每条规则的目标站点由你指定，安装时无法预知目标，因此只能预置申请；实际使用中，内容脚本只注册到真正携带规则的站点，某站点最后一条规则被删除后即解除注册。</li>
+</ul>
+
+<h3>保留与删除</h3>
+<ul>
+  <li>卸载扩展即删除本地存储的全部规则和设置。</li>
+  <li>已同步到同步服务器的数据由该服务器的运营者管理；请通过该服务器自身的手段删除，或停止使用。</li>
+</ul>
+
+<h3>政策变更</h3>
+<p>政策如有变更，将在同一地址发布更新版本并更新生效日期。</p>
+
+<h3>联系方式</h3>
+<p>zsy.evan@gmail.com</p>
+
+</main>
+</body>
+</html>
