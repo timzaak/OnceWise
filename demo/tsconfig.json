@@ -1,0 +1,24 @@
+// 扩展 Demo 的 TypeScript 配置：只覆盖 demo/ 内的 Playwright 用例与配置，
+// 与 extension/ 的生产 tsconfig 相互独立；用 `npm run type-check`（tsc --noEmit）做检查。
+{
+  "compilerOptions": {
+    // Node 现代运行时 + ESM（package.json 已声明 type: module），无需降级转译
+    "target": "ESNext",
+    "module": "ESNext",
+    // 匹配 @playwright/test 等包的 exports 解析方式
+    "moduleResolution": "Bundler",
+    // DOM lib 供 page.evaluate 回调里引用浏览器全局（如 chrome.runtime）
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    // fixture/helper 使用 Node API（fs/crypto/url）
+    "types": ["node"],
+    "strict": true,
+    // 只做类型检查，不产出 JS；用例由 Playwright 即时编译执行
+    "noEmit": true,
+    // 跳过依赖包内部类型检查，降低 @types 版本组合噪音
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["e2e/**/*.ts", "playwright.config.ts"]
+}

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>跨页向导·第 3 步（结果）</title>
+<style>
+  body { font-family: sans-serif; margin: 24px; color: #222; }
+  .panel { border: 1px solid #ddd; padding: 16px; max-width: 480px; }
+  .row { margin: 8px 0; }
+  .row .k { display: inline-block; width: 90px; color: #555; }
+  input { padding: 6px 8px; border: 1px solid #bbb; width: 240px; }
+  .done-marker { display: none; margin-top: 12px; padding: 10px 14px; border: 1px solid #237804;
+    background: #f6ffed; color: #237804; font-weight: 600; }
+  .done-marker.visible { display: block; }
+  #action-log { margin-top: 16px; max-width: 480px; }
+  #action-log li { font-family: monospace; font-size: 12px; }
+  .meta { color: #666; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>发货向导 · 第 3 步：结果</h1>
+<p class="meta">
+  结果页（终态）。<code>#orderNo</code> 可读；终态标记 <code>.done-marker</code> 供断言/等待；
+  <code>?scenario=slow</code> 将就绪信号（标记 + 单据号输入框）延迟约 3 秒——供慢加载认领与越过
+  navigate 截止时间的受控场景使用；动作记录见底部。
+</p>
+<div class="panel">
+  <div class="row"><span class="k">单据号</span><input id="orderNo" value="B-0001" readonly></div>
+  <div class="done-marker">提交完成：本单据已确认发货</div>
+</div>
+<h2>动作记录</h2>
+<ol id="action-log"></ol>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var bizId = params.get('biz') || params.get('orderNo') || 'B-0001';
+  var slow = params.get('scenario') === 'slow';
+  var orderNo = document.getElementById('orderNo');
+  var marker = document.querySelector('.done-marker');
+
+  var log = document.getElementById('action-log');
+  function record(text) {
+    var li = document.createElement('li');
+    li.textContent = new Date().toISOString().slice(11, 23) + ' ' + text;
+    log.appendChild(li);
+  }
+
+  function ready() {
+    orderNo.value = bizId;
+    marker.classList.add('visible');
+    record('ready biz=' + bizId);
+  }
+  if (slow) {
+    orderNo.value = '';
+    setTimeout(ready, 3000);
+    record('page-ready step=3 scenario=slow biz=' + bizId);
+  } else {
+    ready();
+    record('page-ready step=3 biz=' + bizId);
+  }
+})();
+</script>
+</body>
+</html>

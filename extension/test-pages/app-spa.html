@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>受控 SPA 页（hash 路由与视图重挂）</title>
+    <style>
+      body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; color: #111827; margin: 0; background: #f9fafb; }
+      .page { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+      h1 { font-size: 18px; }
+      .hint { font-size: 12px; color: #6b7280; line-height: 1.7; }
+      nav { display: flex; gap: 8px; margin-bottom: 16px; }
+      nav a { padding: 6px 12px; border: 1px solid #d9d9d9; border-radius: 6px; text-decoration: none; color: #1d4ed8; }
+      input[type='text'] { min-height: 32px; padding: 4px 10px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; width: 240px; }
+      button { min-height: 34px; padding: 6px 16px; border-radius: 6px; border: 1px solid #9ca3af; background: #fff; color: #111827; font-size: 14px; cursor: pointer; }
+      .view { border: 1px dashed #d1d5db; border-radius: 8px; padding: 16px; min-height: 80px; }
+      .log { margin-top: 24px; font-size: 12px; color: #374151; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; min-height: 40px; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>受控 SPA 页（app-spa.html）</h1>
+      <p class="hint">
+        hash 路由 <code>#/step1</code> / <code>#/step2</code>（切换不刷新文档）；「重新加载视图」按钮在
+        <b>同一 document 内重挂当前视图</b>（模拟 SPA 重挂）。用于验证：
+        以 <code>urlIncludes = "#/step1"</code> 为特征的流程在 hash 离开再返回、视图重挂后<b>不重复执行</b>（L2 document 级去重）；
+        浏览器刷新（新 document）后非提交流程重新执行、含提交类动作的流程被会话 token 跳过（L3）。
+      </p>
+
+      <nav>
+        <a href="#/step1">#/step1</a>
+        <a href="#/step2">#/step2</a>
+      </nav>
+
+      <div class="view" id="viewRoot"></div>
+      <p style="margin-top: 12px;">
+        <button type="button" id="reloadView">重新加载视图</button>
+      </p>
+
+      <div class="log" id="pageLog">页面事件日志：（等待操作）</div>
+    </div>
+
+    <script>
+      (function () {
+        var logEl = document.getElementById('pageLog');
+        var lines = [];
+        function logEvent(text) {
+          lines.push(new Date().toLocaleTimeString() + ' ' + text);
+          logEl.textContent = '页面事件日志：\n' + lines.slice(-12).join('\n');
+        }
+
+        var viewRoot = document.getElementById('viewRoot');
+        var mountCount = 0;
+
+        function renderView() {
+          mountCount++;
+          viewRoot.innerHTML = '';
+          if (location.hash === '#/step2') {
+            var h2 = document.createElement('p');
+            h2.textContent = '步骤二视图（挂载第 ' + mountCount + ' 次）';
+            viewRoot.appendChild(h2);
+            return;
+          }
+          var h1 = document.createElement('p');
+          h1.textContent = '步骤一视图（挂载第 ' + mountCount + ' 次）';
+          var input = document.createElement('input');
+          input.type = 'text';
+          input.id = 'spaInput';
+          input.placeholder = '步骤一输入框';
+          input.addEventListener('input', function () {
+            logEvent('spaInput 被写入（若非手工输入，检查是否误触发）');
+          });
+          viewRoot.appendChild(h1);
+          viewRoot.appendChild(input);
+        }
+
+        window.addEventListener('hashchange', function () {
+          logEvent('hashchange → ' + location.hash);
+          renderView();
+        });
+        document.getElementById('reloadView').addEventListener('click', function () {
+          logEvent('重新加载视图（同一 document 内重挂）');
+          renderView();
+        });
+
+        renderView();
+        logEvent('初始加载 ' + location.hash);
+      })();
+    </script>
+  </body>
+</html>

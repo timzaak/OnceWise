@@ -1,0 +1,4 @@
+# 扩展 Demo 的依赖与运行产物（依赖安装与报告生成尚未执行）
+node_modules/
+test-results/
+playwright-report/

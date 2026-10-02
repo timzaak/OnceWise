@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>跨页向导·第 1 步（填写）</title>
+<style>
+  body { font-family: sans-serif; margin: 24px; color: #222; }
+  .panel { border: 1px solid #ddd; padding: 16px; max-width: 480px; }
+  label { display: block; margin: 10px 0 4px; }
+  input { padding: 6px 8px; border: 1px solid #bbb; width: 240px; }
+  button { margin-top: 14px; padding: 8px 22px; }
+  #action-log { margin-top: 16px; max-width: 480px; }
+  #action-log li { font-family: monospace; font-size: 12px; }
+  .meta { color: #666; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>发货向导 · 第 1 步：填写</h1>
+<p class="meta">
+  受控三页向导入口。业务号 <code>#orderNo</code> 固定可读（<code>?biz=</code> 覆盖）；提交按钮整页跳转到第 2 步；
+  动作记录见页面底部（不代替扩展链路断言）。
+</p>
+<form class="panel" action="wizard-step2.html" method="get">
+  <label for="orderNo">单据号</label>
+  <input id="orderNo" name="orderNo" value="B-0001" readonly>
+  <label for="carrier">承运商</label>
+  <input id="carrier" name="carrier" value="" placeholder="如：顺丰速运">
+  <label for="remark">备注</label>
+  <input id="remark" name="remark" value="">
+  <button type="submit" class="submit-btn">提 交</button>
+</form>
+<h2>动作记录</h2>
+<ol id="action-log"></ol>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var bizId = params.get('biz') || params.get('orderNo') || 'B-0001';
+  document.getElementById('orderNo').value = bizId;
+
+  var log = document.getElementById('action-log');
+  function record(text) {
+    var li = document.createElement('li');
+    li.textContent = new Date().toISOString().slice(11, 23) + ' ' + text;
+    log.appendChild(li);
+  }
+  ['carrier', 'remark'].forEach(function (id) {
+    document.getElementById(id).addEventListener('change', function (e) {
+      record('fill:' + id + '=' + e.target.value);
+    });
+  });
+  document.querySelector('.submit-btn').addEventListener('click', function () {
+    record('submit biz=' + bizId);
+  });
+  record('page-ready step=1 biz=' + bizId);
+})();
+</script>
+</body>
+</html>

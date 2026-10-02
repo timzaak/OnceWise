@@ -1,0 +1,23 @@
+# Git
+.git
+.gitignore
+.github
+
+# Documentation / repo-local working docs
+*.md
+docs
+.ai
+.agents
+
+# Not part of the backend image
+demo
+skills
+extension
+log
+
+# Build artifacts
+backend/target
+backend/data
+**/node_modules
+**/.output
+**/.wxt

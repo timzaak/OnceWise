@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>受控其他页（隔离样本）</title>
+    <style>
+      body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; color: #111827; margin: 0; background: #f9fafb; }
+      .page { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+      h1 { font-size: 18px; }
+      .hint { font-size: 12px; color: #6b7280; line-height: 1.7; }
+      .ant-form-item { margin-bottom: 18px; }
+      .ant-form-item-label { margin-bottom: 4px; font-weight: 600; }
+      input[type='text'] { min-height: 32px; padding: 4px 10px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; width: 240px; }
+      .log { margin-top: 24px; font-size: 12px; color: #374151; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; min-height: 40px; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>受控其他页（other-page.html）</h1>
+      <p class="hint">
+        隔离样本：与 form-page.html 同站、字段 id 相同但 URL 路径不同。
+        以 <code>urlIncludes = "/form-page.html"</code> 为页面特征的流程在本页<b>必须零动作、零失败记录</b>——
+        若本页「联系电话」被自动填写即为页面误命中（验收目标 2 的判定口径）。
+      </p>
+
+      <div class="ant-form-item">
+        <div class="ant-form-item-label"><label for="contactPhone">联系电话</label></div>
+        <input type="text" id="contactPhone" name="contactPhone" placeholder="隔离样本：流程不应填写这里" />
+      </div>
+
+      <div class="ant-form-item">
+        <div class="ant-form-item-label"><label for="remark">备注</label></div>
+        <input type="text" id="remark" name="remark" placeholder="隔离样本" />
+      </div>
+
+      <div class="log" id="pageLog">页面事件日志：（等待操作）</div>
+    </div>
+
+    <script>
+      (function () {
+        var logEl = document.getElementById('pageLog');
+        var lines = [];
+        window.logEvent = function (text) {
+          lines.push(new Date().toLocaleTimeString() + ' ' + text);
+          logEl.textContent = '页面事件日志：\n' + lines.slice(-12).join('\n');
+        };
+        ['contactPhone', 'remark'].forEach(function (id) {
+          document.getElementById(id).addEventListener('input', function () {
+            logEvent(id + ' 被写入（若非手工输入即为误命中）');
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>跨页向导·第 2 步（确认）</title>
+<style>
+  body { font-family: sans-serif; margin: 24px; color: #222; }
+  .panel { border: 1px solid #ddd; padding: 16px; max-width: 480px; }
+  .row { margin: 8px 0; }
+  .row .k { display: inline-block; width: 90px; color: #555; }
+  input { padding: 6px 8px; border: 1px solid #bbb; width: 240px; }
+  button { margin-top: 14px; padding: 8px 22px; }
+  #action-log { margin-top: 16px; max-width: 480px; }
+  #action-log li { font-family: monospace; font-size: 12px; }
+  .meta { color: #666; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>发货向导 · 第 2 步：确认</h1>
+<p class="meta">
+  确认页。业务号经 <code>#orderNo</code> 可复核（businessKey 跨页复核面）；确认按钮整页跳转第 3 步。
+  <code>?open=new-tab</code> 使确认提交在新标签页打开第 3 步（target=_blank 变体）；<code>?biz=</code> 覆盖业务号
+  （换业务号即 business-changed 取消路径的受控信号）。
+</p>
+<form class="panel" action="wizard-step3.html" method="get">
+  <div class="row"><span class="k">单据号</span><input id="orderNo" name="orderNo" value="B-0001" readonly></div>
+  <div class="row"><span class="k">承运商</span><span id="carrierView">—</span></div>
+  <div class="row"><span class="k">备注</span><span id="remarkView">—</span></div>
+  <button type="submit" class="confirm-btn">确认并继续</button>
+</form>
+<h2>动作记录</h2>
+<ol id="action-log"></ol>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var bizId = params.get('biz') || params.get('orderNo') || 'B-0001';
+  document.getElementById('orderNo').value = bizId;
+  document.getElementById('carrierView').textContent = params.get('carrier') || '—';
+  document.getElementById('remarkView').textContent = params.get('remark') || '—';
+  // ?open=new-tab: the same confirm click opens step 3 in a new tab (target=_blank variant)
+  if (params.get('open') === 'new-tab') document.querySelector('form.panel').target = '_blank';
+
+  var log = document.getElementById('action-log');
+  function record(text) {
+    var li = document.createElement('li');
+    li.textContent = new Date().toISOString().slice(11, 23) + ' ' + text;
+    log.appendChild(li);
+  }
+  document.querySelector('.confirm-btn').addEventListener('click', function () {
+    record('confirm biz=' + bizId + (params.get('open') === 'new-tab' ? ' open=new-tab' : ''));
+  });
+  record('page-ready step=2 biz=' + bizId);
+})();
+</script>
+</body>
+</html>

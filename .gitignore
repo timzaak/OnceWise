@@ -1,0 +1,14 @@
+.ai/*
+!.ai/skill-examples/
+.ai/skill-examples/*
+!.ai/skill-examples/oncewise-flow/
+.live-verify/
+node_modules/
+__pycache__/
+.output/
+dist/
+log/
+*.log
+.env
+.env.*
+.agents/

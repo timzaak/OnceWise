@@ -1,0 +1,20 @@
+# Chrome DevTools MCP setup guide
+
+Chrome DevTools MCP is an external service that the current agent host must connect to; it is not a dependency of this project. Configuration entry points, scope, and reload procedures vary by host. First consult the [Chrome DevTools MCP client configuration index](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/client-configurations.md) and **the current host's** official MCP documentation or built-in help. Do not reuse another agent's installation commands. If installation instructions cannot be found there, or installation fails, search the web using the host name and version for its official MCP setup instructions. Continue to trust only the current host's official documentation. Perform steps the agent can do itself, such as running the host's MCP registration command or writing its MCP configuration; give the user actionable official steps for anything the agent cannot do. The host's MCP list proves registration, while the current agent's tool list and real calls prove usability. Neither substitutes for the other.
+
+## Service startup arguments
+
+A host supporting local stdio MCP can launch `npx -y chrome-devtools-mcp@latest --autoConnect --categoryExtensions=true` in its own configuration format. This is a **service command, not a universal installation command**. If a Windows host requires a shell wrapper for `npx`, follow its documentation and use `cmd /c npx -y chrome-devtools-mcp@latest --autoConnect --categoryExtensions=true`.
+
+Node.js LTS and npm are required. `--autoConnect` connects to a Chrome instance already running on this machine and requires Chrome 144+. `--categoryExtensions=true` exposes extension tools such as `list_extensions`; with autoConnect it requires Chrome 149+. Use the channel of the user's regular Chrome (stable by default). The user must enable remote debugging at `chrome://inspect/#remote-debugging` in that Chrome and approve the connection. Do not omit `--autoConnect` to launch a separate browser. Check current requirements against the [official configuration](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/configuration.md) and [tool reference](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/tool-reference.md).
+
+If official instructions still cannot be found, or the current host cannot start or connect to this local service or expose its tools to the agent running the skill, report the exact capability gap. Running `npx` separately in a terminal does not make the tools available in the agent session. After changing configuration, reload or start a new session as the host requires, then check its MCP list, tool provenance, and call results.
+
+## Troubleshooting
+
+- Tools are missing: check the current host's MCP list, startup logs, configuration scope, and reload requirements. Do not inspect another client's list.
+- `list_pages` times out or fails: check whether the user's regular Chrome has remote debugging enabled, the user approved the connection, and the Chrome channel matches.
+- Navigating to `chrome-extension://` returns "not allowed": MCP lacks `--categoryExtensions=true`. Add it and restart the MCP client. Access to `chrome://` pages is blocked by default, so that alone says nothing about whether extension tools are enabled.
+- The import page does not appear in `list_pages`: first use `list_extensions` over the same MCP connection to check OnceWise AI's name, ID, and enabled state. If installed, open `chrome-extension://<id>/import.html` through that MCP and use `take_snapshot`. If extension tools are unavailable, ask the user to open the import page from the extension side panel in the connected Chrome, then check it with this MCP's `list_pages` and `take_snapshot`. If it is still invisible, report that installation status is unverified. Do not substitute local Chrome profile files, another browser, or extension records from the filesystem for MCP evidence.
+
+In remote development or WSL, do not assume the host Chrome can be discovered automatically. Verify the connection in the environment where Chrome runs.

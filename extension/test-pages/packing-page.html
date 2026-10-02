@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>受控装箱页</title>
+<style>
+  body { font-family: sans-serif; margin: 24px; color: #222; }
+  .tab-strip { display: flex; gap: 8px; margin-bottom: 16px; }
+  .group-tab { padding: 6px 14px; border: 1px solid #bbb; background: #f7f7f7; cursor: pointer; }
+  .group-tab.ant-tabs-tab-active { border-color: #1677ff; background: #e6f4ff; font-weight: 600; }
+  .panel { border: 1px solid #ddd; padding: 12px; margin-bottom: 12px; max-width: 640px; }
+  table { border-collapse: collapse; margin: 8px 0; }
+  th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: center; }
+  input.num { width: 90px; }
+  .save-status { color: #237804; margin-top: 6px; }
+  .ant-modal { display: none; border: 2px solid #1677ff; padding: 16px; margin-top: 12px; max-width: 640px; }
+  .ant-modal.visible { display: block; }
+  #action-log { margin-top: 16px; max-width: 640px; }
+  #action-log li { font-family: monospace; font-size: 12px; }
+  .meta { color: #666; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>发货装箱（受控模拟）</h1>
+<p class="meta">
+  单据号 <input id="orderNo" value="B-0001" readonly> ·
+  业务实例标识固定可读（G1 假设）；包装组带稳定 data-key 与 aria-controls（G2 假设）；
+  保存完成信号 = 「已保存」状态元素出现（G3 假设）；动作记录见页面底部（不代替扩展链路断言）。
+</p>
+<div class="tab-strip" id="tabs"></div>
+<div id="panels"></div>
+<button type="button" class="confirm-btn">确定并装箱</button>
+<div class="ant-modal preview-modal">货件预览（自动化终点——预览内的发货确认不执行）</div>
+<h2>动作记录</h2>
+<ol id="action-log"></ol>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var groupCount = Math.max(1, Math.min(5, parseInt(params.get('groups') || '2', 10) || 2));
+  // scenario: ok（全部有效）| invalid-data（第 2 组箱规含 0 重量）| never-save（保存永不完成）
+  var scenario = params.get('scenario') || 'ok';
+  var bizId = params.get('biz') || 'B-0001';
+  document.getElementById('orderNo').value = bizId;
+
+  var validRows = [['1.2', '30', '20', '10'], ['2.5', '40', '30', '20']];
+  var invalidRows = [['0', '30', '20', '10'], ['2.5', '40', '30', '20']];
+
+  var log = document.getElementById('action-log');
+  function record(text) {
+    var li = document.createElement('li');
+    li.textContent = new Date().toISOString().slice(11, 23) + ' ' + text;
+    log.appendChild(li);
+  }
+
+  var groups = [];
+  var tabs = document.getElementById('tabs');
+  var panels = document.getElementById('panels');
+
+  for (var gi = 1; gi <= groupCount; gi++) {
+    var key = 'g' + gi;
+    var tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'group-tab ant-tabs-tab';
+    tab.setAttribute('data-key', key);
+    tab.setAttribute('aria-controls', 'panel-' + key);
+    tab.setAttribute('aria-selected', 'false');
+    tab.setAttribute('role', 'tab');
+    tab.textContent = '组 ' + gi;
+    tabs.appendChild(tab);
+
+    var panel = document.createElement('div');
+    panel.className = 'panel';
+    panel.id = 'panel-' + key;
+    panels.appendChild(panel);
+
+    var group = {
+      key: key, tab: tab, panel: panel,
+      editMode: false, selected: false, saving: false,
+      rows: validRows.map(function (r) { return r.slice(); }),
+      inputEls: []
+    };
+    if (scenario === 'invalid-data' && key === 'g2') group.rows = invalidRows.map(function (r) { return r.slice(); });
+
+    var editBtn = document.createElement('button');
+    editBtn.type = 'button'; editBtn.className = 'edit-btn'; editBtn.textContent = '编 辑';
+    panel.appendChild(editBtn);
+
+    var autoloadBtn = document.createElement('button');
+    autoloadBtn.type = 'button'; autoloadBtn.className = 'autoload-btn'; autoloadBtn.textContent = '自动加载箱规';
+    panel.appendChild(autoloadBtn);
+
+    var selectAll = document.createElement('input');
+    selectAll.type = 'checkbox'; selectAll.className = 'select-all';
+    var selectAllLabel = document.createElement('span'); selectAllLabel.textContent = ' 全选';
+    panel.appendChild(selectAll); panel.appendChild(selectAllLabel);
+
+    var table = document.createElement('table');
+    var thead = document.createElement('thead');
+    var headRow = document.createElement('tr');
+    ['单箱总重量', '长', '宽', '高'].forEach(function (h) {
+      var th = document.createElement('th'); th.textContent = h; headRow.appendChild(th);
+    });
+    thead.appendChild(headRow); table.appendChild(thead);
+    var tbody = document.createElement('tbody');
+    group.rows.forEach(function () {
+      var tr = document.createElement('tr');
+      var rowInputs = [];
+      for (var c = 0; c < 4; c++) {
+        var td = document.createElement('td');
+        var input = document.createElement('input');
+        input.className = 'num'; input.value = '';
+        td.appendChild(input); tr.appendChild(td); rowInputs.push(input);
+      }
+      tbody.appendChild(tr); group.inputEls.push(rowInputs);
+    });
+    table.appendChild(tbody); panel.appendChild(table);
+
+    var saveBtn = document.createElement('button');
+    saveBtn.type = 'button'; saveBtn.className = 'save-btn'; saveBtn.textContent = '保 存';
+    panel.appendChild(saveBtn);
+    var status = document.createElement('div');
+    status.className = 'save-status'; status.textContent = '已保存'; status.style.display = 'none';
+    panel.appendChild(status);
+
+    autoloadBtn.style.display = 'none'; saveBtn.style.display = 'none'; selectAll.style.display = 'none'; selectAllLabel.style.display = 'none';
+
+    group.editBtn = editBtn;
+    group.autoloadBtn = autoloadBtn;
+    group.saveBtn = saveBtn;
+    group.selectAll = selectAll;
+    group.selectAllLabel = selectAllLabel;
+    group.status = status;
+
+    tab.addEventListener('click', function (g) { return function () {
+      groups.forEach(function (o) {
+        var active = o === g;
+        o.tab.setAttribute('aria-selected', active ? 'true' : 'false');
+        o.tab.classList.toggle('ant-tabs-tab-active', active);
+      });
+      record('switch:' + g.key);
+    }; }(group));
+
+    editBtn.addEventListener('click', function (g) { return function () {
+      g.editMode = true;
+      // 编辑态按钮经短暂延迟出现（等待最初不存在的元素）
+      setTimeout(function () {
+        g.editBtn.style.display = 'none';
+        g.autoloadBtn.style.display = ''; g.saveBtn.style.display = '';
+        g.selectAll.style.display = ''; g.selectAllLabel.style.display = '';
+      }, 150);
+      record('edit:' + g.key);
+    }; }(group));
+
+    autoloadBtn.addEventListener('click', function (g) { return function () {
+      record('autoload:' + g.key);
+      // 异步加载：延迟后填入箱规值
+      setTimeout(function () {
+        g.rows.forEach(function (row, ri) {
+          row.forEach(function (v, ci) { g.inputEls[ri][ci].value = v; });
+        });
+      }, 300);
+    }; }(group));
+
+    selectAll.addEventListener('click', function (g) { return function () {
+      g.selected = !g.selected;
+      g.selectAll.checked = g.selected;
+      record('selectall:' + g.key + ':' + g.selected);
+    }; }(group));
+
+    saveBtn.addEventListener('click', function (g) { return function () {
+      if (g.saving) return;
+      g.saving = true;
+      g.saveBtn.classList.add('ant-btn-loading');
+      record('save:' + g.key);
+      if (scenario === 'never-save') return; // 受控失败信号：保存永不完成
+      setTimeout(function () {
+        g.saving = false;
+        g.saveBtn.classList.remove('ant-btn-loading');
+        g.status.style.display = '';
+      }, 400);
+    }; }(group));
+
+    groups.push(group);
+  }
+
+  // 首组默认激活
+  groups[0].tab.click();
+
+  var confirmBtn = document.querySelector('.confirm-btn');
+  var modal = document.querySelector('.preview-modal');
+  confirmBtn.addEventListener('click', function () {
+    record('confirm');
+    setTimeout(function () { modal.classList.add('visible'); }, 300);
+  });
+
+  record('page-ready scenario=' + scenario + ' groups=' + groupCount + ' biz=' + bizId);
+})();
+</script>
+</body>
+</html>

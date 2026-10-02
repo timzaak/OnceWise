@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" role="img" aria-labelledby="title desc">
+  <title id="title">OnceWise AI 工作台设计方向示意</title>
+  <desc id="desc">左侧是流程侧边栏，右侧是流程导入页。中性浅底、白色表面、近黑色主操作、青绿色启用状态。</desc>
+  <rect width="960" height="560" fill="#F7F7F5"/>
+  <text x="40" y="37" fill="#151515" font-family="system-ui, sans-serif" font-size="16" font-weight="700">OnceWise AI · 编辑式工作台方向</text>
+  <text x="920" y="37" text-anchor="end" fill="#626262" font-family="system-ui, sans-serif" font-size="12">设计示意 · 非实际界面</text>
+
+  <rect x="40" y="58" width="306" height="466" rx="6" fill="#FFFFFF" stroke="#E2E2E0"/>
+  <rect x="41" y="59" width="304" height="86" rx="6" fill="#FFFFFF"/>
+  <rect x="57" y="75" width="28" height="28" rx="5" fill="#151515"/>
+  <path d="M64 89l5 5 10-12" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="96" y="94" fill="#151515" font-family="system-ui, sans-serif" font-size="15" font-weight="700">OnceWise AI</text>
+  <circle cx="65" cy="125" r="3" fill="#008F83"/>
+  <text x="99" y="130" text-anchor="middle" fill="#151515" font-family="system-ui, sans-serif" font-size="12" font-weight="700">流程</text>
+  <text x="190" y="130" text-anchor="middle" fill="#626262" font-family="system-ui, sans-serif" font-size="12">同步</text>
+  <text x="286" y="130" text-anchor="middle" fill="#626262" font-family="system-ui, sans-serif" font-size="12">设置</text>
+  <path d="M40 145h306" stroke="#E2E2E0"/>
+  <text x="57" y="173" fill="#626262" font-family="system-ui, sans-serif" font-size="12">当前站点 · example.com</text>
+
+  <rect x="56" y="190" width="274" height="139" rx="6" fill="#FFFFFF" stroke="#E2E2E0"/>
+  <text x="71" y="216" fill="#151515" font-family="system-ui, sans-serif" font-size="15" font-weight="700">填写发货表单</text>
+  <rect x="263" y="199" width="55" height="22" rx="5" fill="#E8F7F4" stroke="#B6DCD5"/>
+  <text x="290" y="214" text-anchor="middle" fill="#08786F" font-family="system-ui, sans-serif" font-size="11" font-weight="700">已启用</text>
+  <text x="71" y="239" fill="#626262" font-family="system-ui, sans-serif" font-size="11">example.com · 今天更新</text>
+  <text x="71" y="262" fill="#3D3D3D" font-family="system-ui, sans-serif" font-size="12">在装箱页填入订单与收件信息。</text>
+  <path d="M71 278h244" stroke="#E2E2E0"/>
+  <rect x="71" y="289" width="72" height="28" rx="5" fill="#151515"/>
+  <text x="107" y="308" text-anchor="middle" fill="#FFFFFF" font-family="system-ui, sans-serif" font-size="11" font-weight="700">查看详情</text>
+  <text x="165" y="308" fill="#151515" font-family="system-ui, sans-serif" font-size="11" font-weight="600">暂停</text>
+  <text x="274" y="308" fill="#A43232" font-family="system-ui, sans-serif" font-size="11" font-weight="600">删除</text>
+
+  <rect x="56" y="342" width="274" height="139" rx="6" fill="#FFFFFF" stroke="#E2E2E0"/>
+  <text x="71" y="368" fill="#151515" font-family="system-ui, sans-serif" font-size="15" font-weight="700">核对客户资料</text>
+  <rect x="263" y="351" width="55" height="22" rx="5" fill="#FFF5D6" stroke="#E9D39B"/>
+  <text x="290" y="366" text-anchor="middle" fill="#805D13" font-family="system-ui, sans-serif" font-size="11" font-weight="700">已暂停</text>
+  <text x="71" y="391" fill="#626262" font-family="system-ui, sans-serif" font-size="11">crm.example · 昨天更新</text>
+  <text x="71" y="414" fill="#3D3D3D" font-family="system-ui, sans-serif" font-size="12">核对信息后再提交。</text>
+  <path d="M71 430h244" stroke="#E2E2E0"/>
+  <rect x="71" y="441" width="72" height="28" rx="5" fill="#FFFFFF" stroke="#CFCFCB"/>
+  <text x="107" y="460" text-anchor="middle" fill="#151515" font-family="system-ui, sans-serif" font-size="11" font-weight="700">查看详情</text>
+  <text x="165" y="460" fill="#151515" font-family="system-ui, sans-serif" font-size="11" font-weight="600">启用</text>
+
+  <rect x="370" y="58" width="550" height="466" rx="6" fill="#FFFFFF" stroke="#E2E2E0"/>
+  <text x="394" y="93" fill="#151515" font-family="system-ui, sans-serif" font-size="20" font-weight="700">流程导入</text>
+  <text x="896" y="91" text-anchor="end" fill="#626262" font-family="ui-monospace, Consolas, monospace" font-size="10" letter-spacing="1.5">FLOW / 01</text>
+  <text x="394" y="115" fill="#626262" font-family="system-ui, sans-serif" font-size="12">校验流程内容，核对摘要，再保存为未启用状态。</text>
+  <rect x="394" y="130" width="502" height="40" rx="5" fill="#E8F7F4"/>
+  <text x="409" y="154" fill="#07645D" font-family="system-ui, sans-serif" font-size="12" font-weight="600">AI 完成导入与校验；启用由你本人决定。</text>
+  <text x="394" y="202" fill="#151515" font-family="system-ui, sans-serif" font-size="16" font-weight="700">01  ·  导入并校验</text>
+  <text x="394" y="222" fill="#626262" font-family="system-ui, sans-serif" font-size="12">内容输入区由 AI 工具操作</text>
+  <rect x="394" y="235" width="502" height="112" rx="5" fill="#FCFCFB" stroke="#CFCFCB"/>
+  <text x="410" y="261" fill="#626262" font-family="ui-monospace, Consolas, monospace" font-size="12">{</text>
+  <text x="426" y="282" fill="#626262" font-family="ui-monospace, Consolas, monospace" font-size="12">"schemaVersion": 1,</text>
+  <text x="426" y="303" fill="#626262" font-family="ui-monospace, Consolas, monospace" font-size="12">"name": "填写发货表单",</text>
+  <text x="426" y="324" fill="#626262" font-family="ui-monospace, Consolas, monospace" font-size="12">…</text>
+  <rect x="394" y="361" width="96" height="34" rx="5" fill="#151515"/>
+  <text x="442" y="383" text-anchor="middle" fill="#FFFFFF" font-family="system-ui, sans-serif" font-size="12" font-weight="700">校验流程</text>
+  <path d="M394 416h502" stroke="#E2E2E0"/>
+  <text x="394" y="449" fill="#151515" font-family="system-ui, sans-serif" font-size="16" font-weight="700">02  ·  核对与保存</text>
+  <text x="394" y="471" fill="#626262" font-family="system-ui, sans-serif" font-size="12">校验通过后展示站点、触发条件与操作摘要</text>
+  <rect x="788" y="435" width="108" height="30" rx="5" fill="#F7F7F5" stroke="#E2E2E0"/>
+  <text x="842" y="455" text-anchor="middle" fill="#626262" font-family="system-ui, sans-serif" font-size="11" font-weight="700">默认未启用</text>
+  <text x="394" y="504" fill="#626262" font-family="system-ui, sans-serif" font-size="11">保存后再展示独立的启用操作</text>
+</svg>

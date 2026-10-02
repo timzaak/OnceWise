@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SSBA 受控测试页（入口）</title>
+    <style>
+      body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; color: #111827; margin: 0; background: #f9fafb; }
+      .page { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+      h1 { font-size: 18px; }
+      p, li { line-height: 1.8; }
+      a { color: #1d4ed8; }
+      code { background: #eef2ff; padding: 1px 5px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>SSBA 受控测试页（入口，非命中负样本）</h1>
+      <p>本目录是"自助浏览器局部自动化"扩展的受控验证场所：全部本地静态文件，零外部依赖、零网络请求。</p>
+      <ul>
+        <li><a href="./form-page.html">form-page.html</a> —— 命中页 A：仿 antd 下拉、原生下拉、文本、复选、提交按钮「保存」、成功横幅（preState 目标）。</li>
+        <li><a href="./other-page.html">other-page.html</a> —— 隔离样本：同站同字段 id、不同 URL 路径；命中特征为 <code>/form-page.html</code> 的流程在此必须零动作。</li>
+        <li><a href="./app-spa.html">app-spa.html</a> —— SPA 行为模拟：hash 路由 + 同 document 视图重挂（防重复护栏验证）。</li>
+      </ul>
+      <p>
+        启动方式与站点授权说明见 <a href="./README.md">README.md</a>（例如
+        <code>python -m http.server 8123</code> 后经 <code>http://localhost:8123/</code> 访问）。
+      </p>
+    </div>
+  </body>
+</html>

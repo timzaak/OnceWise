@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>受控表单页（命中页 A）</title>
+    <style>
+      body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; color: #111827; margin: 0; background: #f9fafb; }
+      .page { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+      h1 { font-size: 18px; }
+      .hint { font-size: 12px; color: #6b7280; line-height: 1.7; }
+      .ant-form-item { margin-bottom: 18px; }
+      .ant-form-item-label { margin-bottom: 4px; font-weight: 600; }
+      input[type='text'], select { min-height: 32px; padding: 4px 10px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; width: 240px; }
+      button { min-height: 34px; padding: 6px 16px; border-radius: 6px; border: 1px solid #2563eb; background: #2563eb; color: #fff; font-size: 14px; cursor: pointer; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .banner { display: none; margin-top: 16px; padding: 10px 14px; border: 1px solid #86efac; background: #f0fdf4; color: #15803d; border-radius: 8px; }
+      .banner.visible { display: block; }
+      .log { margin-top: 24px; font-size: 12px; color: #374151; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; min-height: 40px; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>受控表单页（form-page.html）</h1>
+      <p class="hint">
+        命中页 A：页面指纹通常取 <code>page.urlIncludes = "/form-page.html"</code>。
+        「发货仓库」是仿 antd DOM 契约的下拉（select-widget.js）；「渠道」是原生下拉。
+        点击「保存」后出现成功横幅——它是提交类动作 preState（前置状态）的目标特征。
+      </p>
+
+      <div class="ant-form-item">
+        <div class="ant-form-item-label"><label for="warehouse">发货仓库</label></div>
+        <div class="ant-select" id="warehouse"></div>
+      </div>
+
+      <div class="ant-form-item">
+        <div class="ant-form-item-label"><label for="contactPhone">联系电话</label></div>
+        <input type="text" id="contactPhone" name="contactPhone" placeholder="自动填写或手工输入" />
+      </div>
+
+      <div class="ant-form-item">
+        <div class="ant-form-item-label"><label for="channel">渠道</label></div>
+        <select id="channel" name="channel">
+          <option value="">请选择</option>
+          <option value="online">线上</option>
+          <option value="offline">线下</option>
+        </select>
+      </div>
+
+      <div class="ant-form-item">
+        <div class="ant-form-item-label"><label for="remark">备注</label></div>
+        <input type="text" id="remark" name="remark" placeholder="备注文本" />
+      </div>
+
+      <div class="ant-form-item">
+        <div class="ant-form-item-label"><label for="urgent">加急</label></div>
+        <input type="checkbox" id="urgent" name="urgent" />
+      </div>
+
+      <button type="button" id="saveBtn">保存</button>
+
+      <div class="banner" id="successBanner" role="status">保存成功：表单已提交（本页仅本地演示，无网络请求）。</div>
+
+      <div class="log" id="pageLog">页面事件日志：（等待操作）</div>
+    </div>
+
+    <script src="./select-widget.js"></script>
+    <script>
+      (function () {
+        var logEl = document.getElementById('pageLog');
+        var lines = [];
+        window.logEvent = function (text) {
+          lines.push(new Date().toLocaleTimeString() + ' ' + text);
+          logEl.textContent = '页面事件日志：\n' + lines.slice(-12).join('\n');
+        };
+
+        createAntSelect(
+          document.getElementById('warehouse'),
+          ['深圳仓 [SZ]', '东莞仓 [DG]', '广州仓 [GH]', '杭州仓 [HZ]', '德国仓 [DE]'],
+          '请选择',
+        );
+        document.getElementById('warehouse').addEventListener('change', function () {
+          logEvent('发货仓库 变更');
+        });
+
+        document.getElementById('saveBtn').addEventListener('click', function () {
+          document.getElementById('successBanner').classList.add('visible');
+          logEvent('点击 保存（成功横幅出现 → preState 达标）');
+        });
+      })();
+    </script>
+  </body>
+</html>

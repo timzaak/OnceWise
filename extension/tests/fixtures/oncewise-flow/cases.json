@@ -1,0 +1,3556 @@
+{
+  "description": "D2-1 流程格式用例语料（纯 JSON 形态，schemaVersion 1 流程）：每条 { name, expect: 'valid'|'invalid', expectErrorIncludes?, flow }，由 extension/tests/skill-format.test.ts 强制与 extension/lib/flow-schema.ts 的 validateFlow('import')（含 step-schema.ts 的 validateSteps）同步——改任一侧不同步即测试红。name 命名约定承载覆盖度断言（节点/动作类型、读取类型、谓词、触发类型、页面指纹形态、submitLike/禁用词族、within/businessKey、预算、envelope、schemaVersion）。",
+  "cases": [
+    {
+      "name": "valid-node-sequence-read-action",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "read-code",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "f0"
+                  },
+                  "componentType": "antdSelect",
+                  "displayLabel": "类型"
+                }
+              },
+              "into": "code"
+            },
+            {
+              "id": "fill",
+              "kind": "action",
+              "action": {
+                "type": "setInputValue",
+                "target": {
+                  "clues": {
+                    "id": "f1"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "备注"
+                },
+                "value": "自动填写"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-action-setInputValue",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "setInputValue",
+                "target": {
+                  "clues": {
+                    "id": "f1"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "备注"
+                },
+                "value": "x"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-action-selectOption",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "selectOption",
+                "target": {
+                  "clues": {
+                    "id": "s1"
+                  },
+                  "componentType": "antdSelect",
+                  "displayLabel": "渠道"
+                },
+                "value": "标准快递[SPE]"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-action-setCheckbox",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "setCheckbox",
+                "target": {
+                  "clues": {
+                    "id": "c1"
+                  },
+                  "componentType": "checkbox",
+                  "displayLabel": "加急"
+                },
+                "checked": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-action-clickButton",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-node-if-branch-else",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "boolean",
+                "target": {
+                  "clues": {
+                    "id": "c1"
+                  },
+                  "componentType": "checkbox",
+                  "displayLabel": "加急"
+                }
+              },
+              "into": "urgent"
+            },
+            {
+              "id": "cond",
+              "kind": "if",
+              "when": {
+                "kind": "boolean",
+                "ref": "vars.urgent",
+                "equals": true
+              },
+              "then": [
+                {
+                  "id": "t",
+                  "kind": "action",
+                  "action": {
+                    "type": "clickButton",
+                    "target": {
+                      "clues": {
+                        "id": "b1"
+                      },
+                      "componentType": "button",
+                      "displayLabel": "提交加急"
+                    }
+                  }
+                }
+              ],
+              "else": [
+                {
+                  "id": "e",
+                  "kind": "action",
+                  "action": {
+                    "type": "clickButton",
+                    "target": {
+                      "clues": {
+                        "id": "b2"
+                      },
+                      "componentType": "button",
+                      "displayLabel": "提交普通"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-node-foreach-within-scope",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "groups",
+              "kind": "read",
+              "read": {
+                "kind": "collection",
+                "target": {
+                  "clues": {
+                    "id": "groupTab"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "包装组"
+                }
+              },
+              "into": "groups"
+            },
+            {
+              "id": "loop",
+              "kind": "foreach",
+              "over": "vars.groups",
+              "itemVar": "group",
+              "maxIterations": 20,
+              "do": [
+                {
+                  "id": "switch",
+                  "kind": "action",
+                  "action": {
+                    "type": "clickButton",
+                    "target": {
+                      "clues": {
+                        "id": "groupTab"
+                      },
+                      "componentType": "other",
+                      "displayLabel": "包装组页签",
+                      "within": "group"
+                    }
+                  }
+                },
+                {
+                  "id": "rows",
+                  "kind": "read",
+                  "read": {
+                    "kind": "rows",
+                    "table": {
+                      "clues": {
+                        "id": "tbody"
+                      },
+                      "componentType": "other",
+                      "displayLabel": "行",
+                      "within": "group"
+                    },
+                    "columns": [
+                      "weight",
+                      "length",
+                      "width",
+                      "height"
+                    ]
+                  },
+                  "into": "rows"
+                },
+                {
+                  "id": "ok",
+                  "kind": "assert",
+                  "check": {
+                    "kind": "every",
+                    "ref": "vars.rows",
+                    "item": {
+                      "kind": "numberCompare",
+                      "ref": "item.weight",
+                      "op": ">",
+                      "value": 0
+                    }
+                  }
+                },
+                {
+                  "id": "save",
+                  "kind": "action",
+                  "action": {
+                    "type": "clickButton",
+                    "submitLike": true,
+                    "target": {
+                      "clues": {
+                        "id": "saveBtn"
+                      },
+                      "componentType": "button",
+                      "displayLabel": "保 存",
+                      "within": "group"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-node-wait-elementPresent",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "编 辑"
+                }
+              }
+            },
+            {
+              "id": "w",
+              "kind": "wait",
+              "timeoutMs": 8000,
+              "until": {
+                "kind": "elementPresent",
+                "target": {
+                  "clues": {
+                    "id": "banner"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "成功横幅"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-node-wait-elementAbsent",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "w",
+              "kind": "wait",
+              "timeoutMs": 5000,
+              "until": {
+                "kind": "elementAbsent",
+                "target": {
+                  "clues": {
+                    "id": "spin"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "加载中"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-node-wait-readMatches-rows",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "load",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "autoload"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "自动加载箱规"
+                }
+              }
+            },
+            {
+              "id": "stable",
+              "kind": "wait",
+              "timeoutMs": 20000,
+              "until": {
+                "kind": "readMatches",
+                "read": {
+                  "kind": "rows",
+                  "table": {
+                    "clues": {
+                      "id": "tbody"
+                    },
+                    "componentType": "other",
+                    "displayLabel": "行"
+                  },
+                  "columns": [
+                    "weight",
+                    "length",
+                    "width",
+                    "height"
+                  ]
+                },
+                "into": "rows",
+                "when": {
+                  "kind": "nonEmpty",
+                  "ref": "vars.rows"
+                }
+              }
+            },
+            {
+              "id": "check",
+              "kind": "assert",
+              "check": {
+                "kind": "every",
+                "ref": "vars.rows",
+                "item": {
+                  "kind": "and",
+                  "parts": [
+                    {
+                      "kind": "numberCompare",
+                      "ref": "item.weight",
+                      "op": ">",
+                      "value": 0
+                    },
+                    {
+                      "kind": "numberCompare",
+                      "ref": "item.length",
+                      "op": ">",
+                      "value": 0
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-node-assert-every",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "rows",
+              "kind": "read",
+              "read": {
+                "kind": "rows",
+                "table": {
+                  "clues": {
+                    "id": "tbody"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "行"
+                },
+                "columns": [
+                  "qty"
+                ]
+              },
+              "into": "rows"
+            },
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "and",
+                "parts": [
+                  {
+                    "kind": "nonEmpty",
+                    "ref": "vars.rows"
+                  },
+                  {
+                    "kind": "every",
+                    "ref": "vars.rows",
+                    "item": {
+                      "kind": "numberCompare",
+                      "ref": "item.qty",
+                      "op": ">",
+                      "value": 0
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-read-scalar-predicate-nonEmpty",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "nonEmpty",
+                "ref": "vars.orderNo"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-read-boolean",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "boolean",
+                "target": {
+                  "clues": {
+                    "id": "tab1"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "页签一"
+                }
+              },
+              "into": "active"
+            },
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "boolean",
+                "ref": "vars.active",
+                "equals": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-read-collection",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "collection",
+                "target": {
+                  "clues": {
+                    "id": "groupTab"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "包装组"
+                }
+              },
+              "into": "groups"
+            },
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "nonEmpty",
+                "ref": "vars.groups"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-read-rows-predicate-some",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "rows",
+                "table": {
+                  "clues": {
+                    "id": "tbody"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "行"
+                },
+                "columns": [
+                  "weight",
+                  "length"
+                ]
+              },
+              "into": "rows"
+            },
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "some",
+                "ref": "vars.rows",
+                "item": {
+                  "kind": "numberCompare",
+                  "ref": "item.weight",
+                  "op": ">=",
+                  "value": 1
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-predicate-exists",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "memo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "备注"
+                }
+              },
+              "into": "memo"
+            },
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "exists",
+                "ref": "vars.memo"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-predicate-equals",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "status"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "状态"
+                }
+              },
+              "into": "st"
+            },
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "equals",
+                "ref": "vars.st",
+                "value": "READY"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-predicate-numberCompare",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "total"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "总量"
+                }
+              },
+              "into": "total"
+            },
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "numberCompare",
+                "ref": "vars.total",
+                "op": "<=",
+                "value": 9999
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-predicate-and-or-not",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "memo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "备注"
+                }
+              },
+              "into": "memo"
+            },
+            {
+              "id": "r2",
+              "kind": "read",
+              "read": {
+                "kind": "boolean",
+                "target": {
+                  "clues": {
+                    "id": "c1"
+                  },
+                  "componentType": "checkbox",
+                  "displayLabel": "加急"
+                }
+              },
+              "into": "urgent"
+            },
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "or",
+                "parts": [
+                  {
+                    "kind": "and",
+                    "parts": [
+                      {
+                        "kind": "nonEmpty",
+                        "ref": "vars.memo"
+                      },
+                      {
+                        "kind": "not",
+                        "of": {
+                          "kind": "boolean",
+                          "ref": "vars.urgent",
+                          "equals": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "exists",
+                    "ref": "vars.memo"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-trigger-fieldChange-anyChange",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "fieldChange",
+          "field": {
+            "clues": {
+              "id": "warehouse"
+            },
+            "componentType": "antdSelect",
+            "displayLabel": "发货仓库"
+          },
+          "condition": {
+            "kind": "anyChange"
+          }
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "warehouse"
+                  },
+                  "componentType": "antdSelect",
+                  "displayLabel": "发货仓库"
+                }
+              },
+              "into": "wh"
+            },
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "nonEmpty",
+                "ref": "vars.wh"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-trigger-fieldChange-codeEquals",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "fieldChange",
+          "field": {
+            "clues": {
+              "id": "warehouse"
+            },
+            "componentType": "antdSelect",
+            "displayLabel": "发货仓库"
+          },
+          "condition": {
+            "kind": "codeEquals",
+            "code": "SZ"
+          }
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "setInputValue",
+                "target": {
+                  "clues": {
+                    "id": "phone"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "联系电话"
+                },
+                "value": {
+                  "ref": "trigger.value"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-trigger-pageEnter",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-page-with-content-includes",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/form-page.html",
+          "contentIncludes": [
+            {
+              "clues": {
+                "id": "headline"
+              },
+              "componentType": "other",
+              "displayLabel": "受控表单页"
+            }
+          ]
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-submit-allowed-labeled",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "saveBtn"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "保 存"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-submit-submitLike-true-unlabeled",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "go",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "submitLike": true,
+                "target": {
+                  "clues": {
+                    "id": "goBtn"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "Go"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-submit-submitLike-false-correction",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "saveDraft",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "submitLike": false,
+                "target": {
+                  "clues": {
+                    "id": "draftBtn"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "保存为草稿(Save Draft)"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-businessKey-scalar",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "saveBtn"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "保 存"
+                }
+              }
+            }
+          ]
+        },
+        "businessKey": {
+          "read": {
+            "kind": "scalar",
+            "target": {
+              "clues": {
+                "id": "orderNo"
+              },
+              "componentType": "input",
+              "displayLabel": "单据号"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "valid-budget-lowering",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "w",
+              "kind": "wait",
+              "timeoutMs": 10000,
+              "until": {
+                "kind": "elementPresent",
+                "target": {
+                  "clues": {
+                    "id": "banner"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "横幅"
+                }
+              }
+            }
+          ]
+        },
+        "budget": {
+          "loopItems": 50,
+          "waitMs": 30000,
+          "runMs": 600000
+        }
+      }
+    },
+    {
+      "name": "valid-ref-trigger-value",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "setInputValue",
+                "target": {
+                  "clues": {
+                    "id": "memo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "备注"
+                },
+                "value": {
+                  "ref": "trigger.value"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "envelope-status-enabled-ignored",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        },
+        "id": "cloud-id",
+        "status": "enabled",
+        "provenance": {
+          "source": "import",
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      }
+    },
+    {
+      "name": "invalid-schema-version-2-unknown",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 2,
+        "name": "旧格式",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/x"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "actions": [
+          {
+            "kind": "setCheckbox",
+            "target": {
+              "clues": {
+                "id": "c1"
+              },
+              "componentType": "checkbox",
+              "displayLabel": "加急"
+            },
+            "checked": true
+          }
+        ]
+      },
+      "expectErrorIncludes": "schemaVersion"
+    },
+    {
+      "name": "invalid-schema-version-missing",
+      "expect": "invalid",
+      "flow": {
+        "name": "缺版本",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/x"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "schemaVersion"
+    },
+    {
+      "name": "invalid-schema-version-99",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 99,
+        "name": "未知版本",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/x"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "schemaVersion"
+    },
+    {
+      "name": "invalid-site-hostname-without-scheme",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-site-with-path",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com/path",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-page-empty-url-includes",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": ""
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-page-content-includes-empty-array",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/x",
+          "contentIncludes": []
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-name-blank",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "   ",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-node-unknown-kind",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "x",
+              "kind": "goto",
+              "label": "top"
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "unknown node kind"
+    },
+    {
+      "name": "invalid-node-duplicate-id",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            },
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b2"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "保存"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "duplicate node id"
+    },
+    {
+      "name": "invalid-ref-unknown",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "nonEmpty",
+                "ref": "vars.missing"
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "not assigned on every path"
+    },
+    {
+      "name": "invalid-ref-branch-only-slot",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "boolean",
+                "target": {
+                  "clues": {
+                    "id": "c1"
+                  },
+                  "componentType": "checkbox",
+                  "displayLabel": "加急"
+                }
+              },
+              "into": "urgent"
+            },
+            {
+              "id": "cond",
+              "kind": "if",
+              "when": {
+                "kind": "boolean",
+                "ref": "vars.urgent",
+                "equals": true
+              },
+              "then": [
+                {
+                  "id": "w",
+                  "kind": "read",
+                  "read": {
+                    "kind": "scalar",
+                    "target": {
+                      "clues": {
+                        "id": "memo"
+                      },
+                      "componentType": "input",
+                      "displayLabel": "备注"
+                    }
+                  },
+                  "into": "memo"
+                }
+              ]
+            },
+            {
+              "id": "use",
+              "kind": "assert",
+              "check": {
+                "kind": "nonEmpty",
+                "ref": "vars.memo"
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "not assigned on every path"
+    },
+    {
+      "name": "invalid-ref-loop-body-slot-after-loop",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "g",
+              "kind": "read",
+              "read": {
+                "kind": "collection",
+                "target": {
+                  "clues": {
+                    "id": "tab"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "组"
+                }
+              },
+              "into": "groups"
+            },
+            {
+              "id": "loop",
+              "kind": "foreach",
+              "over": "vars.groups",
+              "itemVar": "group",
+              "do": [
+                {
+                  "id": "inner",
+                  "kind": "read",
+                  "read": {
+                    "kind": "scalar",
+                    "target": {
+                      "clues": {
+                        "id": "memo"
+                      },
+                      "componentType": "input",
+                      "displayLabel": "备注"
+                    }
+                  },
+                  "into": "memo"
+                }
+              ]
+            },
+            {
+              "id": "after",
+              "kind": "assert",
+              "check": {
+                "kind": "nonEmpty",
+                "ref": "vars.memo"
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "not assigned on every path"
+    },
+    {
+      "name": "invalid-predicate-unknown-kind",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "memo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "备注"
+                }
+              },
+              "into": "memo"
+            },
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "regex",
+                "ref": "vars.memo",
+                "pattern": ".*"
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "unknown predicate kind"
+    },
+    {
+      "name": "invalid-numberCompare-bad-op",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "total"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "总量"
+                }
+              },
+              "into": "total"
+            },
+            {
+              "id": "a",
+              "kind": "assert",
+              "check": {
+                "kind": "numberCompare",
+                "ref": "vars.total",
+                "op": "!=",
+                "value": 0
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "op must be"
+    },
+    {
+      "name": "invalid-action-unknown-type",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "pressEnter",
+                "target": {
+                  "clues": {
+                    "id": "f1"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "备注"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "unknown action type"
+    },
+    {
+      "name": "invalid-action-setinputvalue-missing-value",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "setInputValue",
+                "target": {
+                  "clues": {
+                    "id": "f1"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "备注"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "required for setInputValue"
+    },
+    {
+      "name": "invalid-setcheckbox-missing-checked",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "setCheckbox",
+                "target": {
+                  "clues": {
+                    "id": "c1"
+                  },
+                  "componentType": "checkbox",
+                  "displayLabel": "加急"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "for setCheckbox"
+    },
+    {
+      "name": "invalid-submit-forbidden-term",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "delBtn"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "删 除"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "forbidden irreversible-action terms"
+    },
+    {
+      "name": "invalid-foreach-over-scalar",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "memo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "备注"
+                }
+              },
+              "into": "memo"
+            },
+            {
+              "id": "loop",
+              "kind": "foreach",
+              "over": "vars.memo",
+              "itemVar": "ch",
+              "do": [
+                {
+                  "id": "a",
+                  "kind": "action",
+                  "action": {
+                    "type": "clickButton",
+                    "target": {
+                      "clues": {
+                        "id": "b1"
+                      },
+                      "componentType": "button",
+                      "displayLabel": "刷新"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "foreach requires a collection or rows slot"
+    },
+    {
+      "name": "invalid-foreach-itemvar-shadow",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "g1",
+              "kind": "read",
+              "read": {
+                "kind": "collection",
+                "target": {
+                  "clues": {
+                    "id": "tab1"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "组一"
+                }
+              },
+              "into": "g1"
+            },
+            {
+              "id": "g2",
+              "kind": "read",
+              "read": {
+                "kind": "collection",
+                "target": {
+                  "clues": {
+                    "id": "tab2"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "组二"
+                }
+              },
+              "into": "g2"
+            },
+            {
+              "id": "outer",
+              "kind": "foreach",
+              "over": "vars.g1",
+              "itemVar": "group",
+              "do": [
+                {
+                  "id": "inner",
+                  "kind": "foreach",
+                  "over": "vars.g2",
+                  "itemVar": "group",
+                  "do": [
+                    {
+                      "id": "a",
+                      "kind": "action",
+                      "action": {
+                        "type": "clickButton",
+                        "target": {
+                          "clues": {
+                            "id": "b1"
+                          },
+                          "componentType": "button",
+                          "displayLabel": "刷新"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "shadows an outer loop variable"
+    },
+    {
+      "name": "invalid-foreach-maxiterations-over-budget",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "g",
+              "kind": "read",
+              "read": {
+                "kind": "collection",
+                "target": {
+                  "clues": {
+                    "id": "tab"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "组"
+                }
+              },
+              "into": "groups"
+            },
+            {
+              "id": "loop",
+              "kind": "foreach",
+              "over": "vars.groups",
+              "itemVar": "group",
+              "maxIterations": 50,
+              "do": [
+                {
+                  "id": "a",
+                  "kind": "action",
+                  "action": {
+                    "type": "clickButton",
+                    "target": {
+                      "clues": {
+                        "id": "b1"
+                      },
+                      "componentType": "button",
+                      "displayLabel": "刷新"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "budget": {
+          "loopItems": 10
+        }
+      },
+      "expectErrorIncludes": "exceeds the loop budget"
+    },
+    {
+      "name": "invalid-wait-missing-deadline",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "w",
+              "kind": "wait",
+              "until": {
+                "kind": "elementPresent",
+                "target": {
+                  "clues": {
+                    "id": "banner"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "横幅"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "a deadline is required"
+    },
+    {
+      "name": "invalid-wait-timeout-over-budget",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "w",
+              "kind": "wait",
+              "timeoutMs": 120000,
+              "until": {
+                "kind": "elementPresent",
+                "target": {
+                  "clues": {
+                    "id": "banner"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "横幅"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "exceeds the wait budget"
+    },
+    {
+      "name": "invalid-wait-unknown-condition",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "w",
+              "kind": "wait",
+              "timeoutMs": 5000,
+              "until": {
+                "kind": "urlChanges",
+                "to": "/x"
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "unknown wait condition kind"
+    },
+    {
+      "name": "invalid-read-unknown-kind",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "screenshot"
+              },
+              "into": "shot"
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "unknown read kind"
+    },
+    {
+      "name": "invalid-rows-columns-not-identifiers",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "rows",
+                "table": {
+                  "clues": {
+                    "id": "tbody"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "行"
+                },
+                "columns": [
+                  "weight",
+                  "箱 宽"
+                ]
+              },
+              "into": "rows"
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "non-empty array of identifiers"
+    },
+    {
+      "name": "invalid-rows-empty-columns",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r",
+              "kind": "read",
+              "read": {
+                "kind": "rows",
+                "table": {
+                  "clues": {
+                    "id": "tbody"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "行"
+                },
+                "columns": []
+              },
+              "into": "rows"
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "non-empty array of identifiers"
+    },
+    {
+      "name": "invalid-within-not-in-scope",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "tabBtn"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "页签",
+                  "within": "group"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "is not a loop item variable in scope"
+    },
+    {
+      "name": "invalid-businessKey-non-scalar-read",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        },
+        "businessKey": {
+          "read": {
+            "kind": "rows",
+            "table": {
+              "clues": {
+                "id": "tbody"
+              },
+              "componentType": "other",
+              "displayLabel": "行"
+            },
+            "columns": [
+              "a"
+            ]
+          }
+        }
+      },
+      "expectErrorIncludes": "must be a scalar read"
+    },
+    {
+      "name": "invalid-budget-over-cap",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        },
+        "budget": {
+          "loopItems": 500
+        }
+      },
+      "expectErrorIncludes": "exceeds the engine cap"
+    },
+    {
+      "name": "invalid-sequence-empty-steps",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": []
+        }
+      },
+      "expectErrorIncludes": "steps must be a non-empty array"
+    },
+    {
+      "name": "invalid-target-not-fieldref",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "id": "b1"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expectErrorIncludes": "not a valid field reference"
+    },
+    {
+      "name": "invalid-trigger-missing-kind",
+      "expect": "invalid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "演示流程",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/demo"
+        },
+        "trigger": {
+          "field": {
+            "clues": {
+              "id": "warehouse"
+            },
+            "componentType": "antdSelect",
+            "displayLabel": "发货仓库"
+          }
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "a",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "刷新"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-navigate-multi-page-wizard",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "跨页向导演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/order/new"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "pages": [
+          {
+            "id": "confirm",
+            "page": {
+              "urlIncludes": "/order/confirm"
+            }
+          },
+          {
+            "id": "result",
+            "page": {
+              "urlIncludes": "/order/result"
+            }
+          }
+        ],
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "read-order",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "click-submit",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "提交"
+                }
+              }
+            },
+            {
+              "id": "nav-confirm",
+              "kind": "navigate",
+              "to": "confirm",
+              "timeoutMs": 8000
+            },
+            {
+              "id": "click-confirm",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b2"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "确认"
+                }
+              }
+            },
+            {
+              "id": "nav-result",
+              "kind": "navigate",
+              "to": "result",
+              "timeoutMs": 5000
+            },
+            {
+              "id": "read-result",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "resultNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "结果单号"
+                }
+              },
+              "into": "resultNo"
+            },
+            {
+              "id": "assert-carry",
+              "kind": "assert",
+              "check": {
+                "kind": "nonEmpty",
+                "ref": "vars.orderNo"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-navigate-slot-carryover",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "跨页向导演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/order/new"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "pages": [
+          {
+            "id": "result",
+            "page": {
+              "urlIncludes": "/order/result"
+            }
+          }
+        ],
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "read-order",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "click-submit",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "提交"
+                }
+              }
+            },
+            {
+              "id": "nav1",
+              "kind": "navigate",
+              "to": "result",
+              "timeoutMs": 3000
+            },
+            {
+              "id": "use1",
+              "kind": "action",
+              "action": {
+                "type": "setInputValue",
+                "target": {
+                  "clues": {
+                    "id": "f9"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "回填单号"
+                },
+                "value": {
+                  "ref": "vars.orderNo"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-navigate-to-undeclared-page",
+      "expect": "invalid",
+      "expectErrorIncludes": "navigate.to \"result\" is not a declared pages[].id",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "跨页向导演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/order/new"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "pages": [
+          {
+            "id": "confirm",
+            "page": {
+              "urlIncludes": "/order/confirm"
+            }
+          }
+        ],
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "click-submit",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "提交"
+                }
+              }
+            },
+            {
+              "id": "nav1",
+              "kind": "navigate",
+              "to": "result",
+              "timeoutMs": 3000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-navigate-without-pages",
+      "expect": "invalid",
+      "expectErrorIncludes": "is not a declared pages[].id",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "跨页向导演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/order/new"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "click-submit",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "提交"
+                }
+              }
+            },
+            {
+              "id": "nav1",
+              "kind": "navigate",
+              "to": "result",
+              "timeoutMs": 3000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-navigate-dead-declared-page",
+      "expect": "invalid",
+      "expectErrorIncludes": "declared page \"result\" is not referenced by any navigate step",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "跨页向导演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/order/new"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "pages": [
+          {
+            "id": "confirm",
+            "page": {
+              "urlIncludes": "/order/confirm"
+            }
+          },
+          {
+            "id": "result",
+            "page": {
+              "urlIncludes": "/order/result"
+            }
+          }
+        ],
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "click-submit",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "提交"
+                }
+              }
+            },
+            {
+              "id": "nav1",
+              "kind": "navigate",
+              "to": "confirm",
+              "timeoutMs": 3000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-pages-duplicate-id",
+      "expect": "invalid",
+      "expectErrorIncludes": "\"confirm\" is declared more than once",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "跨页向导演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/order/new"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "pages": [
+          {
+            "id": "confirm",
+            "page": {
+              "urlIncludes": "/order/confirm"
+            }
+          },
+          {
+            "id": "confirm",
+            "page": {
+              "urlIncludes": "/order/confirm2"
+            }
+          }
+        ],
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "click-submit",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "提交"
+                }
+              }
+            },
+            {
+              "id": "nav1",
+              "kind": "navigate",
+              "to": "confirm",
+              "timeoutMs": 3000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-pages-id-not-ident",
+      "expect": "invalid",
+      "expectErrorIncludes": "pages[1].id: must be an identifier",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "跨页向导演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/order/new"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "pages": [
+          {
+            "id": "confirm",
+            "page": {
+              "urlIncludes": "/order/confirm"
+            }
+          },
+          {
+            "id": "2nd-page",
+            "page": {
+              "urlIncludes": "/order/result"
+            }
+          }
+        ],
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "click-submit",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "提交"
+                }
+              }
+            },
+            {
+              "id": "nav1",
+              "kind": "navigate",
+              "to": "confirm",
+              "timeoutMs": 3000
+            },
+            {
+              "id": "nav2",
+              "kind": "navigate",
+              "to": "2nd-page",
+              "timeoutMs": 3000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-pages-fingerprint",
+      "expect": "invalid",
+      "expectErrorIncludes": "pages[0]",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "跨页向导演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/order/new"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "pages": [
+          {
+            "id": "confirm",
+            "page": {
+              "urlIncludes": ""
+            }
+          }
+        ],
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "click-submit",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "提交"
+                }
+              }
+            },
+            {
+              "id": "nav1",
+              "kind": "navigate",
+              "to": "confirm",
+              "timeoutMs": 3000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-navigate-timeout-over-budget",
+      "expect": "invalid",
+      "expectErrorIncludes": "exceeds the wait budget",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "跨页向导演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/order/new"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "pages": [
+          {
+            "id": "confirm",
+            "page": {
+              "urlIncludes": "/order/confirm"
+            }
+          }
+        ],
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "click-submit",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "提交"
+                }
+              }
+            },
+            {
+              "id": "nav1",
+              "kind": "navigate",
+              "to": "confirm",
+              "timeoutMs": 90000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-pages-empty-array",
+      "expect": "invalid",
+      "expectErrorIncludes": "must be a non-empty array",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "跨页向导演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/order/new"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "pages": [],
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "click-submit",
+              "kind": "action",
+              "action": {
+                "type": "clickButton",
+                "target": {
+                  "clues": {
+                    "id": "b1"
+                  },
+                  "componentType": "button",
+                  "displayLabel": "提交"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-navigate-inside-foreach-over-cap",
+      "expect": "invalid",
+      "expectErrorIncludes": "exceeds the loop budget",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "跨页向导演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/order/new"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "pages": [
+          {
+            "id": "confirm",
+            "page": {
+              "urlIncludes": "/order/confirm"
+            }
+          }
+        ],
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "read-lines",
+              "kind": "read",
+              "read": {
+                "kind": "collection",
+                "target": {
+                  "clues": {
+                    "id": "lines"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "行集合"
+                }
+              },
+              "into": "lines"
+            },
+            {
+              "id": "loop",
+              "kind": "foreach",
+              "over": "vars.lines",
+              "itemVar": "it",
+              "maxIterations": 5,
+              "do": [
+                {
+                  "id": "click-submit",
+                  "kind": "action",
+                  "action": {
+                    "type": "clickButton",
+                    "target": {
+                      "clues": {
+                        "id": "b1"
+                      },
+                      "componentType": "button",
+                      "displayLabel": "提交"
+                    }
+                  }
+                },
+                {
+                  "id": "nav1",
+                  "kind": "navigate",
+                  "to": "confirm",
+                  "timeoutMs": 3000
+                }
+              ]
+            }
+          ]
+        },
+        "budget": {
+          "loopItems": 3
+        }
+      }
+    }
+  ]
+}

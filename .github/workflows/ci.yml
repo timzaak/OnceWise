@@ -1,0 +1,236 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - '.ai/**'
+      - '.github/workflows/**'
+  # Manual dispatch: paths-filter has no diff to compare on dispatch, so every
+  # job's `if` below ORs in the event name to run all three.
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      extension: ${{ steps.filter.outputs.extension }}
+      demo: ${{ steps.filter.outputs.demo }}
+      native: ${{ steps.filter.outputs.native }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+            extension:
+              - 'extension/**'
+            demo:
+              - 'demo/**'
+            native:
+              - 'skills/oncewise-message/**'
+              - 'extension/**'
+              - 'demo/e2e/extension/**'
+              - 'demo/playwright.config.ts'
+              - 'scripts/web-demo-test-runner.py'
+              - 'scripts/lib/**'
+
+  backend-ci:
+    name: Backend CI
+    needs: detect-changes
+    if: github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      RUSTC_WRAPPER: ""
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend -> target
+
+      - name: Check formatting
+        working-directory: backend
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        working-directory: backend
+        run: cargo clippy --all-targets --all-features --no-deps -- -D warnings
+
+      - name: Run tests
+        working-directory: backend
+        run: cargo test --all
+
+  extension-ci:
+    name: Extension CI
+    needs: detect-changes
+    if: github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.extension == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Type check
+        working-directory: extension
+        run: npm run compile
+
+      - name: Test
+        working-directory: extension
+        run: npm run test:run
+
+  demo-ci:
+    name: Demo CI
+    needs: detect-changes
+    if: github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.demo == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: demo/package-lock.json
+
+      - name: Install dependencies
+        working-directory: demo
+        run: npm ci
+
+      # The sync stories (us-ds/us-fs, Rust toolchain + PostgreSQL) stay local; the
+      # native-messaging stories run in native-demo-ci below. This job guards compilation.
+      - name: Type check
+        working-directory: demo
+        run: npm run type-check
+
+  # Native messaging channel demo (us-nm-*) on all three desktop platforms: real user-level host
+  # install (HKCU registry on Windows, browser NativeMessagingHosts dir on macOS/Linux), the
+  # Chrome-launched stdio host, the local IPC endpoint (named pipe / unix socket) and the real
+  # client CLI. Self-managed environment — no Rust, no PostgreSQL, headless Playwright Chromium.
+  # Node 22 for the whole job so CI verifies the channel's minimum supported major
+  # (native-host.ts resolveNode22 then reuses process.execPath for host + client).
+  native-demo-ci:
+    name: Native Messaging Demo (${{ matrix.os }})
+    needs: detect-changes
+    if: github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.native == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            extension/package-lock.json
+            demo/package-lock.json
+
+      - name: Install extension dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Build extension
+        working-directory: extension
+        run: npm run build
+
+      - name: Install demo dependencies
+        working-directory: demo
+        run: npm ci
+
+      - name: Install Playwright Chromium with system deps
+        if: runner.os == 'Linux'
+        working-directory: demo
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright Chromium
+        if: runner.os != 'Linux'
+        working-directory: demo
+        run: npx playwright install chromium
+
+      # uv drives scripts/web-demo-test-runner.py; not guaranteed on every runner image.
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
+      # Run every story file even if one fails (a shared-channel defect usually breaks several);
+      # the step exits non-zero if any did. Logs land in demo/test-results/runs/<run-id>/.
+      # NATIVE_DEMO_NODE: uv reorders PATH inside the runner's python child (observed hoisting
+      # /usr/local/bin — home of the image's old system Node — ahead of setup-node's Node 22), so
+      # the npx-launched Playwright process may run on Node 20. resolveNode22's escape hatch pins
+      # the bash-resolved Node 22 for host + client regardless of that.
+      - name: Run native messaging stories
+        shell: bash
+        run: |
+          export NATIVE_DEMO_NODE="$(command -v node)"
+          echo "NATIVE_DEMO_NODE=$NATIVE_DEMO_NODE ($(node -v))"
+          status=0
+          for story in us-nm-001-install-connectivity us-nm-002-native-delivery us-nm-003-native-revision us-nm-005-history-rollback; do
+            echo "=== $story ==="
+            uv run scripts/web-demo-test-runner.py "demo/e2e/extension/stories/$story.e2e.ts" --run-id "ci-$story" || status=1
+          done
+          exit $status
+
+      # If macOS still fails, capture where the channel stopped: host process present? IPC dir?
+      - name: Diagnose native host state (macOS)
+        if: failure() && runner.os == 'macOS'
+        shell: bash
+        run: |
+          ps aux | grep -i oncewise | grep -v grep || echo "no host process"
+          ls -la "$HOME/Library/Application Support/OnceWiseAI/ipc" 2>&1 || true
+          ls -la "$HOME/Library/Application Support/Chromium/NativeMessagingHosts" 2>&1 || true
+
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-demo-results-${{ matrix.os }}
+          path: demo/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

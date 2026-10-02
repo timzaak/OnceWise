@@ -1,0 +1,23 @@
+{
+  "name": "btool-skills",
+  "owner": {
+    "name": "timzaak"
+  },
+  "metadata": {
+    "description": "OnceWise AI agent skills: channel setup, flow authoring, and the native-messaging handoff programs both depend on"
+  },
+  "plugins": [
+    {
+      "name": "oncewise",
+      "version": "1.1.0",
+      "description": "Connect Chrome DevTools MCP and install the OnceWise AI native-messaging host (oncewise-setup), author flows over that channel (oncewise-flow), plus the native-messaging client programs they require.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/oncewise-setup",
+        "./skills/oncewise-flow",
+        "./skills/oncewise-message"
+      ]
+    }
+  ]
+}
