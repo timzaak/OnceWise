@@ -160,7 +160,7 @@
 
 **适用性**: 适用（能力边界与访问控制原则）
 
-- **接口能力范围**：本功能不引入网络服务或对外 HTTP API；新增的是扩展与本机程序之间的本机消息能力，范围限于流程读取、校验、保存、替换四类，与既有导入路径同级校验。不暴露启用、删除、回滚、任意脚本执行或浏览器操作；版本历史由扩展本地管理。
+- **接口能力范围**：本功能不引入网络服务或对外 HTTP API；新增的是扩展与本机程序之间的本机消息能力，范围限于流程读取、校验、保存、替换四类，与既有导入路径同级校验。不暴露启用、删除、回滚、任意脚本执行或浏览器操作；版本历史由扩展本地管理。（方法集与四类能力的映射：`ping` 承载连通验证（FR1），`flow.read`/`flow.validate`/`flow.save`/`flow.verify` 分别承载读取、校验、保存/替换与结果读回；替换由 `flow.save` 携带 `flowId`+`expectedUpdatedAt` 乐观锁承载。）
 - **访问控制原则**：本机程序按用户所选浏览器做用户级注册并绑定实际扩展实例；通信仅限本机当前用户作用域，不经网络，不向页面脚本开放；流程同步（data-sync feature）的数据边界不受本功能影响。
 - **兼容性原则**：桌面 Chrome 114 及以上（Windows/macOS/Linux）；本机程序依赖 Skill 指引指定版本的 Node.js 运行时；对外数据契约仍是流程文件格式（受约束步骤树），格式文档与扩展校验器保持同一事实源。
 
@@ -184,7 +184,7 @@
 
 | Decision ID | 状态 | 决策项 | 结论 | PRD 落点 | 来源 |
 |---|---|---|---|---|---|
-| `DEC-support-native-messaging-001` | Applied | 交接通道替换 | Native Messaging 替换 AI 操作导入页的流程创建与更新通道；支持 Windows/macOS/Linux；目标页探索验证仍用 Chrome DevTools MCP；保存未启用、启用仅用户 | 文首、§2、§3、§4.1、§5.1 | `.ai/decision-log/support-native-messaging.md` |
+| `DEC-support-native-messaging-001` | Applied | 交接通道替换 | Native Messaging 替换 AI 操作导入页的流程创建与更新通道；支持 Windows/macOS/Linux；目标页探索验证仍用 Chrome DevTools MCP；保存未启用、启用仅用户 | 文首、§2、§3、§4.1、§5.1 | 决策账本（内部工作区资产） |
 | `DEC-support-native-messaging-003` | Applied | 首轮范围 | 同时覆盖新建与优化替换 | §2.1、§5.1 FR2/FR3 | 同上 |
 | `DEC-support-native-messaging-004` | Applied | 优化来源 | 本机宿主向 AI 提供用户指定原流程，扩展先暂停原流程 | §2.1、§3.1、§5.1 FR3 | 同上 |
 | `DEC-support-native-messaging-007` | Applied | 保存确认归属 | AI 在对话中取得用户明确确认后经本机通道发起保存；扩展不在本机入口增设确认门禁 | §3.1、§4.1、§5.1 FR2/FR3 | 同上 |
@@ -209,7 +209,7 @@
 ## 9. 参考资料
 
 - 用户故事：`docs/user-stories/core/support-native-messaging.md`（角色定义：`docs/user-stories/_roles.md`）
-- 决策账本：`.ai/decision-log/support-native-messaging.md`（旧决策基线：[`core/self-service-browser-automation.md`](self-service-browser-automation.md) §8）
-- 技术预研：`.ai/tech-research/support-native-messaging.md`
+- 决策账本（内部工作区资产，未随仓库分发）；旧决策基线：[`core/self-service-browser-automation.md`](self-service-browser-automation.md) §8
+- 技术预研（内部工作区资产，未随仓库分发）
 - 基线 PRD：[`core/self-service-browser-automation.md`](self-service-browser-automation.md)、`docs/user-stories/core/self-service-browser-automation.md`
 - 相关 Skill：`skills/oncewise-setup/`、`skills/oncewise-flow/`、`skills/oncewise-message/`

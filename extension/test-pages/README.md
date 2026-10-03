@@ -34,6 +34,7 @@ npx -y serve -l 8123 .
 | `wizard-step1.html` | 跨页向导第 1 步（填写） | 业务号 `#orderNo` 可读、必填输入、提交按钮整页跳转第 2 步；`?biz=` 覆盖业务号 |
 | `wizard-step2.html` | 跨页向导第 2 步（确认） | 业务号跨页复核面（`#orderNo`）、确认跳转第 3 步；`?open=new-tab` 变体经 `target=_blank` 在新标签页打开第 3 步；`?biz=` 换单据号（business-changed 取消路径） |
 | `wizard-step3.html` | 跨页向导第 3 步（结果） | 终态标记 `.done-marker`（等待/断言目标）、动作记录；`?scenario=slow` 延迟就绪信号约 3 秒（慢加载认领、越过 navigate 截止时间） |
+| `packing-page.html` | 装箱受控页 | 模拟异步 DOM、多包装组、保存信号与货件预览；`?scenario=` 注入受控失败信号（us-ssba-010 装箱流程承载，见基线 PRD §2.1 受控测试页） |
 
-对照样例流程：`.ai/skill-examples/oncewise-flow/warehouse-phone.example.json`
+对照样例流程：`extension/tests/fixtures/oncewise-flow/warehouse-phone.example.json`
 （发货仓库 → 联系电话联动，site 即 `http://localhost:8123`）。

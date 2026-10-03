@@ -1,8 +1,8 @@
-# oncewise-ai-sync — 脚本同步与 Workspace 协作后端
+# oncewise-ai-sync — 脚本同步与空间协作后端
 
-自建轻量同步服务（data-sync）：账号、workspace、成员、邀请、脚本与版本的**存储与分发**。只存储分发结构化脚本数据，不生成、不执行流程，不做流程结构校验（格式校验由本机扩展把关，DEC-data-sync-004）。
+自建轻量同步服务（data-sync）：空间、脚本与版本的**存储与分发**——空间由客户端生成的 ID+密钥寻址（`X-Space-Key` 请求头），无账号体系（DEC-data-sync-007）。只存储分发结构化脚本数据，不生成、不执行流程，不做流程结构校验（格式校验由本机扩展把关，DEC-data-sync-004）。
 
-- 设计文档（API 契约唯一设计源）：`.ai/design/data-sync/backend.md`
+- API 契约：代码内 utoipa 注解为唯一事实源（运行时 `GET /api/openapi.json` 输出完整 OpenAPI 文档）
 - 技术栈：Rust + Tokio + Axum + PostgreSQL（sqlx，运行时查询 API）单 crate 单二进制
 
 ## 构建与运行
@@ -60,11 +60,11 @@ pg_dump -h <host> -U <user> oncewise_ai_sync > backup.sql   # 在线备份
 ## 接口
 
 - 健康探针：`GET /api/health`
-- OpenAPI 文档：`GET /api/openapi.json`（22 个接口的 utoipa 注解已全量注册，可据此核对契约）
-- 接口清单、字段、错误体与兼容策略以 `.ai/design/data-sync/backend.md` §4 为唯一设计源
+- OpenAPI 文档：`GET /api/openapi.json`（全部接口的 utoipa 注解已注册，可据此核对契约）
+- 接口清单、字段、错误体与兼容策略以代码内 utoipa 注解（`src/routes/*.rs`）为唯一事实源
 
 ## 当前状态
 
-- 全部 22 个业务接口已实现：账号（注册/登录/退出/getMe）、workspace（创建/清单/删除）、成员（清单/移除/退出）、邀请（生成/清单/作废/凭码加入）、脚本与版本（创建/清单/改名改备注/追加版本/版本清单/取内容）
-- 鉴权：bearer token（argon2id 密码 + SHA-256 token 哈希，30 天有效期）；workspace 域按请求实时鉴权（被移除成员下一请求即 403）
-- 场景测试见 `tests/scenario_data_sync.rs`（`cargo test`）
+- 全部 9 个业务接口已实现：空间（注册 / 读取[凭码加入验证] / 删除[级联]）、脚本与版本（创建 / 清单 / 改名改备注 / 追加版本 / 版本清单 / 取指定版本内容），另有 `health` 与 `openapi.json` 两个运维端点
+- 鉴权：空间密钥（`X-Space-Key` 请求头；服务端只存 SHA-256 哈希并常数时间比对，错误密钥 401、未知空间 404；无账号 / 令牌 / 成员概念，DEC-data-sync-007）
+- 场景测试见 `tests/scenario_data_sync.rs`（`cargo test`，s01–s10 对应 US-DS-001～006）

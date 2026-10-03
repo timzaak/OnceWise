@@ -7,7 +7,7 @@ import { expect, test } from '../fixtures'
 // 页面路径从 manifest.side_panel.default_path 读取，不硬编码。
 // 确定性链路（全新临时 profile、storage 为空）：
 // 1) 首次打开显示 onboarding 声明视图（DEC-011：首次打开必现，确认后写入 seen 标记）；
-// 2) 点击确认后进入工作台导航（4 个视图 tab）；
+// 2) 点击确认后进入工作台导航（3 个视图 tab）；
 // 3) 流程视图向 background 发送真实消息 sp:getFlows，空 profile 下收敛到空态提示。
 // 文本断言同时匹配 en/zh 两个内置目录（lib/i18n.ts 按浏览器 UI 语言选择），不依赖运行语言。
 // 范围说明（初始化阶段不覆盖，留给后续用户故事用例）：

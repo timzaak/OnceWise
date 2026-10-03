@@ -11,7 +11,7 @@ import {
   uploadFlowAsScript,
 } from '../workbench'
 
-// US-FS-001～004 运行前输入与流程复用。
+// US-FS-001～004 运行前输入与流程复用（docs/user-stories/core/form-support.md 故事 1～4）。
 // 一条声明七类输入的流程承载四条故事：详情填写与无效反馈（T1）、同次流程快照复用与
 // 运行中改值下次生效（T2）、缺必填零动作/选填缺席可启动（T3）、同步只共享定义（T4）。
 // 两步骤复用：同一 inputs.orderNo 先写 #contactPhone 再写 #remark；中间 wait 以

@@ -26,7 +26,7 @@ Complete setup only when the current agent reads the user's tab and the extensio
 Follow the [Native Messaging host reference](references/native-host-setup.md):
 
 1. Check Node.js 22+ and the `oncewise-message` programs at `skills/oncewise-message/`.
-2. From that directory, run `node install.mjs` during setup. Add `--browser chromium` for Chromium or `--extension-id <actual ID>` for a different development ID. Fix and rerun if the JSON result says `installed:false`. `client.mjs` stays in the skill directory; it needs no separate installation.
+2. From that directory, run `node install.mjs` during setup. Add `--browser chromium` for Chromium. The default binds the Chrome Web Store build (ID `dmmhmcdbkbbgbcidafhlhepdchjboenc`); for this repository's fixed-key unpacked build pass `--extension-id fkkfdckchahnjkcbimnbhonbgcefnafi` (the ID verified in step 2). Fix and rerun if the JSON result says `installed:false`. `client.mjs` stays in the skill directory; it needs no separate installation.
 3. Ask the user to start or restart that Chrome, then run `node client.mjs ping`. Require one JSON result with `ok:true` and `schemaVersion`; troubleshoot failures using the reference. Installation alone does not prove connectivity.
 
 ## Report the result

@@ -71,7 +71,7 @@
 - **防重复护栏（提交类动作的配套约束，按业务实例）**：带提交类动作的流程声明可读取的业务实例标识，执行前以 `站点+流程+业务实例` 原子占用；失败或结果未知不自动解除占用；已处目标状态即跳过；任何失败保守中止且不自动重试
 - **执行预算（DEC-019）**：引擎设置不可被流程放大的硬上限——静态节点数、嵌套深度、循环项数、总执行节点数、单次等待时长与整次运行时长；流程只能取更小预算
 - **失败原因可见**：实际触发失败后，流程清单与详情显示最近一次失败的节点、循环位置、环节与简短原因；成功后清除，不展示执行历史
-- **流程管理**：全部流程清单、查看、修改名称与流程输入值、暂停/恢复（暂停即取消当前执行）、按流程独立开关；步骤内容由外部 AI 基于原流程重新验证，经本机通道校验后覆盖原流程
+- **流程管理**：全部流程清单、查看、修改名称与流程输入值（输入项能力定义见 [`core/form-support.md`](form-support.md)）、暂停/恢复（暂停即取消当前执行）、按流程独立开关；步骤内容由外部 AI 基于原流程重新验证，经本机通道校验后覆盖原流程
 - **安装使用说明**：首次打开侧边栏展示使用说明与排除平台声明（DEC-011）
 - **受控测试页**：本项目提供含表单、下拉、提交按钮与页面内重载行为的本地测试页，以及模拟异步 DOM、多包装组、保存信号与货件预览的装箱受控页，承载楔子试验、流程验收与重复触发验证
 
@@ -207,7 +207,7 @@
 
 | Decision ID | 状态 | 决策项 | 结论 | PRD 落点 | 来源 |
 |---|---|---|---|---|---|
-| `DEC-self-service-browser-automation-006` | Applied | 首轮目标用户 | 已使用 AI 工具、希望固化已验证操作的人 | §3.1、§1 角色定义 | `.ai/decision-log/self-service-browser-automation.md` |
+| `DEC-self-service-browser-automation-006` | Applied | 首轮目标用户 | 已使用 AI 工具、希望固化已验证操作的人 | §3.1、§1 角色定义 | 决策账本（内部工作区资产） |
 | `DEC-self-service-browser-automation-007` | Applied | 首轮站点范围 | 用户指定站点、页面和触发条件 | §2.1、§4.1 | 同上 |
 | `DEC-self-service-browser-automation-008` | Applied | 验证载体与定位 | 外部 AI 验证至流程启用运行的完整闭环；内部试验定位 | 文首说明、§3.1、§5.2 | 同上 |
 | `DEC-self-service-browser-automation-009` | Applied | AI 与扩展职责 | AI 在用户工具中；本项目提供 Skill；扩展仅承担流程运行闭环 | §2.1、§2.2、§3.2、§4.1 | 同上 |
@@ -218,7 +218,7 @@
 | `DEC-self-service-browser-automation-014` | Superseded | 导入通道与启用分工 | AI 经浏览器通道实时导入 + 用户手动导入，同一校验；默认关闭、独立开关、启用无预演门禁（承接 DEC-012）；启用与站点授权只能由用户操作 | 不作为本 PRD 依据（有效条款由 DEC-015 承接，见决策账本） | 同上 |
 | `DEC-self-service-browser-automation-015` | Superseded（部分） | 导入通道收敛 | 原结论为"导入唯一通道为 AI 经浏览器通道实时导入"；通道部分由 DEC-support-native-messaging-001 取代（唯一交付通道为本机通道，见 [`core/support-native-messaging.md`](support-native-messaging.md)）；不提供面向用户的手动导入（文件/粘贴）通道、导入即默认关闭、独立开关、启用无门禁、启用仅用户、导入/管理页面作为载体等条款继续有效 | §2.1、§2.2、§3.2、§4.1、§7 | 同上 |
 | `DEC-self-service-browser-automation-016` | Applied | 一站式授权启用 | 导入→启用→验证全流程一站式于导入页面完成（保存后一键启用卡、流程清单独立开关、AI 编排验证演示），无跨界面往返；启用仍仅限用户本人（承接 DEC-015）。2026-09-28 用户裁定：站点授权层移除，一键卡仅保留启用 | §1.1（US-SSBA-009）、§5.1 FR3、§5.2 目标 1、§7 | 同上 |
-| `DEC-self-service-browser-automation-019` | Applied（"跨文档续跑"排除条款由 DEC-cross-page-flow-001 部分取代，跨页扩展见 [`core/cross-page-flow.md`](cross-page-flow.md)） | 受约束步骤树运行期 | 流程格式为受约束步骤树（读取、条件、有界循环、等待、断言），运行期以 XState 状态机执行；防重复单位为业务实例占用；部分完成不回滚；非当前 schemaVersion 拒绝执行、不做迁移；可选的多页声明（声明页清单与跳转声明）是其词汇增量，同站顺序跨页语义以 cross-page-flow PRD 为准 | §2.1/2.2、§3.1/3.2、§4.1/4.2、§5.1 FR1/FR2/FR4~FR7/FR9/FR12、§5.2 目标 3~5、§6 | 同上（改造方案：`.ai/future/flow-runtime-plan.md`） |
+| `DEC-self-service-browser-automation-019` | Applied（"跨文档续跑"排除条款由 DEC-cross-page-flow-001 部分取代，跨页扩展见 [`core/cross-page-flow.md`](cross-page-flow.md)） | 受约束步骤树运行期 | 流程格式为受约束步骤树（读取、条件、有界循环、等待、断言），运行期以 XState 状态机执行；防重复单位为业务实例占用；部分完成不回滚；非当前 schemaVersion 拒绝执行、不做迁移；可选的多页声明（声明页清单与跳转声明）是其词汇增量，同站顺序跨页语义以 cross-page-flow PRD 为准 | §2.1/2.2、§3.1/3.2、§4.1/4.2、§5.1 FR1/FR2/FR4~FR7/FR9/FR12、§5.2 目标 3~5、§6 | 同上（改造方案：flow-runtime 改造计划，内部工作区资产） |
 
 > `DEC-self-service-browser-automation-001` ~ `005` 已 Superseded，不作为本 PRD 依据（见决策账本）。`DEC-self-service-browser-automation-017/018`（i18n 主语言、图标直达工作台）为工程与交互决策，落点见决策账本与本 PRD §7。
 
@@ -228,6 +228,6 @@
 - 用户故事：`docs/user-stories/core/self-service-browser-automation.md`（角色定义：`docs/user-stories/_roles.md`）
 - 交接通道 PRD：[`core/support-native-messaging.md`](support-native-messaging.md)（用户故事：`docs/user-stories/core/support-native-messaging.md`）
 - 跨页能力 PRD：[`core/cross-page-flow.md`](cross-page-flow.md)（用户故事：`docs/user-stories/core/cross-page-flow.md`）
-- Decision Brief：`.ai/decision/self-service-browser-automation.md`（2026-09-24 版）
-- 决策账本：`.ai/decision-log/self-service-browser-automation.md`（DEC-006 ~ 016）
-- 技术预研：`.ai/tech-research/self-service-browser-automation.md`
+- Decision Brief（内部工作区资产，已归档）：2026-09-24 版
+- 决策账本（内部工作区资产，未随仓库分发）：DEC-006 ~ 016
+- 技术预研（内部工作区资产，未随仓库分发）

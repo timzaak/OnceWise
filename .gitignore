@@ -1,7 +1,4 @@
 .ai/*
-!.ai/skill-examples/
-.ai/skill-examples/*
-!.ai/skill-examples/oncewise-flow/
 .live-verify/
 node_modules/
 __pycache__/

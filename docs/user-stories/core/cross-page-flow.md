@@ -1,4 +1,4 @@
-# AI 工具用户 用户故事（cross-page-flow）
+# 跨页流程 用户故事（cross-page-flow）
 
 > 角色定义见 [`docs/user-stories/_roles.md`](../_roles.md)（AI 工具用户）。
 > 关联：[正式 PRD](../../prd/core/cross-page-flow.md)；基线故事（US-SSBA-010/004/002）见 [`self-service-browser-automation.md`](self-service-browser-automation.md)。

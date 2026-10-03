@@ -145,9 +145,9 @@
 
 | Decision ID | 状态 | 决策项 | 结论 | PRD 落点 | 来源 |
 |---|---|---|---|---|---|
-| `DEC-cross-page-flow-001` | Applied | 跨页范围 | 同站顺序跨页：声明式跳转续跑（含新标签页同站下一页），单一站点、串行、单业务实例；跨站与跨标签页编排维持排除，部分取代 DEC-self-service-browser-automation-019 的"跨文档续跑"排除条款 | §2.1/2.2、§3.1/3.2、§4.1、§5.1 FR1~FR5、§5.2 目标 1~4 | `.ai/decision-log/cross-page-flow.md` |
+| `DEC-cross-page-flow-001` | Applied | 跨页范围 | 同站顺序跨页：声明式跳转续跑（含新标签页同站下一页），单一站点、串行、单业务实例；跨站与跨标签页编排维持排除，部分取代 DEC-self-service-browser-automation-019 的"跨文档续跑"排除条款 | §2.1/2.2、§3.1/3.2、§4.1、§5.1 FR1~FR5、§5.2 目标 1~4 | 决策账本（内部工作区资产） |
 | `DEC-cross-page-flow-002` | Applied | 中断语义 | 意外中断保守取消、不自动续跑、不保存可恢复运行快照；维持 DEC-019"不保存可恢复的运行快照"条款 | §2.1/2.2、§4.1（取消面/数据边界）、§5.1 FR4、§5.2 目标 3 | 同上 |
-| `DEC-self-service-browser-automation-019` | Applied（"跨文档续跑"排除条款被 DEC-cross-page-flow-001 部分取代） | 受约束步骤树运行期 | 多页能力是步骤树的可选词汇增量；业务实例占用、保守停止、schema 拒绝迁移、XState 唯一运行期等条款继续适用 | §2.1/2.2、§3.2、§4.1、§6 | `.ai/decision-log/self-service-browser-automation.md` |
+| `DEC-self-service-browser-automation-019` | Applied（"跨文档续跑"排除条款被 DEC-cross-page-flow-001 部分取代） | 受约束步骤树运行期 | 多页能力是步骤树的可选词汇增量；业务实例占用、保守停止、schema 拒绝迁移、XState 唯一运行期等条款继续适用 | §2.1/2.2、§3.2、§4.1、§6 | 决策账本（内部工作区资产，父 feature） |
 | `DEC-self-service-browser-automation-010` | Applied | 高风险动作 | 保存/提交/确认自动执行与防重放边界不变，占用跨页保持 | §4.1（防重放）、§5.1 FR5 | 同上 |
 | `DEC-self-service-browser-automation-009` / `013` | Applied | AI 与扩展职责 / 交接入口 | 扩展无 AI；多页流程经既有 Skill + 本机通道交付，不新增导入路径 | §2.3、§5.1 FR1、§6 | 同上 |
 | `DEC-self-service-browser-automation-015` / `016` | Applied | 导入与启用边界 | 多页流程保存即未启用、启用仅限用户本人、无新增门禁 | §5.1 FR1 | 同上 |
@@ -160,4 +160,4 @@
 ## 9. 参考资料
 - 用户故事：`docs/user-stories/core/cross-page-flow.md`（US-CPF-001）；受影响基线故事 `docs/user-stories/core/self-service-browser-automation.md`（US-SSBA-010/004/002，已随本能力修订）
 - 基线 PRD：[`core/self-service-browser-automation.md`](self-service-browser-automation.md)（本能力修订其 §2.2 排除条款与 FR5/FR6/FR7 执行面）
-- 决策账本：`.ai/decision-log/cross-page-flow.md`（DEC-cross-page-flow-001/002）；`.ai/decision-log/self-service-browser-automation.md`（父 feature，文首登记部分取代关系）
+- 决策账本（内部工作区资产，未随仓库分发）：DEC-cross-page-flow-001/002；父 feature 账本登记部分取代关系（DEC-self-service-browser-automation-019）

@@ -105,7 +105,6 @@ describe('import validation chain', () => {
   });
 
   it('success path: normalized draft, status draft, envelope rewritten, existing flows untouched', async () => {
-    // an existing flow is present before the import
     const existing = buildImportedFlow(validateFlow(importFile({ name: '已有流程' }), 'import').draft!);
     await flowStoreItem.setValue(buildFlowStore([existing]));
 

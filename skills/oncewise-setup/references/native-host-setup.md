@@ -8,9 +8,9 @@ OnceWise AI uses `skills/oncewise-message/` to hand flows to its Chrome extensio
 - Node.js 22 or later (prefer a supported LTS release). Check with `node --version`; the installer, host, and client enforce the minimum version.
 - The skill repository's `skills/oncewise-message/` directory, containing `protocol.mjs`, `host.mjs`, `client.mjs`, `install.mjs`, and `uninstall.mjs`.
 
-## Fixed extension ID
+## Fixed extension IDs
 
-The extension manifest pins its `key`, so the extension ID is always `fkkfdckchahnjkcbimnbhonbgcefnafi`. The host manifest's `allowed_origins` contains only `chrome-extension://fkkfdckchahnjkcbimnbhonbgcefnafi/`, with no wildcard. For a development build loaded with a different key, explicitly pass `--extension-id <actual ID>` when installing.
+The Chrome Web Store build runs under the store-assigned ID `dmmhmcdbkbbgbcidafhlhepdchjboenc` (the store rejects manifest `key` fields, so the store build cannot keep the pinned dev ID). By default the host manifest's `allowed_origins` contains only `chrome-extension://dmmhmcdbkbbgbcidafhlhepdchjboenc/`, with no wildcard. The fixed-key unpacked build from this repository (`extension/wxt.config.ts`) keeps ID `fkkfdckchahnjkcbimnbhonbgcefnafi` — install for that build with `--extension-id fkkfdckchahnjkcbimnbhonbgcefnafi`. Any other development build: pass its actual ID the same way.
 
 ## Install for the current user (no administrator rights)
 
@@ -18,7 +18,7 @@ The extension manifest pins its `key`, so the extension ID is always `fkkfdckcha
 cd <repository>/skills/oncewise-message
 node install.mjs                       # Google Chrome (default)
 node install.mjs --browser chromium    # Chromium, Playwright's bundled browser, etc.
-node install.mjs --extension-id <id>   # Development build without the fixed key
+node install.mjs --extension-id <id>   # Non-default build (fixed-key dev build: fkkfdckchahnjkcbimnbhonbgcefnafi)
 ```
 
 The installer copies `host.mjs` and `protocol.mjs` to a stable user-level directory, creates a launcher using the current Node binary's absolute path, writes and registers the host manifest (`stdio`, exact origin), verifies what it wrote, and prints a JSON summary with `installed: true` and the paths. On failure it prints `installed: false` and a reason. Rerun it after fixing the cause. `client.mjs` stays in the skill directory for the AI to call; it needs no separate installation.

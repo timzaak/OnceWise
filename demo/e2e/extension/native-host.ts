@@ -100,7 +100,9 @@ let hostRegistrationConfirmedClean = false
 // 先卸载再重装（自愈上次中断的残留注册），不把残留当作就绪证据。
 export function installNativeHost(): InstallSummary {
   if (!hostRegistrationConfirmedClean) uninstallNativeHost()
-  const { result } = runNode22('install.mjs', ['--browser', 'chromium'])
+  // 显式绑定固定 key 开发构建的 ID：protocol.mjs 的 EXTENSION_ID 默认值是 Chrome Web Store
+  // 分配的正式 ID，而本套件加载的是 pinned-key 解包构建（HOST_EXT_ID），必须显式覆盖。
+  const { result } = runNode22('install.mjs', ['--browser', 'chromium', '--extension-id', HOST_EXT_ID])
   if (result.installed !== true) {
     throw new Error(`宿主安装失败：${JSON.stringify(result)}`)
   }

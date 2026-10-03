@@ -1,4 +1,4 @@
-> [项目简述：请在此处填写项目的一句话描述]
+> OnceWise AI：自助浏览器局部自动化 Chrome 扩展（受约束步骤树流程、本机通道流程交接、运行前输入表单）+ oncewise-ai-sync 数据同步后端（Rust/Axum/PostgreSQL，无账号空间模型）。主要入口：`README.md`、`docs/prd/00-index.md`、`scripts/index.md`。
 
 These rules apply to every task in this project unless explicitly overridden.
 Bias: caution over speed on non-trivial work. Use judgment on trivial tasks.

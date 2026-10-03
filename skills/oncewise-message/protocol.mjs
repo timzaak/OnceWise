@@ -20,10 +20,12 @@ export const PROTOCOL_VERSION = 1;
 export const MAX_REQUEST_BYTES = 512 * 1024;
 export const MAX_RESPONSE_BYTES = 1024 * 1024;
 
-// Fixed extension ID derived from the manifest key pinned in extension/wxt.config.ts. The host
-// manifest's allowed_origins must list exactly this origin unless an override is given explicitly
-// (install.mjs --extension-id, for development builds with a different key).
-export const EXTENSION_ID = 'fkkfdckchahnjkcbimnbhonbgcefnafi';
+// Production extension ID assigned by the Chrome Web Store (item dmmhmcdbkbbgbcidafhlhepdchjboenc;
+// the store rejects uploads whose manifest carries a key, so the store build cannot keep the pinned
+// dev ID). The host manifest's allowed_origins must list exactly this origin unless an override is
+// given explicitly (install.mjs --extension-id, e.g. fkkfdckchahnjkcbimnbhonbgcefnafi for the
+// fixed-key unpacked build from extension/wxt.config.ts).
+export const EXTENSION_ID = 'dmmhmcdbkbbgbcidafhlhepdchjboenc';
 
 // Closed op whitelist. Enable / delete / rollback / list / browser / script are not part of the
 // channel — destructive and user-reserved actions stay off the AI channel, and widening this list

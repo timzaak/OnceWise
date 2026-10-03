@@ -2,6 +2,7 @@
 // response bodies (including the unified error-body codes). Each case gets a fresh PostgreSQL
 // database from db::init_test_pool (same migration source as production; needs TEST_DATABASE_URL
 // or DATABASE_URL pointing at a running PostgreSQL server).
+// Story mapping: s01–s10 correspond to US-DS-001～006 (docs/user-stories/core/data-sync.md).
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};

@@ -2,6 +2,7 @@
 
 > 角色：**AI 工具用户**，定义见 [`docs/user-stories/_roles.md`](../_roles.md)。
 > 关联：[正式 PRD](../../prd/core/self-service-browser-automation.md)。
+> 编号说明：US-SSBA-001/006 为 2026-09-24 前旧方向草稿的编号，现行故事集发布时废止，故编号自 002 起、跳过 006。
 > 2026-09-30 修订：流程交接通道切换为 Chrome Native Messaging 本机通道（见 [`support-native-messaging.md`](support-native-messaging.md)）——US-SSBA-008 由 US-NM-002 取代，US-SSBA-005 场景 2 按 US-NM-003 修订，US-SSBA-007 的交付引用按本机通道理解；其余故事不变。
 > 2026-10-02 修订：放开同站顺序跨页（见 [`cross-page-flow.md`](cross-page-flow.md)）——US-SSBA-010 新增跨页继续场景（场景 7），US-SSBA-004/US-SSBA-002 增补跨页注记；跨页完整故事见 US-CPF-001。其余故事不变。
 

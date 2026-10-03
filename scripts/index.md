@@ -25,16 +25,16 @@
 ## 前置工具
 
 - 基础：uv（Python runner）、Node + npm + npx、Playwright 自带 Chromium；Demo 首次准备 `cd demo && npm install` 再 `npx playwright install chromium`。
-- 本机通道用例（us-nm-*）：需要 Node 22+（解析链见 `demo/e2e/extension/native-host.ts` 头注），并在目标浏览器用户级安装宿主 `node skills/oncewise-message/install.mjs`（Chromium 类加 `--browser chromium`）。安装位置、固定扩展 ID、排错与卸载统一见 `skills/oncewise-setup/references/native-host-setup.md`。
-- 同步故事（`stories/` 下 us-ds / us-fs / us-ssba 同步类）：Rust 工具链 + PostgreSQL（默认 `postgres://postgres:postgres@127.0.0.1:5432/postgres`，`SYNC_DATABASE_URL` 可覆盖；本地可 `docker run -d --name oncewise-demo-pg -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5432:5432 postgres:18-alpine`）。
+- 本机通道用例（us-nm-*）：需要 Node 22+（解析链见 `demo/e2e/extension/native-host.ts` 头注），并在目标浏览器用户级安装宿主 `node skills/oncewise-message/install.mjs`（Chromium 类加 `--browser chromium`；套件加载的是固定 key 开发构建，人工预装须再加 `--extension-id fkkfdckchahnjkcbimnbhonbgcefnafi`——`native-host.ts` 的自动安装已自带该参数）。安装位置、固定扩展 ID、排错与卸载统一见 `skills/oncewise-setup/references/native-host-setup.md`。
+- 同步故事（`stories/` 下 us-ds / us-fs 同步类）：Rust 工具链 + PostgreSQL（默认 `postgres://postgres:postgres@127.0.0.1:5432/postgres`，`SYNC_DATABASE_URL` 可覆盖；本地可 `docker run -d --name oncewise-demo-pg -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5432:5432 postgres:18-alpine`）。
 
 ## Demo 套件
 
-- **本机通道（us-nm-001～005，基础设施 `demo/e2e/extension/native-host.ts`）**：四个文件 us-nm-001-install-connectivity / us-nm-002-native-delivery / us-nm-003-native-revision / us-nm-005-history-rollback，入口同命令表。`nativeTest` 每用例完成宿主注册 → 浏览器冷启动 → 用例 → 卸载回收（真实用户级注册，Windows 为 HKCU；中断残留由下次安装自愈，或手动 `node skills/oncewise-message/uninstall.mjs --browser chromium`）；`bareTest` 强制未注册承载未就绪场景。三平台真实 Chrome 与用户当前浏览器现场证据不在这些用例范围（见 `native-host-setup.md`）。
+- **本机通道（us-nm-001～005，基础设施 `demo/e2e/extension/native-host.ts`）**：四个文件 us-nm-001-install-connectivity / us-nm-002-native-delivery / us-nm-003-native-revision / us-nm-005-history-rollback，入口同命令表。US-NM-004（交接结果真实可见）的两场景由 us-nm-002 文件内承载（无同名文件，非覆盖缺口）。`nativeTest` 每用例完成宿主注册 → 浏览器冷启动 → 用例 → 卸载回收（真实用户级注册，Windows 为 HKCU；中断残留由下次安装自愈，或手动 `node skills/oncewise-message/uninstall.mjs --browser chromium`）；`bareTest` 强制未注册承载未就绪场景。三平台真实 Chrome 与用户当前浏览器现场证据不在这些用例范围（见 `native-host-setup.md`）。
 - **同步故事（stories/ 其余）**：oncewise-ai-sync 后端由 `sync-server.ts` 每用例自管（二进制解析 `ONCEWISE_AI_SYNC_BIN` → `backend/target/release|debug` → cargo 兜底；随机端口 + 自动建删独立库），宿主静态页由 `host-site.ts` 随机端口提供；任一环节失败即用例失败，不 skip。
 - **装箱流程（us-ssba-010）**：不起后端；宿主页由 host-site 提供，受控失败信号经 `packing-page.html?scenario=` 注入。
 - **跨页流程（us-cpf-001，extension-demo 交付 `stories/us-cpf-001-cross-page-flow.e2e.ts`）**：不起后端；宿主三页向导由 host-site 提供（`wizardStepUrl(step, opts)`，静态源为 `extension/test-pages/wizard-step{1,2,3}.html`）。受控信号：`?open=new-tab`（第 2 步确认以 `target=_blank` 打开第 3 步）、`?scenario=slow`（第 3 步就绪信号延迟约 3 秒——慢加载认领与越过 navigate 截止时间；向导表单 GET 提交不带查询参数，该信号由宿主服务 `startHostSite({ slowStep3: true })` 以 302 投递到表单发起的导航上）、`?biz=`（区分业务实例；第 2 步换单据号即 business-changed 取消路径）。跨页受控页参数详见 `extension/test-pages/README.md`。
-- **店铺资产采集（listing/capture-listing.e2e.ts）**：非验收用例——加载生产构建产物、播种演示流程，把 Chrome Web Store 截图（1280×800）与宣传图（440×280 / 1400×560）直接写入 `docs/store-listing/screenshots/`；无业务断言、无需宿主/后端，不入 CI；产物清单与拍摄纪律见 `docs/store-listing/`。
+- **店铺资产采集（listing/capture-listing.e2e.ts）**：非验收用例——加载生产构建产物、播种演示流程，把 Chrome Web Store 截图（1280×800）与宣传图（440×280 / 1400×560）直接写入 `docs/store-listing/screenshots/`；无需后端（宿主页由 host-site 自起；仅含一条截图稳定性守卫断言，非业务验收），不入 CI；产物清单与拍摄纪律见 `docs/store-listing/`。
 - 所有扩展用例直接加载生产构建产物 `extension/.output/chrome-mv3`（定位见 `extension-target.ts`）；host 权限随 manifest 安装获得，无需权限手势；扩展 ID 由 fixtures 从 background service worker URL 自动解析。其余用例无外部服务，不得为扩展用例启动默认 Docker Web 环境。
 - 日志：runner 末行 `Result`（`logs` 相对 `demo/`），常见位置 `demo/test-results/runs/<run-id>/` 与统一日志 `demo/test-results/unified-logs/`。失败时保留命令、失败用例和日志，修复后定向重跑；未执行或受阻的测试明确记录原因，不得换脚本绕过。
 
@@ -49,6 +49,8 @@
 ## 缺口（未配置，不虚构命令）
 
 后端（`backend/`）测试入口尚未在本索引配置；需要时按其 nextest 约定补齐 `backend-test.py` 与对应说明。同域真实入口：`cd backend && TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres cargo test`（s01–s10 场景测试，每用例自建一次性 `oncewise_ai_test_*` 库）。
+
+扩展故事 demo 覆盖缺口（显式记录，非遗漏）：US-SSBA-003（字段变化联动，全部 demo 流程均为 pageEnter 触发）、US-SSBA-005 场景 4（用户暂停/恢复不自动续跑——us-cpf-001 T4 仅覆盖关闭标签页中断）无用例；US-SSBA-007 属 AI 工具侧产出（Playwright 无法承载，由 skills/ 交付与人工路径覆盖）；US-SSBA-002/009/011 由 smoke/packing/us-nm-002/us-ds-004 用例部分触及。
 
 ## 人工 Demo 环境
 

@@ -5,11 +5,12 @@
 ## 目录结构
 
 - `extension/` — Chrome MV3 扩展（单击工具栏图标直达流程工作台 sidepanel、流程导入（流程自带站点域名，内容脚本按流程站点动态注入）、dry-run；「同步」页签按空间码共享脚本）
-- `backend/` — oncewise-ai-sync 数据同步服务（axum + SQLite；空间由客户端生成的 ID+密钥寻址，无账号体系）
+- `backend/` — oncewise-ai-sync 数据同步服务（axum + PostgreSQL；空间由客户端生成的 ID+密钥寻址，无账号体系）
 - `demo/` — Playwright 扩展集成测试（`demo/e2e/extension/`，独立 fixture 加载真实构建产物）
 - `scripts/` — 测试与 Demo 运行脚本（Python runner）
-- `docs/` — PRD 与用户故事
+- `docs/` — PRD 与用户故事（PRD 索引：[docs/prd/00-index.md](docs/prd/00-index.md)）
 - `skills/oncewise-message/` — 本机流程交接程序（Node 22+，`host.mjs`/`client.mjs`/`install.mjs`/`uninstall.mjs`，随 Skill 分发；安装位置与排错见 `skills/oncewise-setup/references/native-host-setup.md`）
+- `DESIGN.md` — 视觉规范（业务约束以 `docs/` 为准）
 
 ## 快速启动
 
@@ -18,8 +19,9 @@
 cd extension && npm install && npm run dev     # 构建产物手动加载到日常 Chrome
 cd extension && npm run build                  # MV3 生产构建 → .output/chrome-mv3
 
-# 同步后端（backend/）
-cd backend && cargo run                        # 默认 0.0.0.0:8080，数据在 ./data（BIND_ADDR / DATA_DIR 可覆盖）
+# 同步后端（backend/，外部 PostgreSQL；DATABASE_URL 必填，BIND_ADDR 可覆盖）
+docker run -d --name oncewise-demo-pg -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5432:5432 postgres:18-alpine
+cd backend && DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres cargo run   # 默认 0.0.0.0:8080
 
 # 扩展 Demo 集成测试（首次准备）
 cd demo && npm install && npx playwright install chromium
@@ -58,7 +60,7 @@ npx skills add . --skill oncewise-setup --skill oncewise-flow --skill oncewise-m
 
 兼容性以一次实际连通性检查为准：宿主须能读取随附资料、连接运行在用户本机的浏览器 MCP（目标网页探索与验证），并在用户本机运行 `skills/oncewise-message/client.mjs` 完成 Native Messaging 交接（Node 22+，`oncewise-setup` 负责安装与 `ping` 验证）；扩展是唯一的校验与持久化方，保存前须取得用户在对话中的明确确认，流程保存后未启用，启用与回滚仅由用户本人在扩展界面操作。仅支持上传 skill 或仅有内置网页浏览能力，不足以证明完整流程可用。云端执行环境尤其需要确认是否能连接用户本机的 Chrome 与本机通道。
 
-本项目扩展目前以源码形式交付：先在 `extension/` 执行 `npm install`、`npm run build`，再在 Chrome 的 `chrome://extensions` 打开开发者模式，通过「Load unpacked / 加载已解压的扩展程序」选择 `extension/.output/chrome-mv3`。manifest 固定了 `key`，扩展 ID 恒为 `fkkfdckchahnjkcbimnbhonbgcefnafi`（本机宿主的 `allowed_origins` 绑定该 ID）。扩展必须装在 MCP 操作的同一 Chrome 实例内。旧的无 key 开发实例派生不同 ID，其本地流程在新 ID 下不可见——所需流程须经 AI 本机通道重新创建。
+本项目扩展有两种安装形态。**Chrome Web Store 版**（推荐）：商店链接上线后直接安装，运行在商店分配的 ID `dmmhmcdbkbbgbcidafhlhepdchjboenc` 下（商店拒绝带 `key` 字段的上传包，故商店版无法保留下面的固定开发 ID）。**源码开发版**：先在 `extension/` 执行 `npm install`、`npm run build`，再在 Chrome 的 `chrome://extensions` 打开开发者模式，通过「Load unpacked / 加载已解压的扩展程序」选择 `extension/.output/chrome-mv3`。开发版 manifest 固定了 `key`，扩展 ID 恒为 `fkkfdckchahnjkcbimnbhonbgcefnafi`（本机宿主安装时需加 `--extension-id fkkfdckchahnjkcbimnbhonbgcefnafi`；默认 `allowed_origins` 绑定的是商店版 ID）。扩展必须装在 MCP 操作的同一 Chrome 实例内。旧的无 key 开发实例派生不同 ID，其本地流程在新 ID 下不可见——所需流程须经 AI 本机通道重新创建。
 
 ## 开源许可证
 

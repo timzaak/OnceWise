@@ -250,7 +250,9 @@ pub async fn update_script(
 }
 
 /// Append an immutable new version: MAX(version_number)+1 allocation + INSERT + scripts.updated_at
-/// refresh, all inside one BEGIN IMMEDIATE transaction; the UNIQUE(script_id, version_number)
+/// refresh, all inside one write transaction holding a row lock on the script (SELECT … FOR
+/// UPDATE — PostgreSQL's replacement for SQLite's whole-database BEGIN IMMEDIATE
+/// serialization); the UNIQUE(script_id, version_number)
 /// backstop hitting means an invariant broke and is treated as an internal error.
 #[utoipa::path(
     post,
