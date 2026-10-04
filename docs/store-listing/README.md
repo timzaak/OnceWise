@@ -41,4 +41,4 @@
 
 - 扩展 UI 变化后重跑采集刷新全部截图:`uv run scripts/web-demo-test-runner.py demo/e2e/extension/listing/capture-listing.e2e.ts --run-id <唯一ID>`(入口说明见 `scripts/index.md`)。
 - 隐私政策修订后:更新 `docs/privacy-policy.md` 生效日期 → 同步 `gh-pages` 的 `index.html` → 核对本包 `privacy-declarations.md` 与政策无出入。
-- 版本号递增:`extension/package.json`(当前 1.1.0)。
+- 版本号递增:`extension/package.json`(以最新 `git tag` 为准,不在此维护具体版本号)。

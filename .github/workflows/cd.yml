@@ -11,8 +11,56 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  detect:
+    name: Detect Backend Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      backend_changed: ${{ steps.changes.outputs.backend_changed }}
+      previous_version: ${{ steps.changes.outputs.previous_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compare backend against previous release
+        id: changes
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          image="${REPO,,}"
+          current="${GITHUB_REF_NAME}"
+          # Newest vX.Y.Z tag strictly below the current one in version order.
+          prev_tag=$(git tag -l 'v*.*.*' --sort=-v:refname | awk -v cur="$current" '$0 == cur {found = 1; next} found {print; exit}')
+
+          if [ -z "$prev_tag" ]; then
+            echo "No previous release tag found — building."
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+          elif ! git diff --quiet "$prev_tag" "$current" -- backend docker/Dockerfile; then
+            echo "Backend changed since $prev_tag — building."
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+          elif ! docker buildx imagetools inspect "${REGISTRY}/${image}:${prev_tag#v}" > /dev/null 2>&1; then
+            echo "Backend unchanged since $prev_tag, but the previous image tag is gone from the registry — building."
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Backend unchanged since $prev_tag — skipping the build, aliasing image ${prev_tag#v} to ${current#v}."
+            echo "backend_changed=false" >> "$GITHUB_OUTPUT"
+            echo "previous_version=${prev_tag#v}" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
-    if: github.event_name == 'push'
+    needs: detect
+    if: github.event_name == 'push' && needs.detect.outputs.backend_changed == 'true'
     name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -74,13 +122,17 @@ jobs:
 
   merge:
     name: Merge multi-arch manifest
-    needs: build
+    needs: [detect, build]
+    # Also runs when build was skipped (backend unchanged) — it then skips the
+    # digest merge and only aliases the previous image to this version's tag.
+    if: ${{ !cancelled() && needs.detect.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - name: Download digests
+        if: needs.detect.outputs.backend_changed == 'true'
         uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
@@ -102,6 +154,7 @@ jobs:
           echo "PACKAGE_NAME=${image#*/}" >> $GITHUB_ENV
 
       - name: Create manifest list and push
+        if: needs.detect.outputs.backend_changed == 'true'
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create \
@@ -109,7 +162,16 @@ jobs:
             -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
             $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
 
+      - name: Re-tag previous image as this version
+        if: needs.detect.outputs.backend_changed == 'false'
+        run: |
+          docker buildx imagetools create \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.detect.outputs.previous_version }}
+
       - name: Clean up GHCR intermediate versions
+        if: needs.detect.outputs.backend_changed == 'true'
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
           package: ${{ env.PACKAGE_NAME }}

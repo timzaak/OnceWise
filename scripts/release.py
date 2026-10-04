@@ -4,7 +4,8 @@
 版本载体是 extension/package.json（连同 package-lock.json 的根版本）和
 .claude-plugin/marketplace.json 的 oncewise 插件条目。backend/ 与 demo/ 各自维护
 版本，不随本脚本变动。注意：每个 vX.Y.Z 标签都会触发 .github/workflows/cd.yml
-的后端镜像发布。
+的 GitHub Release；后端镜像仅当 backend/ 或 docker/Dockerfile 相对上一版本有
+改动时才重新构建，否则跳过构建、直接将上一版镜像别名到新版本 tag。
 """
 
 import argparse

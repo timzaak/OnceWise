@@ -31,10 +31,11 @@
 ## Demo 套件
 
 - **本机通道（us-nm-001～005，基础设施 `demo/e2e/extension/native-host.ts`）**：四个文件 us-nm-001-install-connectivity / us-nm-002-native-delivery / us-nm-003-native-revision / us-nm-005-history-rollback，入口同命令表。US-NM-004（交接结果真实可见）的两场景由 us-nm-002 文件内承载（无同名文件，非覆盖缺口）。`nativeTest` 每用例完成宿主注册 → 浏览器冷启动 → 用例 → 卸载回收（真实用户级注册，Windows 为 HKCU；中断残留由下次安装自愈，或手动 `node skills/oncewise-message/uninstall.mjs --browser chromium`）；`bareTest` 强制未注册承载未就绪场景。三平台真实 Chrome 与用户当前浏览器现场证据不在这些用例范围（见 `native-host-setup.md`）。
-- **同步故事（stories/ 其余）**：oncewise-ai-sync 后端由 `sync-server.ts` 每用例自管（二进制解析 `ONCEWISE_AI_SYNC_BIN` → `backend/target/release|debug` → cargo 兜底；随机端口 + 自动建删独立库），宿主静态页由 `host-site.ts` 随机端口提供；任一环节失败即用例失败，不 skip。
+- **同步故事（stories/ 其余）**：oncewise-ai-sync 后端由 `sync-server.ts` 每用例自管（二进制解析 `ONCEWISE_AI_SYNC_BIN` → `backend/target/release|debug` → cargo 兜底；随机端口 + 自动建删独立库），宿主静态页由 `host-site.ts` 随机端口提供；任一环节失败即用例失败，不 skip。us-fs-001-004 为单文件承载 US-FS-001～004 四条故事的形态（T1–T4 逐故事映射，见文件头注）。
 - **装箱流程（us-ssba-010）**：不起后端；宿主页由 host-site 提供，受控失败信号经 `packing-page.html?scenario=` 注入。
 - **跨页流程（us-cpf-001，extension-demo 交付 `stories/us-cpf-001-cross-page-flow.e2e.ts`）**：不起后端；宿主三页向导由 host-site 提供（`wizardStepUrl(step, opts)`，静态源为 `extension/test-pages/wizard-step{1,2,3}.html`）。受控信号：`?open=new-tab`（第 2 步确认以 `target=_blank` 打开第 3 步）、`?scenario=slow`（第 3 步就绪信号延迟约 3 秒——慢加载认领与越过 navigate 截止时间；向导表单 GET 提交不带查询参数，该信号由宿主服务 `startHostSite({ slowStep3: true })` 以 302 投递到表单发起的导航上）、`?biz=`（区分业务实例；第 2 步换单据号即 business-changed 取消路径）。跨页受控页参数详见 `extension/test-pages/README.md`。
-- **店铺资产采集（listing/capture-listing.e2e.ts）**：非验收用例——加载生产构建产物、播种演示流程，把 Chrome Web Store 截图（1280×800）与宣传图（440×280 / 1400×560）直接写入 `docs/store-listing/screenshots/`；无需后端（宿主页由 host-site 自起；仅含一条截图稳定性守卫断言，非业务验收），不入 CI；产物清单与拍摄纪律见 `docs/store-listing/`。
+- **流程优化 UI 契约（verification/flow-optimization.e2e.ts，非故事验收）**：「用 AI 优化」的扩展侧半段——对启用中流程发起优化先暂停并发放 15 分钟单流程读取授权（session:nativeReadGrant 形状断言）；修订替换的本机通道往返（flow.read→对话确认→flow.save）由 us-nm-003 承载（e2e 的 CI Chrome 无宿主，不可驱动该段）。
+- **店铺资产采集（listing/capture-listing.e2e.ts）**：非验收用例——加载生产构建产物、播种演示流程，把 Chrome Web Store 截图（1280×800）与宣传图（440×280 / 1400×560）直接写入 `docs/store-listing/screenshots/`；无需后端（宿主页由 host-site 自起；除截图就绪门外仅含一条执行效果守卫断言——联系电话填值回显，非业务验收），不入 CI；产物清单与拍摄纪律见 `docs/store-listing/`。
 - 所有扩展用例直接加载生产构建产物 `extension/.output/chrome-mv3`（定位见 `extension-target.ts`）；host 权限随 manifest 安装获得，无需权限手势；扩展 ID 由 fixtures 从 background service worker URL 自动解析。其余用例无外部服务，不得为扩展用例启动默认 Docker Web 环境。
 - 日志：runner 末行 `Result`（`logs` 相对 `demo/`），常见位置 `demo/test-results/runs/<run-id>/` 与统一日志 `demo/test-results/unified-logs/`。失败时保留命令、失败用例和日志，修复后定向重跑；未执行或受阻的测试明确记录原因，不得换脚本绕过。
 
@@ -44,13 +45,13 @@
 
 ## 版本发布
 
-- 产品版本载体：`extension/package.json`（含 `package-lock.json` 根版本）与 `.claude-plugin/marketplace.json` 的 oncewise 条目；`backend/`、`demo/` 各自维护版本，不随发布变动。发布走 `/t-tool t-release`（等价 `python scripts/release.py [版本号]`）：要求 main + 干净工作区，`npm run compile` 与 `npm run test:run` 通过后创建 `chore: bump version to <版本号>` commit 与 `v<版本号>` 标签并推送。注意：`v*.*.*` 标签会触发 `.github/workflows/cd.yml` 的后端镜像发布与 GitHub Release；无参数运行给出的推荐版本基于最新 tag 推算（当前 v1.1.0），产品线发布请显式传版本号。
+- 产品版本载体：`extension/package.json`（含 `package-lock.json` 根版本）与 `.claude-plugin/marketplace.json` 的 oncewise 条目；`backend/`、`demo/` 各自维护版本，不随发布变动。发布走 `/t-tool t-release`（等价 `python scripts/release.py [版本号]`）：要求 main + 干净工作区，`npm run compile` 与 `npm run test:run` 通过后创建 `chore: bump version to <版本号>` commit 与 `v<版本号>` 标签并推送。每个 `v*.*.*` 标签都会触发 `.github/workflows/cd.yml` 的 GitHub Release；后端镜像仅当 `backend/` 或 `docker/Dockerfile` 相对上一版本有改动时才重新构建，否则跳过构建、将上一版镜像别名到新 tag（详见 `scripts/release.py` 头注）。无参数运行给出的推荐版本基于最新 tag 推算（以 `git tag` 为准，不在此维护具体版本号），产品线发布请显式传版本号。
 
 ## 缺口（未配置，不虚构命令）
 
 后端（`backend/`）测试入口尚未在本索引配置；需要时按其 nextest 约定补齐 `backend-test.py` 与对应说明。同域真实入口：`cd backend && TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres cargo test`（s01–s10 场景测试，每用例自建一次性 `oncewise_ai_test_*` 库）。
 
-扩展故事 demo 覆盖缺口（显式记录，非遗漏）：US-SSBA-003（字段变化联动，全部 demo 流程均为 pageEnter 触发）、US-SSBA-005 场景 4（用户暂停/恢复不自动续跑——us-cpf-001 T4 仅覆盖关闭标签页中断）无用例；US-SSBA-007 属 AI 工具侧产出（Playwright 无法承载，由 skills/ 交付与人工路径覆盖）；US-SSBA-002/009/011 由 smoke/packing/us-nm-002/us-ds-004 用例部分触及。
+扩展故事 demo 覆盖缺口（显式记录，非遗漏）：US-SSBA-003（字段变化联动，全部 demo 流程均为 pageEnter 触发）、US-SSBA-005 场景 4（用户暂停/恢复不自动续跑）无用例；US-CPF-001 场景 4 声明手动刷新/关闭标签页/重启浏览器三种中断形态，us-cpf-001 T4 仅覆盖关闭标签页（三形态走同一保守取消路径）；US-SSBA-010 场景 2（非目标页面不执行）与场景 1 的 L2 文档级去重由单测承载（`extension/tests/page-enter.test.ts` 负样本），demo 不重复承载；US-NM-002 场景 2（对话未确认或要求修改时不保存）属 AI 对话侧纪律，由 skills/oncewise-flow 的保存前确认门承载（us-nm-002 用例中确认由用例代行，无负路径用例）；US-SSBA-007 属 AI 工具侧产出（Playwright 无法承载，由 skills/ 交付与人工路径覆盖）；US-SSBA-002/009/011 由 smoke/packing/us-nm-002/us-ds-004 用例部分触及。
 
 ## 人工 Demo 环境
 

@@ -4,7 +4,7 @@
 
 ## 目录结构
 
-- `extension/` — Chrome MV3 扩展（单击工具栏图标直达流程工作台 sidepanel、流程导入（流程自带站点域名，内容脚本按流程站点动态注入）、dry-run；「同步」页签按空间码共享脚本）
+- `extension/` — Chrome MV3 扩展（单击工具栏图标直达流程工作台 sidepanel、流程导入（流程自带站点域名，内容脚本按流程站点动态注入）、运行前输入表单与同站顺序跨页续跑、dry-run；「同步」页签按空间码共享脚本）
 - `backend/` — oncewise-ai-sync 数据同步服务（axum + PostgreSQL；空间由客户端生成的 ID+密钥寻址，无账号体系）
 - `demo/` — Playwright 扩展集成测试（`demo/e2e/extension/`，独立 fixture 加载真实构建产物）
 - `scripts/` — 测试与 Demo 运行脚本（Python runner）

@@ -8,7 +8,7 @@ import {
 } from '../workbench'
 
 // US-CPF-001 一条流程完成同一站点的多个页面（docs/user-stories/core/cross-page-flow.md
-// 场景 1–6）。全部经真实链路：播种跨页流程（sp:saveFlow 保存通道）→ 本人启用 → 打开受控
+// 场景 1–7：T1–T6 对应场景 1–6，T7 承载场景 7 双标签页单胜者）。全部经真实链路：播种跨页流程（sp:saveFlow 保存通道）→ 本人启用 → 打开受控
 // 三页向导自动执行（表单 GET 跳转 = 流程白名单提交点击造成的整页导航）。
 // 页面侧受控信号：?biz= 区分业务实例、?open=new-tab 使确认以 target=_blank 打开结果页、
 // ?scenario=slow 延迟结果页就绪约 3 秒（向导表单不带查询参数，该信号由宿主服务的 slowStep3

@@ -19,7 +19,8 @@ import { startHostSite } from '../host-site'
 
 // 店铺资产采集(非验收用例):加载真实构建产物,播种演示流程,把 Chrome Web Store 所需
 // 截图(1280×800)与宣传图(440×280 / 1400×560)直接写入 docs/store-listing/screenshots/。
-// 清单与再生成说明见 docs/store-listing/screenshots.md;不入 CI,不承载业务断言。
+// 清单与再生成说明见 docs/store-listing/screenshots.md;不入 CI,除截图就绪门外仅含一条
+// 执行效果守卫断言(联系电话填值回显),非业务验收。
 // 演示数据纪律:仅假数据(13800001234 样式电话、127.0.0.1 测试页),不得出现真实个人信息。
 
 const FLOW_NAME = 'Fill contact phone'
