@@ -1,0 +1,38 @@
+name: Feature request
+description: Request a capability the flow format or the extension does not support yet
+labels: enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Request a capability the flow format or the extension does not support yet.
+        请先搜索已有 issue,避免重复提交。
+
+        Do not paste flow JSON, input values, or business data into this issue.
+        请勿在 issue 中粘贴流程 JSON、输入值或业务数据。
+  - type: input
+    id: site
+    attributes:
+      label: Target site / 目标站点
+      description: The site or page you want to automate — a bare origin is enough. Skip if not site-specific.
+      placeholder: https://example.com
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps you want to automate / 想自动化的步骤
+      description: What should happen, in order. Describe the steps, not real data — no account numbers, phone numbers, or order details.
+      placeholder: |
+        1. Open the order page
+        2. Fill the form fields
+        3. Click submit
+    validations:
+      required: true
+  - type: textarea
+    id: gap
+    attributes:
+      label: What is unsupported today / 当前哪里做不到
+      description: What the agent or the extension told you is not possible, and the nearest alternative you were offered, if any.
+    validations:
+      required: true

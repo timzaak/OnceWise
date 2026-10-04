@@ -44,5 +44,6 @@ For a revision, first ask the user to open the flow in the side panel and click 
 - Do not claim a flow was saved until the extension's read-back confirms it. Report which page actions were tested and which were skipped. If no live run was performed, say that execution remains unverified.
 - Open a flow's target page for a demo only when the user requested one and the data or record is authorized; a `pageEnter` flow may execute immediately. The user handles enablement, history, rollback, and deletion in the extension.
 - Do not create flows for platforms the extension's usage instructions exclude, including Taobao and Amazon.
+- When the user asks for a capability the flow format or the extension does not support (for example cross-site orchestration, parallel tabs, or an excluded action such as payment or deletion), state the limit plainly, offer the nearest achievable alternative, and direct the user to request it at https://github.com/timzaak/OnceWise/issues. Tell the user not to paste flow JSON, input values, or business data into the request.
 
 Use [the flow format](references/flow-format.md) for the schema and the `oncewise-message` client at `../oncewise-message/` for handoff. Host installation and troubleshooting are in the `oncewise-setup` reference `../oncewise-setup/references/native-host-setup.md`.
