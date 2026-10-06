@@ -8,7 +8,9 @@ import { useCopied } from '@/lib/use-copy';
 // GETTING STARTED: install the skills with the one-line installer, let oncewise-setup install the
 // native host, ask the AI for a flow, enable it yourself. Shared tokens (reset / typography /
 // cards / buttons) come from lib/ui-css; only the welcome-specific layout flows live here.
-const REPO_URL = 'https://github.com/timzaak/OnceWise';
+// Store-assigned listing (ID-only canonical form; the dev build shares this listing). The store
+// rejects manifest `key` fields, so the store build's ID differs from the pinned dev ID.
+const STORE_URL = 'https://chromewebstore.google.com/detail/dmmhmcdbkbbgbcidafhlhepdchjboenc';
 const SKILLS_INSTALL_CMD =
   'npx skills add timzaak/OnceWise --skill oncewise-setup --skill oncewise-flow --skill oncewise-message';
 
@@ -88,7 +90,7 @@ function App() {
           <h2 className="wl-title">{t('welcome.star.title')}</h2>
           <p className="wl-desc">{t('welcome.star.body')}</p>
           <div className="wl-actions">
-            <a className="wl-btn primary" href={REPO_URL} target="_blank" rel="noreferrer">
+            <a className="wl-btn primary" href={STORE_URL} target="_blank" rel="noreferrer">
               <span className="wl-star" aria-hidden="true">★</span>&nbsp;{t('welcome.star.button')}
             </a>
             <button type="button" className="wl-btn" onClick={() => void openImportPage().catch(() => undefined)}>

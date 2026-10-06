@@ -190,9 +190,9 @@ const en = {
   'welcome.explore.sidepanel': 'Click the toolbar icon to open the workbench sidepanel — flows, run history, sync spaces and settings live there.',
   'welcome.explore.localFirst':
     'Local-first: flows, settings and version history stay in this browser. No accounts, no telemetry; nothing leaves your device unless you explicitly share a flow to a sync space.',
-  'welcome.star.title': 'Open source — star it if it helps',
-  'welcome.star.body': 'OnceWise AI is developed openly under Apache-2.0. A star on GitHub helps more people find the project.',
-  'welcome.star.button': 'Star on GitHub',
+  'welcome.star.title': 'Finding it helpful? Rate it on the Chrome Web Store',
+  'welcome.star.body': 'A five-star rating or a short review on the store helps more people discover OnceWise AI.',
+  'welcome.star.button': 'Rate on Chrome Web Store',
   'welcome.openFlows': 'Open flow list',
 
   'pick.triggerField': 'trigger field',
@@ -524,9 +524,9 @@ const zh: Catalog = {
   'welcome.explore.title': '功能入口',
   'welcome.explore.sidepanel': '点击工具栏图标打开侧栏工作台——流程、运行历史、同步空间与设置都在那里。',
   'welcome.explore.localFirst': '本地优先：流程、设置与版本历史都保存在本浏览器。无账号、无遥测；除非你主动把流程分享到同步空间，任何数据都不离开设备。',
-  'welcome.star.title': '开源项目——有帮助就点个 Star',
-  'welcome.star.body': 'OnceWise AI 以 Apache-2.0 开源开发。GitHub 上的一次 Star 能让更多人发现这个项目。',
-  'welcome.star.button': '去 GitHub 点 Star',
+  'welcome.star.title': '觉得有帮助？去 Chrome 商店点个五星',
+  'welcome.star.body': '在 Chrome Web Store 给 OnceWise AI 留下五星和几句使用评价，能让更多人发现它。',
+  'welcome.star.button': '去 Chrome 商店好评',
   'welcome.openFlows': '打开流程列表',
 
   'pick.triggerField': '触发字段',
