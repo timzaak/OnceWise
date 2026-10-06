@@ -168,6 +168,33 @@ const en = {
   'import.list.opTimeout': 'Operation timed out. Try again.',
   'import.list.sidepanelHint': 'Editing, history and rollback live in the sidepanel — click the toolbar icon.',
 
+  'welcome.title': 'Welcome to OnceWise AI',
+  'welcome.intro':
+    'Turn repetitive web work into flows that run themselves — locally, with you in control of every site and every step.',
+  'welcome.steps.title': 'Get started in four steps',
+  'welcome.step1.title': 'Install the OnceWise skills in your AI tool',
+  'welcome.step1.body':
+    'Any agent that can drive Chrome works (Claude Code, Cursor, ZCode…). Run this one-liner in your AI tool\u2019s terminal:',
+  'welcome.step1.copy': 'Copy',
+  'welcome.step1.copied': 'Copied',
+  'welcome.step2.title': 'Let the AI set up the local channel',
+  'welcome.step2.body':
+    'Ask your AI assistant to run the oncewise-setup skill — it installs and verifies the native-messaging host (the flow handoff channel) for you. Requires Node 22 or newer.',
+  'welcome.step3.title': 'Ask your AI assistant to automate a routine',
+  'welcome.step3.body':
+    'Describe the repetitive web work. The agent tries it on the real page, distills it into a constrained flow, and hands it over through a channel that never leaves your machine.',
+  'welcome.step4.title': 'Review and enable the flow yourself',
+  'welcome.step4.body':
+    'A saved flow starts out disabled. One click enables it; from then on, whenever you open a matching page, OnceWise AI runs the steps for you.',
+  'welcome.explore.title': 'Where things live',
+  'welcome.explore.sidepanel': 'Click the toolbar icon to open the workbench sidepanel — flows, run history, sync spaces and settings live there.',
+  'welcome.explore.localFirst':
+    'Local-first: flows, settings and version history stay in this browser. No accounts, no telemetry; nothing leaves your device unless you explicitly share a flow to a sync space.',
+  'welcome.star.title': 'Open source — star it if it helps',
+  'welcome.star.body': 'OnceWise AI is developed openly under Apache-2.0. A star on GitHub helps more people find the project.',
+  'welcome.star.button': 'Star on GitHub',
+  'welcome.openFlows': 'Open flow list',
+
   'pick.triggerField': 'trigger field',
   'pick.targetField': 'target field',
   'pick.tip': 'Click the [{label}]',
@@ -480,6 +507,27 @@ const zh: Catalog = {
   'import.list.opFail': '操作失败：{reason}',
   'import.list.opTimeout': '操作超时，请重试。',
   'import.list.sidepanelHint': '编辑、历史与回滚请在侧栏工作台（点击工具栏图标）完成。',
+
+  'welcome.title': '欢迎使用 OnceWise AI',
+  'welcome.intro': '把重复的网页工作变成会自动执行的流程——一切都在本地完成，每个站点、每一步都由你掌控。',
+  'welcome.steps.title': '四步上手',
+  'welcome.step1.title': '在你的 AI 工具中安装 OnceWise skills',
+  'welcome.step1.body': '任何能驱动 Chrome 的智能体都可以（Claude Code、Cursor、ZCode…）。在你的 AI 工具的终端里运行这一行命令：',
+  'welcome.step1.copy': '复制',
+  'welcome.step1.copied': '已复制',
+  'welcome.step2.title': '让 AI 完成本机通道安装',
+  'welcome.step2.body': '让你的 AI 助手运行 oncewise-setup skill——它会替你安装并验证本机通道（流程交接宿主）。需要 Node 22 或更高版本。',
+  'welcome.step3.title': '让 AI 助手把重复操作做成流程',
+  'welcome.step3.body': '把重复的网页工作描述给它。智能体会在真实页面上试做，提炼为受约束的流程，并经本机通道交付——全程不离开你的设备。',
+  'welcome.step4.title': '亲自核对并启用流程',
+  'welcome.step4.body': '流程保存后默认停用。点击一次即可启用；此后每当你打开匹配的页面，OnceWise AI 就会替你执行这些步骤。',
+  'welcome.explore.title': '功能入口',
+  'welcome.explore.sidepanel': '点击工具栏图标打开侧栏工作台——流程、运行历史、同步空间与设置都在那里。',
+  'welcome.explore.localFirst': '本地优先：流程、设置与版本历史都保存在本浏览器。无账号、无遥测；除非你主动把流程分享到同步空间，任何数据都不离开设备。',
+  'welcome.star.title': '开源项目——有帮助就点个 Star',
+  'welcome.star.body': 'OnceWise AI 以 Apache-2.0 开源开发。GitHub 上的一次 Star 能让更多人发现这个项目。',
+  'welcome.star.button': '去 GitHub 点 Star',
+  'welcome.openFlows': '打开流程列表',
 
   'pick.triggerField': '触发字段',
   'pick.targetField': '目标字段',

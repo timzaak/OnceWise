@@ -1,67 +1,69 @@
 # OnceWise AI
 
-智能表单自动化助手 Chrome 扩展（WXT + React，界面英语为主、内置中文 i18n，本地优先存储）与 oncewise-ai-sync 数据同步后端（Rust，无账号空间模型）。
+English | [简体中文](README.zh.md)
 
-## 目录结构
+An intelligent form-automation assistant Chrome extension (WXT + React; English-first UI with built-in Chinese i18n; local-first storage) and the oncewise-ai-sync data-sync backend (Rust, account-free space model).
 
-- `extension/` — Chrome MV3 扩展（单击工具栏图标直达流程工作台 sidepanel、流程导入（流程自带站点域名，内容脚本按流程站点动态注入）、运行前输入表单与同站顺序跨页续跑、dry-run；「同步」页签按空间码共享脚本）
-- `backend/` — oncewise-ai-sync 数据同步服务（axum + PostgreSQL；空间由客户端生成的 ID+密钥寻址，无账号体系）
-- `demo/` — Playwright 扩展集成测试（`demo/e2e/extension/`，独立 fixture 加载真实构建产物）
-- `scripts/` — 测试与 Demo 运行脚本（Python runner）
-- `docs/` — PRD 与用户故事（PRD 索引：[docs/prd/00-index.md](docs/prd/00-index.md)）
-- `skills/oncewise-message/` — 本机流程交接程序（Node 22+，`host.mjs`/`client.mjs`/`install.mjs`/`uninstall.mjs`，随 Skill 分发；安装位置与排错见 `skills/oncewise-setup/references/native-host-setup.md`）
-- `DESIGN.md` — 视觉规范（业务约束以 `docs/` 为准）
+## Repository layout
 
-## 快速启动
+- `extension/` — Chrome MV3 extension (clicking the toolbar icon opens the flow workbench sidepanel; flow import — flows carry their own site domain, and content scripts are injected dynamically per the flow's site; pre-run input forms and same-site sequential cross-page continuation; dry-run; the "Sync" tab shares flows via space codes)
+- `backend/` — oncewise-ai-sync data-sync service (axum + PostgreSQL; spaces are addressed by a client-generated ID + key, with no account system)
+- `demo/` — Playwright extension integration tests (`demo/e2e/extension/`, standalone fixtures loading the real build output)
+- `scripts/` — test and demo runner scripts (Python runner)
+- `docs/` — PRDs and user stories (PRD index: [docs/prd/00-index.md](docs/prd/00-index.md))
+- `skills/oncewise-message/` — local flow-handoff programs (Node 22+; `host.mjs`/`client.mjs`/`install.mjs`/`uninstall.mjs`, distributed with the Skill; installation location and troubleshooting in `skills/oncewise-setup/references/native-host-setup.md`)
+- `DESIGN.md` — visual spec (business constraints defer to `docs/`)
+
+## Quick start
 
 ```bash
-# 扩展开发（extension/）
-cd extension && npm install && npm run dev     # 构建产物手动加载到日常 Chrome
-cd extension && npm run build                  # MV3 生产构建 → .output/chrome-mv3
+# Extension development (extension/)
+cd extension && npm install && npm run dev     # load the build output manually into your daily Chrome
+cd extension && npm run build                  # MV3 production build → .output/chrome-mv3
 
-# 同步后端（backend/，外部 PostgreSQL；DATABASE_URL 必填，BIND_ADDR 可覆盖）
+# Sync backend (backend/, external PostgreSQL; DATABASE_URL required, BIND_ADDR optional override)
 docker run -d --name oncewise-demo-pg -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5432:5432 postgres:18-alpine
-cd backend && DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres cargo run   # 默认 0.0.0.0:8080
+cd backend && DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres cargo run   # defaults to 0.0.0.0:8080
 
-# 扩展 Demo 集成测试（首次准备）
+# Extension demo integration tests (first-time setup)
 cd demo && npm install && npx playwright install chromium
 
-# 运行扩展 Demo smoke（先构建扩展，再运行）
+# Run the extension demo smoke (build the extension first, then run)
 cd extension && npm run build
-uv run scripts/web-demo-test-runner.py demo/e2e/extension/verification/smoke.e2e.ts --run-id <唯一ID>
+uv run scripts/web-demo-test-runner.py demo/e2e/extension/verification/smoke.e2e.ts --run-id <unique-id>
 ```
 
-所有测试与 Demo 运行说明统一维护在 [scripts/index.md](scripts/index.md)（含环境前置、日志位置与失败恢复），本文件不重复维护命令。
+All test and demo run instructions are maintained centrally in [scripts/index.md](scripts/index.md) (environment prerequisites, log locations, and failure recovery); this file does not duplicate those commands.
 
-## 安装 Agent Skills
+## Installing the Agent Skills
 
-本仓库按 [Agent Skills 开放格式](https://agentskills.io/specification)提供三个目录，根目录的 [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json) 把它们声明为同一插件（`oncewise`）的 skill 路径。每个目录的 `SKILL.md` 是入口，`references/` 和 `examples/` 是该 skill 的随附资料：
+This repository ships three directories in the [Agent Skills open format](https://agentskills.io/specification); the root [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) declares them as the skill paths of a single plugin (`oncewise`). Each directory's `SKILL.md` is the entry point; `references/` and `examples/` hold that skill's accompanying materials:
 
-| Skill | 用途 |
+| Skill | Purpose |
 | --- | --- |
-| [`oncewise-setup`](skills/oncewise-setup/SKILL.md) | 首次安装扩展、配置 Chrome DevTools MCP，并检查 AI 是否能访问扩展导入页 |
-| [`oncewise-flow`](skills/oncewise-flow/SKILL.md) | 在目标网页验证操作，经本机通道校验并保存自动化流程（保存前取得对话确认），启用由用户本人完成 |
-| [`oncewise-message`](skills/oncewise-message/SKILL.md)（随附程序，硬依赖） | 本机流程交接宿主与 AI 侧 CLI：`install.mjs` 用户级安装，`client.mjs` 执行 ping/校验/保存/核验；另两个 skill 的交接步骤都运行它 |
+| [`oncewise-setup`](skills/oncewise-setup/SKILL.md) | First-time extension installation, Chrome DevTools MCP configuration, and checking that the AI can reach the extension's import page |
+| [`oncewise-flow`](skills/oncewise-flow/SKILL.md) | Verify actions on the target web page, then validate and save the automation flow through the local channel (conversation confirmation is required before saving); enabling is done by the user themselves |
+| [`oncewise-message`](skills/oncewise-message/SKILL.md) (companion programs, hard dependency) | Local flow-handoff host and AI-side CLI: `install.mjs` performs a user-level install, and `client.mjs` runs ping / validate / save / verify; the handoff steps of both other skills invoke it |
 
-支持 [Skills CLI](https://github.com/vercel-labs/skills) 的工具可让安装器发现并选择 skill。在本仓库根目录：
+Tools that support the [Skills CLI](https://github.com/vercel-labs/skills) can let their installers discover and select the skills. From the repository root:
 
 ```bash
 npx skills add . --list
 npx skills add . --skill oncewise-setup --skill oncewise-flow --skill oncewise-message
 ```
 
-本仓库开发时，`skills/` 是唯一源文件，`.agents/skills/` 是本机安装副本；安装副本不会自动跟随源文件更新。修改后运行 `python scripts/sync-skills.py`，再用 `python scripts/sync-skills.py --check` 确认一致。需要编辑时持续同步，可在终端运行 `python scripts/sync-skills.py --watch`（Ctrl+C 停止）。同步只从源文件覆盖副本，包含随附资料与程序，并清理对应 skill 内的过时文件；其他已安装 skill 保留。已从源目录移除的整个 skill 不会自动卸载。
+When developing in this repository, `skills/` is the single source of truth and `.agents/skills/` holds local installed copies; the installed copies do not update automatically when the sources change. After changes run `python scripts/sync-skills.py`, then `python scripts/sync-skills.py --check` to confirm they match. To keep them in sync while editing, run `python scripts/sync-skills.py --watch` in a terminal (Ctrl+C to stop). Sync only overwrites the copies from the sources — including accompanying materials and programs — and prunes stale files inside the affected skill; other installed skills are left alone. A skill removed entirely from the source directory is not uninstalled automatically.
 
-`oncewise-message` 是另两个 skill 的硬依赖，三项必须装到同一位置成兄弟目录——`oncewise-flow` 通过 `../oncewise-message/client.mjs` 运行交接。若所用工具只装了两个 skill（清单或 `--list` 未列出 `oncewise-message` 即说明该工具不认清单声明），请把 `skills/oncewise-message/` 复制或链接到同一安装位置。
+`oncewise-message` is a hard dependency of the other two skills, and all three must be installed side by side in the same location — `oncewise-flow` runs the handoff through `../oncewise-message/client.mjs`. If your tool installs only two skills (a manifest or `--list` that omits `oncewise-message` means the tool does not honor manifest declarations), copy or link `skills/oncewise-message/` into the same install location.
 
-仓库发布并可被安装者访问后，也可把 `.` 换成仓库 Git URL 或 `owner/repo`。安装器负责选择目标 AI 工具和安装位置；`--list` 只列出可用 skill，不安装。若工具不支持 Skills CLI，可按该工具的说明导入**完整的三个 skill 目录**，不要只复制 `SKILL.md`。新 skill 未显示时，重启或刷新该工具。
+Once the repository is published and reachable, you can replace `.` with the repository Git URL or `owner/repo`. The installer picks the target AI tool and install location; `--list` only lists available skills and installs nothing. If a tool doesn't support the Skills CLI, import **all three complete skill directories** per that tool's instructions — do not copy just `SKILL.md`. Restart or refresh the tool if new skills don't show up.
 
-按宿主工具支持的方式调用 `oncewise-setup` 完成环境检查，再调用 `oncewise-flow` 描述要自动化的网页操作。安装 skill **不会自动安装** Chrome DevTools MCP 或 OnceWise AI 扩展；需按[初始化指引](skills/oncewise-setup/references/mcp-setup.md)配置 MCP，并确认它能调用 `list_pages`、`take_snapshot`、`fill`、`click` 等浏览器工具。
+Invoke `oncewise-setup` in whatever way your host tool supports to complete the environment checks, then invoke `oncewise-flow` and describe the web actions to automate. Installing the skills does **not** automatically install Chrome DevTools MCP or the OnceWise AI extension; configure MCP per the [setup guide](skills/oncewise-setup/references/mcp-setup.md) and confirm it can invoke browser tools such as `list_pages`, `take_snapshot`, `fill`, and `click`.
 
-兼容性以一次实际连通性检查为准：宿主须能读取随附资料、连接运行在用户本机的浏览器 MCP（目标网页探索与验证），并在用户本机运行 `skills/oncewise-message/client.mjs` 完成 Native Messaging 交接（Node 22+，`oncewise-setup` 负责安装与 `ping` 验证）；扩展是唯一的校验与持久化方，保存前须取得用户在对话中的明确确认，流程保存后未启用，启用与回滚仅由用户本人在扩展界面操作。仅支持上传 skill 或仅有内置网页浏览能力，不足以证明完整流程可用。云端执行环境尤其需要确认是否能连接用户本机的 Chrome 与本机通道。
+Compatibility is settled by one actual connectivity check: the host must be able to read the accompanying materials, connect to the browser MCP running on the user's own machine (target-page exploration and verification), and run `skills/oncewise-message/client.mjs` on that machine to complete the Native Messaging handoff (Node 22+; `oncewise-setup` handles installation and `ping` verification). The extension is the sole validator and persistence point: explicit user confirmation in the conversation is required before saving, a saved flow starts out disabled, and enabling and rollback are performed only by the user in the extension UI. Skill upload alone, or only built-in web browsing, is not enough to prove the full flow works. Cloud execution environments in particular must confirm whether they can reach the user's local Chrome and the local channel.
 
-本项目扩展有两种安装形态。**Chrome Web Store 版**（推荐）：商店链接上线后直接安装，运行在商店分配的 ID `dmmhmcdbkbbgbcidafhlhepdchjboenc` 下（商店拒绝带 `key` 字段的上传包，故商店版无法保留下面的固定开发 ID）。**源码开发版**：先在 `extension/` 执行 `npm install`、`npm run build`，再在 Chrome 的 `chrome://extensions` 打开开发者模式，通过「Load unpacked / 加载已解压的扩展程序」选择 `extension/.output/chrome-mv3`。开发版 manifest 固定了 `key`，扩展 ID 恒为 `fkkfdckchahnjkcbimnbhonbgcefnafi`（本机宿主安装时需加 `--extension-id fkkfdckchahnjkcbimnbhonbgcefnafi`；默认 `allowed_origins` 绑定的是商店版 ID）。扩展必须装在 MCP 操作的同一 Chrome 实例内。旧的无 key 开发实例派生不同 ID，其本地流程在新 ID 下不可见——所需流程须经 AI 本机通道重新创建。
+The extension ships in two install flavors. **Chrome Web Store version** (recommended): install directly once the store listing is live; it runs under the store-assigned ID `dmmhmcdbkbbgbcidafhlhepdchjboenc` (the store rejects uploads containing a `key` field, so the store build cannot keep the fixed development ID below). **Source-code development version**: run `npm install` and `npm run build` in `extension/`, enable Developer mode on Chrome's `chrome://extensions` page, and use "Load unpacked" to select `extension/.output/chrome-mv3`. The development manifest pins a `key`, so the extension ID is permanently `fkkfdckchahnjkcbimnbhonbgcefnafi` (when installing the local host, pass `--extension-id fkkfdckchahnjkcbimnbhonbgcefnafi`; the default `allowed_origins` binds the store version's ID). The extension must be installed in the same Chrome instance that the MCP operates. Older keyless development instances derive a different ID, and flows saved locally under that ID are invisible to the new one — flows you need must be recreated through the AI local channel.
 
-## 开源许可证
+## License
 
-本项目以 [Apache License 2.0](LICENSE) 开源。
+This project is open-sourced under the [Apache License 2.0](LICENSE).

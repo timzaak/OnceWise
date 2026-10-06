@@ -1,5 +1,5 @@
 // First-use notice with excluded-platform declaration (DEC-011): purely informational, re-viewable, bound
-// to the sidepanel's first open (the import page auto-opened at install never triggers it).
+// to the sidepanel's first open (the welcome page auto-opened at install never triggers it).
 import { onboardingItem } from '@/lib/storage';
 import { t } from '@/lib/i18n';
 

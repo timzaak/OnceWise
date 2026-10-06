@@ -13,7 +13,7 @@ import {
 } from '@/lib/messaging';
 import { parseOrigin, flowDraftHash, validateFlow, type Flow, type RunFailureDetail } from '@/lib/flow-schema';
 import { createLogger } from '@/lib/logger';
-import { IMPORT_PAGE_URL } from '@/lib/import-page';
+import { openWelcomePage } from '@/lib/import-page';
 import { connectNativeChannel, isNativeChannelConnected } from '@/lib/native-messaging';
 import {
   buildStoredInputMap,
@@ -371,11 +371,12 @@ export default defineBackground(() => {
     void cancelHandoversByTab(closedTabId);
   });
 
-  // On install (not update — reopening after upgrades would be disruptive) the import page opens once
-  // so the user lands on the summary/enable surface without any manual step.
+  // On install (not update — reopening after upgrades would be disruptive) the welcome page opens
+  // once: first-run tutorial plus the repository star CTA. The import page stays reachable from the
+  // sidepanel settings and the welcome page's own link.
   browser.runtime.onInstalled.addListener((details) => {
     if (details.reason === 'install') {
-      void browser.tabs.create({ url: browser.runtime.getURL(IMPORT_PAGE_URL) });
+      void openWelcomePage();
     }
   });
 
