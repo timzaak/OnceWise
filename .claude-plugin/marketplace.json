@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "oncewise",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "description": "Connect Chrome DevTools MCP and install the OnceWise AI native-messaging host (oncewise-setup), author flows over that channel (oncewise-flow), plus the native-messaging client programs they require.",
       "source": "./",
       "strict": false,
