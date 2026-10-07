@@ -36,7 +36,7 @@
 5. **上传与填报**:
    - 手动路径:开发者控制台 → 条目 → Package → 上传步骤 4 的 zip(新上架时为 New item,并按上表逐项粘贴/上传)。
    - CI 路径(版本更新推荐):`v*.*.*` 标签触发的 CD 含 `store-upload` 任务,在 `chrome-store` environment 审批门后自动构建剥 key 包、经 Chrome Web Store API(V2)上传为控制台新版本草稿,并把 zip 挂到 Release assets。**不自动提审**——提交审核仍为控制台手动动作(顺序纪律见步骤 7)。一次性配置(需开发者账号本人操作):
-     1. GCP:建项目 → 启用 **Chrome Web Store API 与 IAM Service Account Credentials API** 两个(后者是 `google-github-actions/auth` 生成 access token 的依赖,2026-10-07 实测漏启会报 SERVICE_DISABLED)→ 建 service account(角色授予可跳过——角色目录中无 Chrome Web Store 专用角色,条目授权在下一步控制台侧完成)→ Keys 标签导出 JSON 私钥(官方步骤见 developer.chrome.com/docs/webstore/service-accounts);
+     1. GCP:建项目 → 启用 **Chrome Web Store API** 即可(CI 用 SA 私钥自签 JWT 直接换 access token,`extension/scripts/cws-upload.mjs`;不走 `google-github-actions/auth`——那还需启用 IAM Service Account Credentials API 并给 SA 自授 Service Account Token Creator 角色,2026-10-07 两条坑都实测踩过)→ 建 service account(角色授予可跳过——角色目录中无 Chrome Web Store 专用角色,条目授权在下一步控制台侧完成)→ Keys 标签导出 JSON 私钥(官方步骤见 developer.chrome.com/docs/webstore/service-accounts);
      2. 开发者控制台 设置 页:把 service account 邮箱填入"服务账号"区添加(服务账号将能够通过公共 API 访问所有项),同页"发布商 ID"字段即 `CWS_PUBLISHER_ID`(UUID 形式);
      3. 仓库 Settings → Secrets and variables → Actions:Secrets 加 `CWS_SA_JSON`(JSON 私钥全文)与 `CWS_PUBLISHER_ID`(发布商 UUID),Variables 加 `CWS_UPLOAD_ENABLED=true`(删除或置 false 可随时停用 CI 上传);
      4. Settings → Environments → 新建 `chrome-store` 并配置 required reviewer,作为每次上传的人工审批门(不配置则任务无门直传)。

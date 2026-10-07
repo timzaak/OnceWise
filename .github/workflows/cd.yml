@@ -236,38 +236,19 @@ jobs:
         working-directory: extension
         run: echo "zip=.output/oncewise-ai-$(jq -r .version .output/chrome-mv3/manifest.json)-chrome-store.zip" >> "$GITHUB_OUTPUT"
 
-      - name: Mint access token
-        id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.CWS_SA_JSON }}
-          token_format: access_token
-          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
-
       # Upload only — submitting the new package for review stays a manual console
       # action so the store-side sequencing discipline in docs/store-listing/README.md
-      # 步骤 7 keeps a human decision point.
+      # 步骤 7 keeps a human decision point. Token minting lives in the script
+      # (self-signed SA JWT exchange) — see its header for why not google-github-actions/auth.
       - name: Upload package as new console draft
         working-directory: extension
         env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
-          PUBLISHER: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_SA_JSON: ${{ secrets.CWS_SA_JSON }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
           # Public item ID, also pinned in skills/oncewise-message/protocol.mjs.
-          ITEM: dmmhmcdbkbbgbcidafhlhepdchjboenc
-          ZIP: ${{ steps.pkg.outputs.zip }}
-        run: |
-          response="$(curl -sS -X POST \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "X-Goog-Upload-Protocol: raw" \
-            -H "X-Goog-Upload-File-Name: extension.zip" \
-            --data-binary "@$ZIP" \
-            "https://chromewebstore.googleapis.com/upload/v2/publishers/$PUBLISHER/items/$ITEM:upload")"
-          echo "$response"
-          state="$(printf '%s' "$response" | jq -r '.uploadState // empty')"
-          if [ "$state" != "SUCCEEDED" ]; then
-            echo "::error::Upload state was '$state' (expected SUCCEEDED) — check the response above and the Developer Dashboard."
-            exit 1
-          fi
+          CWS_ITEM_ID: dmmhmcdbkbbgbcidafhlhepdchjboenc
+          ZIP_PATH: ${{ steps.pkg.outputs.zip }}
+        run: node scripts/cws-upload.mjs
 
       - name: Attach store zip to the GitHub Release
         env:
