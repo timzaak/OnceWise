@@ -46,7 +46,7 @@
 
 ## 版本发布
 
-- 产品版本载体：`extension/package.json`（含 `package-lock.json` 根版本）与 `.claude-plugin/marketplace.json` 的 oncewise 条目；`backend/`、`demo/` 各自维护版本，不随发布变动。发布走 `/t-tool t-release`（等价 `python scripts/release.py [版本号]`）：要求 main + 干净工作区，`npm run compile` 与 `npm run test:run` 通过后创建 `chore: bump version to <版本号>` commit 与 `v<版本号>` 标签并推送。每个 `v*.*.*` 标签都会触发 `.github/workflows/cd.yml` 的 GitHub Release；后端镜像仅当 `backend/` 或 `docker/Dockerfile` 相对上一版本有改动时才重新构建，否则跳过构建、将上一版镜像别名到新 tag（详见 `scripts/release.py` 头注）。Release 之后还有 `store-upload` 任务：仅当仓库变量 `CWS_UPLOAD_ENABLED=true` 时启用，在 `chrome-store` environment 审批门后构建剥 key 商店包、经 Chrome Web Store API 上传为控制台新版本草稿（不自动提审）并把 zip 挂到 Release assets；一次性配置见 `docs/store-listing/README.md` 步骤 5。无参数运行给出的推荐版本基于最新 tag 推算（以 `git tag` 为准，不在此维护具体版本号），产品线发布请显式传版本号。
+- 产品版本载体：`extension/package.json`（含 `package-lock.json` 根版本）与 `.claude-plugin/marketplace.json` 的 oncewise 条目；`backend/`、`demo/` 各自维护版本，不随发布变动。发布走 `/t-tool t-release`（等价 `python scripts/release.py [版本号]`）：要求 main + 干净工作区，`npm run compile` 与 `npm run test:run` 通过后创建 `chore: bump version to <版本号>` commit 与 `v<版本号>` 标签并推送。每个 `v*.*.*` 标签都会触发 `.github/workflows/cd.yml` 的 GitHub Release；后端镜像仅当 `backend/` 或 `docker/Dockerfile` 相对上一版本有改动时才重新构建，否则跳过构建、将上一版镜像别名到新 tag（详见 `scripts/release.py` 头注）。Release 之后还有 `store-upload` 任务：仅当仓库变量 `CWS_UPLOAD_ENABLED=true` 时启用，构建剥 key 商店包、经 Chrome Web Store API 上传为控制台新版本草稿（仅草稿、不设审批门——人工门是控制台提审动作，不自动提审）并把 zip 挂到 Release assets；一次性配置见 `docs/store-listing/README.md` 步骤 5。无参数运行给出的推荐版本基于最新 tag 推算（以 `git tag` 为准，不在此维护具体版本号），产品线发布请显式传版本号。
 
 ## 缺口（未配置，不虚构命令）
 

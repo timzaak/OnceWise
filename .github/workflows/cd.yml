@@ -206,10 +206,10 @@ jobs:
     # CWS_PUBLISHER_ID secrets. vars (not secrets) gates the job because the secrets
     # context is not available in job-level `if`. !cancelled() guards against the same
     # transitive-skip that silenced the v1.1.2 release.
+    # No approval gate on purpose: the upload only creates an unreviewed console
+    # draft — the human decision point is the manual review submission in the
+    # Developer Console (docs/store-listing/README.md 步骤 7).
     if: ${{ !cancelled() && needs.release.result == 'success' && vars.CWS_UPLOAD_ENABLED == 'true' }}
-    # Approval gate: create this environment in repo settings with a required reviewer;
-    # without protection rules the job runs ungated.
-    environment: chrome-store
     runs-on: ubuntu-latest
     permissions:
       contents: write
