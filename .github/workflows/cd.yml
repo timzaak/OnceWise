@@ -182,6 +182,10 @@ jobs:
   release:
     name: Create GitHub Release
     needs: merge
+    # Check the direct need only: the default success() gate also requires the transitive
+    # `build` job, which is skipped on the backend-unchanged path — that skip silenced
+    # release creation for v1.1.2.
+    if: ${{ !cancelled() && needs.merge.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -193,3 +197,79 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+
+  store-upload:
+    name: Upload Chrome Web Store package
+    needs: release
+    # Activation switch: set the repo variable CWS_UPLOAD_ENABLED=true (Settings →
+    # Secrets and variables → Actions → Variables) after configuring the CWS_SA_JSON /
+    # CWS_PUBLISHER_ID secrets. vars (not secrets) gates the job because the secrets
+    # context is not available in job-level `if`. !cancelled() guards against the same
+    # transitive-skip that silenced the v1.1.2 release.
+    if: ${{ !cancelled() && needs.release.result == 'success' && vars.CWS_UPLOAD_ENABLED == 'true' }}
+    # Approval gate: create this environment in repo settings with a required reviewer;
+    # without protection rules the job runs ungated.
+    environment: chrome-store
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Build store package
+        working-directory: extension
+        run: |
+          npm ci
+          npm run build
+          npm run zip:store
+
+      - name: Resolve package path
+        id: pkg
+        working-directory: extension
+        run: echo "zip=.output/oncewise-ai-$(jq -r .version .output/chrome-mv3/manifest.json)-chrome-store.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Mint access token
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.CWS_SA_JSON }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+
+      # Upload only — submitting the new package for review stays a manual console
+      # action so the store-side sequencing discipline in docs/store-listing/README.md
+      # 步骤 7 keeps a human decision point.
+      - name: Upload package as new console draft
+        working-directory: extension
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          PUBLISHER: ${{ secrets.CWS_PUBLISHER_ID }}
+          # Public item ID, also pinned in skills/oncewise-message/protocol.mjs.
+          ITEM: dmmhmcdbkbbgbcidafhlhepdchjboenc
+          ZIP: ${{ steps.pkg.outputs.zip }}
+        run: |
+          response="$(curl -sS -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "X-Goog-Upload-Protocol: raw" \
+            -H "X-Goog-Upload-File-Name: extension.zip" \
+            --data-binary "@$ZIP" \
+            "https://chromewebstore.googleapis.com/upload/v2/publishers/$PUBLISHER/items/$ITEM:upload")"
+          echo "$response"
+          state="$(printf '%s' "$response" | jq -r '.uploadState // empty')"
+          if [ "$state" != "SUCCEEDED" ]; then
+            echo "::error::Upload state was '$state' (expected SUCCEEDED) — check the response above and the Developer Dashboard."
+            exit 1
+          fi
+
+      - name: Attach store zip to the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" "extension/${{ steps.pkg.outputs.zip }}" --clobber

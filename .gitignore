@@ -10,3 +10,4 @@ log/
 .env.*
 .agents/
 .zcode/
+.zcodeignore

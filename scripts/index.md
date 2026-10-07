@@ -15,6 +15,7 @@
 | 扩展单元测试（Vitest，定向） | `cd extension && npm run test:run -- <文件或匹配模式>` |
 | 扩展类型检查 | `cd extension && npm run compile` |
 | 扩展构建（扩展 Demo 的必要前置） | `cd extension && npm run build` |
+| 扩展商店上传包（剥 manifest `key`） | `cd extension && npm run build && npm run zip:store`（产物 `.output/oncewise-ai-<版本>-chrome-store.zip`） |
 | Demo 类型检查 | `cd demo && npm run type-check` |
 | Demo 用例发现（只列出，不执行） | `cd demo && npx playwright test --list` |
 | 扩展 Demo 整文件测试 | `uv run scripts/web-demo-test-runner.py demo/e2e/extension/<file>.e2e.ts --run-id <唯一ID>` |
@@ -45,7 +46,7 @@
 
 ## 版本发布
 
-- 产品版本载体：`extension/package.json`（含 `package-lock.json` 根版本）与 `.claude-plugin/marketplace.json` 的 oncewise 条目；`backend/`、`demo/` 各自维护版本，不随发布变动。发布走 `/t-tool t-release`（等价 `python scripts/release.py [版本号]`）：要求 main + 干净工作区，`npm run compile` 与 `npm run test:run` 通过后创建 `chore: bump version to <版本号>` commit 与 `v<版本号>` 标签并推送。每个 `v*.*.*` 标签都会触发 `.github/workflows/cd.yml` 的 GitHub Release；后端镜像仅当 `backend/` 或 `docker/Dockerfile` 相对上一版本有改动时才重新构建，否则跳过构建、将上一版镜像别名到新 tag（详见 `scripts/release.py` 头注）。无参数运行给出的推荐版本基于最新 tag 推算（以 `git tag` 为准，不在此维护具体版本号），产品线发布请显式传版本号。
+- 产品版本载体：`extension/package.json`（含 `package-lock.json` 根版本）与 `.claude-plugin/marketplace.json` 的 oncewise 条目；`backend/`、`demo/` 各自维护版本，不随发布变动。发布走 `/t-tool t-release`（等价 `python scripts/release.py [版本号]`）：要求 main + 干净工作区，`npm run compile` 与 `npm run test:run` 通过后创建 `chore: bump version to <版本号>` commit 与 `v<版本号>` 标签并推送。每个 `v*.*.*` 标签都会触发 `.github/workflows/cd.yml` 的 GitHub Release；后端镜像仅当 `backend/` 或 `docker/Dockerfile` 相对上一版本有改动时才重新构建，否则跳过构建、将上一版镜像别名到新 tag（详见 `scripts/release.py` 头注）。Release 之后还有 `store-upload` 任务：仅当仓库变量 `CWS_UPLOAD_ENABLED=true` 时启用，在 `chrome-store` environment 审批门后构建剥 key 商店包、经 Chrome Web Store API 上传为控制台新版本草稿（不自动提审）并把 zip 挂到 Release assets；一次性配置见 `docs/store-listing/README.md` 步骤 5。无参数运行给出的推荐版本基于最新 tag 推算（以 `git tag` 为准，不在此维护具体版本号），产品线发布请显式传版本号。
 
 ## 缺口（未配置，不虚构命令）
 

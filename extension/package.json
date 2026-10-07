@@ -11,6 +11,7 @@
     "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
+    "zip:store": "node scripts/zip-store.mjs",
     "compile": "tsc --noEmit",
     "test:run": "vitest run",
     "postinstall": "wxt prepare"
@@ -25,6 +26,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@wxt-dev/module-react": "^1.1.5",
+    "adm-zip": "^0.6.1",
     "typescript": "^5.9.3",
     "vitest": "^5.0.1",
     "web-ext": "^10.5.0",
