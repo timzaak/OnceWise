@@ -86,9 +86,13 @@ jobs:
         working-directory: backend
         run: cargo clippy --all-targets --all-features --no-deps -- -D warnings
 
+      # scenario_herald_auth (a01–a09) exercises a real docker Herald + Redis
+      # (scripts/test-start.py), which this job does not provision — it runs locally per
+      # scripts/index.md. Unit tests and scenario_data_sync run here; clippy --all-targets
+      # above still compiles the herald suite.
       - name: Run tests
         working-directory: backend
-        run: cargo test --all
+        run: cargo test --lib --test scenario_data_sync
 
   extension-ci:
     name: Extension CI

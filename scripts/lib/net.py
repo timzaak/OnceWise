@@ -85,7 +85,9 @@ def wait_for_http_ok(url: str, timeout_seconds: int, interval_seconds: float = 1
                     if logger and logger.level >= 2:
                         logger.verbose_info(f"{url} healthy after {elapsed:.1f}s ({check_count} checks)")
                     return True
-        except (urllib.error.URLError, TimeoutError):
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            # ConnectionError covers an early-boot server that accepts the socket but
+            # closes it before answering (e.g. a container still warming up).
             pass
         time.sleep(interval_seconds)
         check_count += 1

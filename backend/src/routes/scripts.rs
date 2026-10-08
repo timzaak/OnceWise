@@ -65,11 +65,16 @@ fn script_not_found() -> ApiError {
     tag = "scripts",
     request_body = CreateScriptReq,
     params(("spaceId" = String, Path, description = "Space id")),
-    security(("space_key" = [])),
+    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    security(
+        ("bearer_auth" = [], "space_key" = []),
+        ("space_key" = []),
+    ),
     responses(
         (status = 201, body = ScriptDto),
         (status = 400, body = ErrorBodyDto, description = "INVALID_INPUT: id/name/note/version-note shape or flowContent not an object / over the limit"),
-        (status = 401, body = ErrorBodyDto, description = "BAD_SPACE_KEY"),
+        (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND"),
         (status = 409, body = ErrorBodyDto, description = "SCRIPT_EXISTS"),
     )
@@ -149,10 +154,15 @@ pub async fn create_script(
     path = "/api/spaces/{spaceId}/scripts",
     tag = "scripts",
     params(("spaceId" = String, Path, description = "Space id")),
-    security(("space_key" = [])),
+    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    security(
+        ("bearer_auth" = [], "space_key" = []),
+        ("space_key" = []),
+    ),
     responses(
         (status = 200, body = [ScriptDto]),
-        (status = 401, body = ErrorBodyDto, description = "BAD_SPACE_KEY"),
+        (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND"),
     )
 )]
@@ -181,11 +191,16 @@ pub async fn list_scripts(
         ("spaceId" = String, Path, description = "Space id"),
         ("scriptId" = String, Path, description = "Script id"),
     ),
-    security(("space_key" = [])),
+    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    security(
+        ("bearer_auth" = [], "space_key" = []),
+        ("space_key" = []),
+    ),
     responses(
         (status = 200, body = ScriptDto),
         (status = 400, body = ErrorBodyDto, description = "INVALID_INPUT: missing fields or length violations"),
-        (status = 401, body = ErrorBodyDto, description = "BAD_SPACE_KEY"),
+        (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND / SCRIPT_NOT_FOUND"),
     )
 )]
@@ -263,11 +278,16 @@ pub async fn update_script(
         ("spaceId" = String, Path, description = "Space id"),
         ("scriptId" = String, Path, description = "Script id"),
     ),
-    security(("space_key" = [])),
+    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    security(
+        ("bearer_auth" = [], "space_key" = []),
+        ("space_key" = []),
+    ),
     responses(
         (status = 201, body = VersionMetaDto),
         (status = 400, body = ErrorBodyDto, description = "INVALID_INPUT"),
-        (status = 401, body = ErrorBodyDto, description = "BAD_SPACE_KEY"),
+        (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND / SCRIPT_NOT_FOUND"),
     )
 )]
@@ -353,10 +373,15 @@ pub async fn create_script_version(
         ("spaceId" = String, Path, description = "Space id"),
         ("scriptId" = String, Path, description = "Script id"),
     ),
-    security(("space_key" = [])),
+    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    security(
+        ("bearer_auth" = [], "space_key" = []),
+        ("space_key" = []),
+    ),
     responses(
         (status = 200, body = [VersionMetaDto]),
-        (status = 401, body = ErrorBodyDto, description = "BAD_SPACE_KEY"),
+        (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND / SCRIPT_NOT_FOUND"),
     )
 )]
@@ -405,11 +430,16 @@ pub async fn list_script_versions(
         ("scriptId" = String, Path, description = "Script id"),
         ("versionNumber" = i64, Path, description = "Version number (positive integer)"),
     ),
-    security(("space_key" = [])),
+    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    security(
+        ("bearer_auth" = [], "space_key" = []),
+        ("space_key" = []),
+    ),
     responses(
         (status = 200, body = VersionDto),
         (status = 400, body = ErrorBodyDto, description = "INVALID_INPUT: versionNumber not a positive integer"),
-        (status = 401, body = ErrorBodyDto, description = "BAD_SPACE_KEY"),
+        (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND / SCRIPT_NOT_FOUND / VERSION_NOT_FOUND"),
     )
 )]

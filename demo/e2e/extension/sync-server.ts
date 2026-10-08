@@ -113,6 +113,11 @@ export class SyncServer {
         DATABASE_URL: databaseUrlFor(this.database),
         // cleanup() 后再 start() 的自愈路径：库被 DROP 时后端自行重建空库
         CREATE_DB_IF_MISSING: '1',
+        // 后端默认 AUTH_MODE=herald 会让无 Herald 配置的 demo 后端启动即失败；缺省 none
+        // 保住既有 demo 语义，显式设置的 AUTH_MODE 照常透传（后续 Herald 故事 fixture
+        // 直接注入 env 即可，与 scripts/lib/demo_session.py 同语义）。空白串视同未设置：
+        // 后端对 trim 后为空的 AUTH_MODE 按默认 herald 处理，原样透传会让后端启动失败。
+        AUTH_MODE: process.env.AUTH_MODE?.trim() || 'none',
         RUST_LOG: 'info',
       },
       stdio: ['ignore', 'pipe', 'pipe'],

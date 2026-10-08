@@ -18,6 +18,14 @@ pub enum ApiError {
     /// 401 BAD_SPACE_KEY (missing header, wrong key or malformed key)
     #[error("The space key was rejected for this space")]
     BadSpaceKey,
+    /// 401 AUTH_REQUIRED (herald mode: missing/empty/invalid Bearer or the identity provider
+    /// rejected the token). Distinct from BAD_SPACE_KEY at the same status via `code`.
+    #[error("Sign-in is required to access this server")]
+    AuthRequired,
+    /// 503 AUTH_UNAVAILABLE (herald mode: the identity provider is unreachable, times out or
+    /// answered outside the expected contract — fail-closed, never a silent allow).
+    #[error("{message}")]
+    AuthUnavailable { message: String },
     /// 404 `<code>`: SPACE_NOT_FOUND / SCRIPT_NOT_FOUND / VERSION_NOT_FOUND / NOT_FOUND (fallback route)
     #[error("{message}")]
     NotFound { code: &'static str, message: String },
@@ -34,6 +42,8 @@ impl ApiError {
         match self {
             ApiError::InvalidInput { .. } => StatusCode::BAD_REQUEST,
             ApiError::BadSpaceKey => StatusCode::UNAUTHORIZED,
+            ApiError::AuthRequired => StatusCode::UNAUTHORIZED,
+            ApiError::AuthUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
             ApiError::NotFound { .. } => StatusCode::NOT_FOUND,
             ApiError::Conflict { .. } => StatusCode::CONFLICT,
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -44,6 +54,8 @@ impl ApiError {
         match self {
             ApiError::InvalidInput { .. } => "INVALID_INPUT",
             ApiError::BadSpaceKey => "BAD_SPACE_KEY",
+            ApiError::AuthRequired => "AUTH_REQUIRED",
+            ApiError::AuthUnavailable { .. } => "AUTH_UNAVAILABLE",
             ApiError::NotFound { code, .. } => code,
             ApiError::Conflict { code, .. } => code,
             ApiError::Internal(_) => "INTERNAL",
@@ -52,6 +64,22 @@ impl ApiError {
 
     pub(crate) fn internal(err: impl Into<anyhow::Error>) -> Self {
         ApiError::Internal(err.into())
+    }
+}
+
+/// Default 503 AUTH_UNAVAILABLE payload (identity dependency failure — fail-closed).
+pub(crate) fn auth_unavailable() -> ApiError {
+    ApiError::AuthUnavailable {
+        message: "The sign-in service is unavailable, please try again later".to_string(),
+    }
+}
+
+/// 404 NOT_FOUND "No such endpoint" — the router fallback and the auth endpoints' not-mounted
+/// guard share one payload so the two paths can never drift apart.
+pub(crate) fn endpoint_not_found() -> ApiError {
+    ApiError::NotFound {
+        code: "NOT_FOUND",
+        message: "No such endpoint".to_string(),
     }
 }
 

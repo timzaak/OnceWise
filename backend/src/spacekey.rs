@@ -85,9 +85,9 @@ where
     }
 }
 
-/// Constant-time string equality over fixed-length hex digests (an early length return leaks only
-/// the length, and both operands are always 64-char hashes here).
-fn constant_time_eq(a: &str, b: &str) -> bool {
+/// Constant-time string equality over fixed-length digests (an early length return leaks only
+/// the length; callers pass fixed-size hex or base64url digests).
+pub(crate) fn constant_time_eq(a: &str, b: &str) -> bool {
     if a.len() != b.len() {
         return false;
     }

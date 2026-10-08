@@ -4,16 +4,14 @@
 // or DATABASE_URL pointing at a running PostgreSQL server).
 // Story mapping: s01–s10 correspond to US-DS-001～006 (docs/user-stories/core/data-sync.md).
 
-use axum::body::Body;
-use axum::http::{Request, StatusCode};
+mod common;
+
+use axum::http::StatusCode;
 use axum::Router;
-use http_body_util::BodyExt;
 use oncewise_ai_sync::{routes, AppState};
 use serde_json::{json, Value};
-use tower::ServiceExt;
 
-const KEY_A: &str = "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"; // 32 chars — the space key (shared by all holders)
-const KEY_B: &str = "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj"; // 32 chars — a *different* key (wrong for this space)
+use common::{json_of, KEY_A, KEY_B};
 
 struct TestApp {
     app: Router,
@@ -21,13 +19,14 @@ struct TestApp {
 }
 
 async fn spawn() -> TestApp {
-    let pool = oncewise_ai_sync::db::init_test_pool().await;
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .expect("migration run failed");
+    // auth: None is the explicit none mode — this suite doubles as the regression proof that
+    // the space-key-only behavior is unchanged.
+    let pool = common::migrated_pool().await;
     TestApp {
-        app: routes::build_router(AppState { pool: pool.clone() }),
+        app: routes::build_router(AppState {
+            pool: pool.clone(),
+            auth: None,
+        }),
         pool,
     }
 }
@@ -39,31 +38,9 @@ async fn send(
     key: Option<&str>,
     body: Option<Value>,
 ) -> (StatusCode, Value) {
-    let mut builder = Request::builder().method(method).uri(uri);
-    if let Some(key) = key {
-        builder = builder.header("X-Space-Key", key);
-    }
-    let request = if let Some(body) = body {
-        builder = builder.header("content-type", "application/json");
-        builder.body(Body::from(body.to_string()))
-    } else {
-        builder.body(Body::empty())
-    }
-    .expect("failed to build the test request");
-    let response = app.clone().oneshot(request).await.expect("request failed");
-    let status = response.status();
-    let bytes = response
-        .into_body()
-        .collect()
-        .await
-        .expect("failed to read the response")
-        .to_bytes();
-    let value = if bytes.is_empty() {
-        Value::Null
-    } else {
-        serde_json::from_slice(&bytes).expect("responses must be valid JSON")
-    };
-    (status, value)
+    let headers: Vec<(&str, &str)> = key.map(|k| vec![("X-Space-Key", k)]).unwrap_or_default();
+    let (status, _, bytes) = common::send(app, method, uri, &headers, body).await;
+    (status, json_of(&bytes))
 }
 
 fn flow_content(v: u32) -> Value {

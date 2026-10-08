@@ -28,10 +28,15 @@ fn space_not_found() -> ApiError {
     path = "/api/spaces",
     tag = "spaces",
     request_body = CreateSpaceReq,
+    // Herald mode: bearer gate (the space key travels in the body here, not a header);
+    // AUTH_MODE=none requires no sign-in.
+    security(("bearer_auth" = [])),
     responses(
         (status = 201, body = SpaceDto, description = "Space registered"),
         (status = 200, body = SpaceDto, description = "Idempotent re-registration with the same key"),
         (status = 400, body = ErrorBodyDto, description = "INVALID_INPUT: id/key shape or name length"),
+        (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode: no valid sign-in)"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
         (status = 409, body = ErrorBodyDto, description = "SPACE_KEY_MISMATCH"),
     )
 )]
@@ -156,11 +161,16 @@ pub async fn create_space(
     path = "/api/spaces/{spaceId}",
     tag = "spaces",
     params(("spaceId" = String, Path, description = "Space id")),
-    security(("space_key" = [])),
+    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    security(
+        ("bearer_auth" = [], "space_key" = []),
+        ("space_key" = []),
+    ),
     responses(
         (status = 200, body = SpaceDto),
-        (status = 401, body = ErrorBodyDto, description = "BAD_SPACE_KEY"),
+        (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
     )
 )]
 pub async fn get_space(
@@ -191,11 +201,16 @@ pub async fn get_space(
     path = "/api/spaces/{spaceId}",
     tag = "spaces",
     params(("spaceId" = String, Path, description = "Space id")),
-    security(("space_key" = [])),
+    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    security(
+        ("bearer_auth" = [], "space_key" = []),
+        ("space_key" = []),
+    ),
     responses(
         (status = 204),
-        (status = 401, body = ErrorBodyDto, description = "BAD_SPACE_KEY"),
+        (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
     )
 )]
 pub async fn delete_space(

@@ -89,3 +89,47 @@ pub struct UpdateScriptReq {
     pub name: Option<String>,
     pub note: Option<String>,
 }
+
+/// Sign-in mode probe (public in both run modes; `loginUrl` is only meaningful when enabled).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthConfigDto {
+    pub enabled: bool,
+    pub login_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshTokenReq {
+    pub refresh_token: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RedeemTokenReq {
+    pub handoff_code: String,
+    pub handoff_verifier: String,
+}
+
+/// Access/refresh token pair as delivered to the extension (POST bodies only — tokens never
+/// appear in URLs). `expiresIn`/`refreshExpiresIn` are remaining seconds (rounded down).
+#[derive(Serialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenSetDto {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub expires_in: i64,
+    pub refresh_expires_in: i64,
+    pub token_type: String,
+}
+
+// Manual Debug: the two token fields are secrets and must never reach a log line.
+impl std::fmt::Debug for TokenSetDto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TokenSetDto")
+            .field("expires_in", &self.expires_in)
+            .field("refresh_expires_in", &self.refresh_expires_in)
+            .field("token_type", &self.token_type)
+            .finish_non_exhaustive()
+    }
+}

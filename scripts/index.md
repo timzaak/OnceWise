@@ -16,6 +16,8 @@
 | 扩展类型检查 | `cd extension && npm run compile` |
 | 扩展构建（扩展 Demo 的必要前置） | `cd extension && npm run build` |
 | 扩展商店上传包（剥 manifest `key`） | `cd extension && npm run build && npm run zip:store`（产物 `.output/oncewise-ai-<版本>-chrome-store.zip`） |
+| Herald 鉴权测试环境（真实 docker Herald + Redis） | `uv run scripts/test-start.py`（默认镜像 `ghcr.io/timzaak/herald:0.6.1`，`HERALD_IMAGE` 可覆盖；复用 demo PostgreSQL 上的 `herald_test` 库，Herald/Redis 容器自管；realm/client/测试用户由测试内播种） |
+| 停止 Herald 鉴权测试环境 | `uv run scripts/test-stop.py`（移除 Herald/Redis 测试容器，不动共享 PostgreSQL） |
 | Demo 类型检查 | `cd demo && npm run type-check` |
 | Demo 用例发现（只列出，不执行） | `cd demo && npx playwright test --list` |
 | 扩展 Demo 整文件测试 | `uv run scripts/web-demo-test-runner.py demo/e2e/extension/<file>.e2e.ts --run-id <唯一ID>` |
@@ -42,7 +44,7 @@
 
 ## CI
 
-`.github/workflows/ci.yml` 的 `native-demo-ci` 在 ubuntu / macos / windows runner 上串行跑全部 us-nm 文件（push 按 paths filter 触发，或 workflow_dispatch 手动全量），失败工件 `native-demo-results-<os>`；机制说明（NATIVE_DEMO_NODE 钉定、profile 内 NativeMessagingHosts 预置）见 ci.yml 与 native-host.ts 注释。同步类故事不进 CI（需 Rust + PG）。
+`.github/workflows/ci.yml` 的 `native-demo-ci` 在 ubuntu / macos / windows runner 上串行跑全部 us-nm 文件（push 按 paths filter 触发，或 workflow_dispatch 手动全量），失败工件 `native-demo-results-<os>`；机制说明（NATIVE_DEMO_NODE 钉定、profile 内 NativeMessagingHosts 预置）见 ci.yml 与 native-host.ts 注释。同步类故事不进 CI（需 Rust + PG）。`backend-ci` 只跑单元测试与 `scenario_data_sync`（`cargo test --lib --test scenario_data_sync`）；`scenario_herald_auth`（a01–a09）需真实 docker Herald + Redis 环境（上文 test-start.py 入口），不在该 job 供给范围内，仍按上方本地入口运行。
 
 ## 版本发布
 
@@ -50,7 +52,7 @@
 
 ## 缺口（未配置，不虚构命令）
 
-后端（`backend/`）测试入口尚未在本索引配置；需要时按其 nextest 约定补齐 `backend-test.py` 与对应说明。同域真实入口：`cd backend && TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres cargo test`（s01–s10 场景测试，每用例自建一次性 `oncewise_ai_test_*` 库）。
+后端（`backend/`）测试入口尚未在本索引配置；需要时按其 nextest 约定补齐 `backend-test.py` 与对应说明。同域真实入口：`cd backend && TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres cargo test`（s01–s10 数据同步场景与 scenario_herald_auth 的 a01–a09 鉴权场景，每用例自建一次性 `oncewise_ai_test_*` 库）。a01–a09 对接**真实 docker Herald**（无 mock）：先 `uv run scripts/test-start.py` 起环境（Herald `http://127.0.0.1:13001`、其 PG 库 `herald_test`、Redis `127.0.0.1:16381`，可用 `TEST_HERALD_URL`/`TEST_HERALD_DATABASE_URL`/`TEST_HERALD_REDIS` 覆盖；a05 会停/起 Herald 容器，套件内部串行）。
 
 扩展故事 demo 覆盖缺口（显式记录，非遗漏）：US-SSBA-003（字段变化联动，全部 demo 流程均为 pageEnter 触发）、US-SSBA-005 场景 4（用户暂停/恢复不自动续跑）无用例；US-CPF-001 场景 4 声明手动刷新/关闭标签页/重启浏览器三种中断形态，us-cpf-001 T4 仅覆盖关闭标签页（三形态走同一保守取消路径）；US-SSBA-010 场景 2（非目标页面不执行）与场景 1 的 L2 文档级去重由单测承载（`extension/tests/page-enter.test.ts` 负样本），demo 不重复承载；US-NM-002 场景 2（对话未确认或要求修改时不保存）属 AI 对话侧纪律，由 skills/oncewise-flow 的保存前确认门承载（us-nm-002 用例中确认由用例代行，无负路径用例）；US-SSBA-007 属 AI 工具侧产出（Playwright 无法承载，由 skills/ 交付与人工路径覆盖）；US-SSBA-002/009/011 由 smoke/packing/us-nm-002/us-ds-004 用例部分触及。
 

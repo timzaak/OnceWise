@@ -1,15 +1,21 @@
+pub mod auth;
 pub mod scripts;
 pub mod spaces;
 
+use axum::middleware;
 use axum::response::IntoResponse;
 use axum::routing::{get, patch, post};
 use axum::Router;
 
-use crate::error::ApiError;
+use crate::error::endpoint_not_found;
 use crate::AppState;
 
+/// Single assembly point. In herald mode the nine business routes sit behind the sign-in gate
+/// and all five auth endpoints are mounted; in none mode only the mode probe `/api/auth/config`
+/// exists (the other auth endpoints fall through to the 404 fallback) — the previous behavior
+/// plus that one new public probe.
 pub fn build_router(state: AppState) -> Router {
-    Router::new()
+    let business = Router::new()
         .route("/api/spaces", post(spaces::create_space))
         .route(
             "/api/spaces/{spaceId}",
@@ -30,18 +36,33 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/spaces/{spaceId}/scripts/{scriptId}/versions/{versionNumber}",
             get(scripts::get_script_version),
-        )
+        );
+    let business = match state.auth {
+        Some(_) => business.layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_herald_auth,
+        )),
+        None => business,
+    };
+
+    let router = Router::new()
+        .merge(business)
         .route("/api/health", get(spaces::get_health))
         .route("/api/openapi.json", get(crate::openapi::get_openapi))
-        .fallback(fallback_not_found)
-        .with_state(state)
+        .route("/api/auth/config", get(auth::get_auth_config));
+    let router = match state.auth {
+        Some(_) => router
+            .route("/api/auth/oauth/start", get(auth::oauth_start))
+            .route("/api/auth/oauth/callback", get(auth::oauth_callback))
+            .route("/api/auth/redeem", post(auth::redeem_token))
+            .route("/api/auth/refresh", post(auth::refresh_token)),
+        None => router,
+    };
+    router.fallback(fallback_not_found).with_state(state)
 }
 
 async fn fallback_not_found() -> impl IntoResponse {
-    ApiError::NotFound {
-        code: "NOT_FOUND",
-        message: "No such endpoint".to_string(),
-    }
+    endpoint_not_found()
 }
 
 #[cfg(test)]
@@ -59,7 +80,7 @@ mod tests {
             .run(&pool)
             .await
             .expect("migration run failed");
-        let app = build_router(AppState { pool });
+        let app = build_router(AppState { pool, auth: None });
 
         let response = app
             .clone()

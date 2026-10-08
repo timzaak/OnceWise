@@ -1,4 +1,5 @@
 use anyhow::Context;
+use oncewise_ai_sync::routes::auth::HeraldAuth;
 use oncewise_ai_sync::{config, db, routes, AppState};
 use tower_http::trace::TraceLayer;
 
@@ -15,8 +16,29 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("failed to run database migrations")?;
 
-    let state = AppState { pool };
-    let app = routes::build_router(state).layer(TraceLayer::new_for_http());
+    let auth = match &config.auth {
+        config::AuthMode::Herald(herald) => Some(
+            HeraldAuth::new(herald.clone())
+                .context("failed to assemble the Herald sign-in gate")?,
+        ),
+        config::AuthMode::None => None,
+    };
+    let state = AppState { pool, auth };
+    if let Some(herald) = state.auth.as_ref() {
+        // Drops expired login handshakes even during idle periods; exits with the server state.
+        herald.start_sweep_task();
+    }
+    let app = routes::build_router(state).layer(TraceLayer::new_for_http().make_span_with(
+        // Only method + path: the default span records the full URI, which would put OAuth
+        // query parameters (state, code) into logs.
+        |request: &axum::http::Request<axum::body::Body>| {
+            tracing::info_span!(
+                "http_request",
+                method = %request.method(),
+                path = %request.uri().path()
+            )
+        },
+    ));
 
     let listener = tokio::net::TcpListener::bind(&config.bind_addr)
         .await

@@ -11,9 +11,14 @@ pub mod spacekey;
 
 use sqlx::PgPool;
 
-/// Carries only the connection pool: access control queries the database per request, the service
-/// keeps no in-memory state.
+use routes::auth::HeraldAuth;
+
+/// Carries the connection pool plus the optional Herald sign-in gate: `auth: None` is the
+/// explicit none mode (space-key only, the pre-gate behavior). Access control queries the
+/// database per request; the only in-memory state is the short-lived login handshake inside
+/// HeraldAuth.
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
+    pub auth: Option<HeraldAuth>,
 }

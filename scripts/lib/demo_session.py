@@ -162,6 +162,11 @@ def stop_demo_postgres(logger: "Logger") -> bool:
 def start_sync_backend(logger: "Logger", binary: Path, port: int) -> int:
     ensure_demo_postgres(logger)
     env = dict(os.environ)
+    # 后端默认 AUTH_MODE=herald，缺 Herald 配置会启动失败；人工 demo 默认显式 none（原行为），
+    # 操作者显式设置的 AUTH_MODE / HERALD_* 从 os.environ 透传保留。空白串视同未设置：
+    # 后端对 trim 后为空的 AUTH_MODE 按默认 herald 处理，原样透传会让 demo 后端启动失败。
+    if not env.get("AUTH_MODE", "").strip():
+        env["AUTH_MODE"] = "none"
     env.update({
         "BIND_ADDR": f"127.0.0.1:{port}",
         # Persistent manual-demo database: created on first run, survives restarts.
