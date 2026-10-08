@@ -5,33 +5,16 @@
 // used by the configure flow.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '@/lib/sync-api';
+import { jsonResponse, recordingFetch, type Recorded } from './fetch-recorder';
 
 const SERVER = 'http://127.0.0.1:8080';
 const KEY = 'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk';
 
-interface Recorded {
-  url: string;
-  method: string;
-  body?: string;
-  headers: Record<string, string>;
-}
-
 let calls: Recorded[];
 
-function jsonResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-}
-
-// Install a recording fetch mock; the handler resolves per-request responses
+// The handler sees only the URL (sync-api request construction is asserted through the recording)
 function mockFetch(handler: (url: string) => Response | Promise<Response>) {
-  const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    // sync-api only ever passes a plain header record
-    const headers: Record<string, string> = init?.headers === undefined ? {} : { ...(init.headers as Record<string, string>) };
-    calls.push({ url, method: init?.method ?? 'GET', body: init?.body === undefined ? undefined : String(init.body), headers });
-    return handler(url);
-  });
-  vi.stubGlobal('fetch', fn);
+  vi.stubGlobal('fetch', recordingFetch(calls, handler));
 }
 
 beforeEach(() => {
@@ -51,16 +34,25 @@ describe('error classification', () => {
     expect(res).toEqual({ ok: false, error: { kind: 'unreachable' } });
   });
 
-  it('a fetch timeout abort maps to unreachable', async () => {
+  it('a fetch timeout abort after dispatch is classified as timeout(sent) — never plain unreachable, a write outcome is unknown', async () => {
     mockFetch(() => Promise.reject(new DOMException('aborted', 'TimeoutError')));
     const res = await api.getHealth(SERVER);
-    expect(res).toEqual({ ok: false, error: { kind: 'unreachable' } });
+    expect(res).toEqual({ ok: false, error: { kind: 'timeout', sent: true } });
+    // Reads still surface as the retryable 'unreachable' reason; writers upgrade to operation-uncertain
+    expect(api.syncErrorToReason((res as { ok: false; error: api.SyncApiError }).error).reason).toBe('unreachable');
   });
 
-  it('401 maps to unauthorized regardless of body', async () => {
-    mockFetch(() => jsonResponse(401, { error: { code: 'BAD_SPACE_KEY', message: 'The space key was rejected for this space' } }));
+  it('401 splits by error code: AUTH_REQUIRED is the sign-in gate, everything else (incl. old servers with no code) stays unauthorized', async () => {
+    mockFetch(() => jsonResponse(401, { error: { code: 'AUTH_REQUIRED', message: 'Sign in to use this server' } }));
     const res = await api.getSpace(SERVER, 'sp-test000000000001', KEY);
-    expect(res).toEqual({ ok: false, error: { kind: 'unauthorized' } });
+    expect(res).toEqual({ ok: false, error: { kind: 'auth-required' } });
+
+    mockFetch(() => jsonResponse(401, { error: { code: 'BAD_SPACE_KEY', message: 'The space key was rejected for this space' } }));
+    expect(await api.getSpace(SERVER, 'sp-test000000000001', KEY)).toEqual({ ok: false, error: { kind: 'unauthorized' } });
+
+    // A pre-auth server's bare 401 (no unified body) must keep the original classification
+    mockFetch(() => new Response('Nope', { status: 401 }));
+    expect(await api.getSpace(SERVER, 'sp-test000000000001', KEY)).toEqual({ ok: false, error: { kind: 'unauthorized' } });
   });
 
   it('the unified error body {"error":{code,message}} is parsed and carried through', async () => {
@@ -203,7 +195,105 @@ describe('machine-code → reason mapping', () => {
     expect(api.syncErrorToReason({ kind: 'http', status: 409, code: 'SCRIPT_EXISTS', message: 'x' }).reason).toBe('script-exists');
     expect(api.syncErrorToReason({ kind: 'unreachable' })).toEqual({ reason: 'unreachable' });
     expect(api.syncErrorToReason({ kind: 'unauthorized' })).toEqual({ reason: 'bad-space-key' });
+    expect(api.syncErrorToReason({ kind: 'auth-required' })).toEqual({ reason: 'sign-in-required' });
     // unknown future codes stay readable via the generic transform
     expect(api.syncErrorToReason({ kind: 'http', status: 418, code: 'SOME_NEW_CODE', message: 'x' }).reason).toBe('some-new-code');
+  });
+});
+
+describe('auth endpoints and bearer construction', () => {
+  it('a bearer token rides the Authorization header; none-mode sends no header', async () => {
+    mockFetch(() => jsonResponse(200, { id: 'sp-test000000000001', name: 'n', createdAt: 't' }));
+    await api.getSpace(SERVER, 'sp-test000000000001', KEY, { bearer: 'at-1' });
+    expect(calls[0]!.headers['Authorization']).toBe('Bearer at-1');
+    expect(calls[0]!.headers['X-Space-Key']).toBe(KEY);
+    await api.getSpace(SERVER, 'sp-test000000000001', KEY);
+    expect(calls[1]!.headers['Authorization']).toBeUndefined();
+    await api.getSpace(SERVER, 'sp-test000000000001', KEY, { bearer: null });
+    expect(calls[2]!.headers['Authorization']).toBeUndefined();
+  });
+
+  it('getAuthConfig hits the public config endpoint with no credentials', async () => {
+    mockFetch(() => jsonResponse(200, { enabled: true, loginUrl: '/api/auth/oauth/start' }));
+    const res = await api.getAuthConfig(SERVER);
+    expect(res).toEqual({ ok: true, data: { enabled: true, loginUrl: '/api/auth/oauth/start' } });
+    expect(calls[0]!.url).toBe(`${SERVER}/api/auth/config`);
+    expect(calls[0]!.headers['Authorization']).toBeUndefined();
+    expect(calls[0]!.headers['X-Space-Key']).toBeUndefined();
+  });
+
+  it('redeem POSTs {handoffCode, handoffVerifier} — the verifier is in the body, never in the URL', async () => {
+    mockFetch(() =>
+      jsonResponse(200, { accessToken: 'at-9', refreshToken: 'rt-9', expiresIn: 60, refreshExpiresIn: 600, tokenType: 'Bearer' }),
+    );
+    const verifier = 'v'.repeat(43);
+    const res = await api.redeemToken(SERVER, { handoffCode: 'c'.repeat(43), handoffVerifier: verifier });
+    expect(res.ok).toBe(true);
+    expect(calls[0]!.method).toBe('POST');
+    expect(calls[0]!.url).toBe(`${SERVER}/api/auth/redeem`);
+    expect(JSON.parse(calls[0]!.body!)).toEqual({ handoffCode: 'c'.repeat(43), handoffVerifier: verifier });
+    expect(calls[0]!.url).not.toContain(verifier);
+    expect(calls[0]!.url).not.toContain('at-9');
+  });
+
+  it('refresh POSTs {refreshToken} — same body-only rule for the rotating credential', async () => {
+    mockFetch(() =>
+      jsonResponse(200, { accessToken: 'at-2', refreshToken: 'rt-2', expiresIn: 60, refreshExpiresIn: 600, tokenType: 'Bearer' }),
+    );
+    const res = await api.refreshToken(SERVER, 'rt-1');
+    expect(res.ok).toBe(true);
+    expect(calls[0]!.url).toBe(`${SERVER}/api/auth/refresh`);
+    expect(JSON.parse(calls[0]!.body!)).toEqual({ refreshToken: 'rt-1' });
+    expect(calls[0]!.url).not.toContain('rt-1');
+  });
+
+  it('503 AUTH_UNAVAILABLE carries the machine code through for auth-unavailable mapping', async () => {
+    mockFetch(() => jsonResponse(503, { error: { code: 'AUTH_UNAVAILABLE', message: 'Herald is unreachable' } }));
+    const res = await api.listScripts(SERVER, KEY, 'sp-test000000000001');
+    expect(res).toEqual({
+      ok: false,
+      error: { kind: 'http', status: 503, code: 'AUTH_UNAVAILABLE', message: 'Herald is unreachable' },
+    });
+    expect(api.syncErrorToReason((res as { ok: false; error: api.SyncApiError }).error).reason).toBe('auth-unavailable');
+  });
+});
+
+describe('shared deadline budget', () => {
+  it('an exhausted deadline refuses before dispatch — nothing was sent, so nothing was committed', async () => {
+    mockFetch(() => jsonResponse(200, {}));
+    const res = await api.getSpace(SERVER, 'sp-test000000000001', KEY, { deadlineAt: Date.now() - 1 });
+    expect(res).toEqual({ ok: false, error: { kind: 'timeout', sent: false } });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('maxFetchMs caps below the default when the deadline still allows it', async () => {
+    mockFetch(() => jsonResponse(200, {}));
+    // Only the cap logic matters here: a 10s-capped refresh-style call still dispatches normally
+    const res = await api.refreshToken(SERVER, 'rt-1', { deadlineAt: Date.now() + 60_000, maxFetchMs: 10_000 });
+    expect(res.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+  });
+});
+
+describe('token set wire shape (redeem/refresh responses)', () => {
+  const good = { accessToken: 'at', refreshToken: 'rt', expiresIn: 60, refreshExpiresIn: 600, tokenType: 'Bearer' };
+
+  it('accepts the five-field Bearer shape', () => {
+    expect(api.parseTokenSet(good)).toEqual(good);
+  });
+
+  it('rejects malformed sets — no session is ever built from a broken contract', () => {
+    for (const bad of [
+      null,
+      {},
+      { ...good, accessToken: '' },
+      { ...good, refreshToken: 7 },
+      { ...good, expiresIn: 0 },
+      { ...good, expiresIn: Number.POSITIVE_INFINITY },
+      { ...good, refreshExpiresIn: -1 },
+      { ...good, tokenType: 'Basic' },
+    ]) {
+      expect(api.parseTokenSet(bad)).toBeNull();
+    }
   });
 });

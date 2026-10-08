@@ -2,7 +2,16 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { storage } from 'wxt/utils/storage';
 import { businessClaimsItem, onboardingItem, flowStoreItem } from '@/lib/storage';
-import { syncConfigItem, syncLinksItem, syncUiItem } from '@/lib/sync-storage';
+import { SYNC_AUTH_OP_TIMEOUT_MS, SYNC_SIGN_IN_TIMEOUT_MS, SYNC_TIMEOUT_MS } from '@/lib/messaging';
+import { AUTHED_OP_BUDGET_MS, NONE_OP_BUDGET_MS, SIGN_IN_BUDGET_MS } from '@/lib/sync-auth';
+import {
+  isValidSyncAuthData,
+  resetSyncForServer,
+  syncAuthItem,
+  syncConfigItem,
+  syncLinksItem,
+  syncUiItem,
+} from '@/lib/sync-storage';
 
 describe('test pipeline smoke', () => {
   beforeEach(() => {
@@ -43,5 +52,55 @@ describe('test pipeline smoke', () => {
     });
     expect(await syncLinksItem.getValue()).toEqual([]);
     expect(await syncUiItem.getValue()).toEqual({ currentSpaceId: null });
+  });
+
+  it('the sign-in credentials live in local:syncAuth with a signed-out fallback at epoch 0', async () => {
+    expect(syncAuthItem.key).toBe('local:syncAuth');
+    expect(await syncAuthItem.getValue()).toEqual({
+      serverUrl: '',
+      accessToken: '',
+      refreshToken: '',
+      accessTokenExpiresAt: 0,
+      epoch: 0,
+    });
+  });
+
+  it('syncAuth records are shape-validated — a malformed record is signed-out, never credentials', () => {
+    const good = { serverUrl: 'https://s', accessToken: 'a', refreshToken: 'r', accessTokenExpiresAt: 1, epoch: 2 };
+    expect(isValidSyncAuthData(good)).toBe(true);
+    for (const bad of [
+      null,
+      {},
+      { ...good, epoch: 1.5 },
+      { ...good, accessTokenExpiresAt: 'soon' },
+      { ...good, serverUrl: 7 },
+    ]) {
+      expect(isValidSyncAuthData(bad)).toBe(false);
+    }
+  });
+
+  it('a server switch clears the sign-in state in the same reset, advancing the epoch (never back to 0)', async () => {
+    await syncConfigItem.setValue({ serverUrl: 'https://a.example.com', spaces: [] });
+    await syncAuthItem.setValue({
+      serverUrl: 'https://a.example.com',
+      accessToken: 'at',
+      refreshToken: 'rt',
+      accessTokenExpiresAt: 123,
+      epoch: 5,
+    });
+    await resetSyncForServer('https://b.example.com');
+    expect(await syncAuthItem.getValue()).toEqual({
+      serverUrl: 'https://b.example.com',
+      accessToken: '',
+      refreshToken: '',
+      accessTokenExpiresAt: 0,
+      epoch: 6,
+    });
+  });
+
+  it('UI hop timeouts outlive their background budgets — the background must answer before the hop dies', () => {
+    expect(SYNC_AUTH_OP_TIMEOUT_MS).toBeGreaterThan(AUTHED_OP_BUDGET_MS);
+    expect(SYNC_SIGN_IN_TIMEOUT_MS).toBeGreaterThan(SIGN_IN_BUDGET_MS);
+    expect(SYNC_TIMEOUT_MS).toBeGreaterThan(NONE_OP_BUDGET_MS);
   });
 });

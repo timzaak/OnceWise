@@ -24,6 +24,13 @@ function spaceErrorText(res: ExtensionResponse | undefined, fallback: string): s
   if (res.reason === 'space-key-mismatch') return t('sync.spaces.keyMismatch');
   if (res.reason === 'space-not-found') return t('sync.spaces.notFound');
   if (res.reason === 'invalid-input') return res.detail ?? t('sync.error.invalidInput');
+  // Auth-gate outcomes: sign-in guidance (never a permission/role notice — any valid sign-in is
+  // enough), a retryable dependency failure, an unknown-outcome write, and a session replaced
+  // mid-operation
+  if (res.reason === 'sign-in-required') return t('sync.auth.required');
+  if (res.reason === 'auth-unavailable') return t('sync.auth.unavailable');
+  if (res.reason === 'operation-uncertain') return t('sync.auth.operationUncertain');
+  if (res.reason === 'auth-changed') return t('sync.auth.relogin');
   return res.detail ?? fallback;
 }
 
@@ -60,7 +67,12 @@ export default function SyncSpacesView({ status, health, call, probeHealth, onCh
       try {
         const res = await call({ type: 'sp:syncSetServer', serverUrl: parsedOrigin });
         if (!res?.ok) {
-          setServerMsg({ kind: 'error', text: t('sync.server.unreachableSave') });
+          // auth-unavailable refuses before anything is saved — the "address was saved" retry hint
+          // would be wrong
+          setServerMsg({
+            kind: 'error',
+            text: res?.reason === 'auth-unavailable' ? t('sync.server.authUnavailable') : t('sync.server.unreachableSave'),
+          });
           return;
         }
         const next = await probeHealth();

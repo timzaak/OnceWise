@@ -2,7 +2,10 @@
 // locally generated id+key, join-by-code verification, forget/delete, server-switch reset), the
 // pull/switch data flow (validate → flow write → link update → registration sync + reload push, zero
 // writes on validation failure) and the script-list join with the local pinning links. background.ts
-// stays a thin router; only this module talks to lib/sync-api.ts.
+// stays a thin router; only this module talks to lib/sync-api.ts. Every business API call goes
+// through authedOperation (lib/sync-auth.ts): bearer + lazy renewal on Herald-gated servers, the
+// original credential-free wire shape on none/unknown ones; the sign-in lifecycle handlers live in
+// lib/sync-auth.ts.
 import { importFlowContent } from './import-pipeline';
 import { afterFlowsWrite } from './site-scripts';
 import {
@@ -17,6 +20,7 @@ import { stepsHaveSubmitAction } from './step-schema';
 import { redactText } from './redact';
 import { loadFlows, saveFlowRecord } from './storage';
 import * as api from './sync-api';
+import { authedOperation, authReady, getAuthState, signIn, signOut } from './sync-auth';
 import {
   findLinkByFlow,
   findLinkByScript,
@@ -54,11 +58,6 @@ async function requireSpace(spaceId: string): Promise<SpaceContext | { resp: Ext
   return { serverUrl: config.serverUrl, space };
 }
 
-async function fail(error: api.SyncApiError): Promise<ExtensionResponse> {
-  const { reason, detail } = api.syncErrorToReason(error);
-  return { ok: false, reason, detail };
-}
-
 function spaceView(space: SyncSpaceEntry): SyncSpaceView {
   return {
     id: space.id,
@@ -91,11 +90,23 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       return { ok: true, health: res.ok ? 'ok' : 'unreachable' };
     }
 
+    // Sign-in lifecycle (Herald-gated servers): mode probe + non-secret auth state, the
+    // authorization-window sign-in and the local sign-out — all orchestrated in lib/sync-auth.ts
+    case 'sp:syncGetAuthState':
+      return getAuthState();
+    case 'sp:syncSignIn':
+      return signIn();
+    case 'sp:syncSignOut':
+      return signOut();
+
     // The UI has already requested the origin's host permission inside its user gesture; changing
-    // the address resets the local spaces/links/selection (confirmed upstream by the UI)
+    // the address resets the local spaces/links/selection (confirmed upstream by the UI) and, in
+    // the same serialized write, the old server's sign-in state. The auth-write path gates on the
+    // storage trusted-contexts restriction — without it nothing is cleared and no probe is sent.
     case 'sp:syncSetServer': {
       const origin = api.normalizeServerUrl(msg.serverUrl);
       if (!origin) return { ok: false, reason: 'invalid-origin' };
+      if (!(await authReady())) return { ok: false, reason: 'auth-unavailable' };
       const config = await loadSyncConfig();
       if (config.serverUrl !== origin) await resetSyncForServer(origin);
       const res = await api.getHealth(origin);
@@ -110,11 +121,15 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       if (typeof serverUrl !== 'string') return serverUrl.resp;
       const id = api.generateSpaceId();
       const key = api.generateSpaceKey();
-      const res = await api.createSpace(serverUrl, { id, key, name: msg.name });
-      if (!res.ok) return fail(res.error);
-      await upsertSyncSpace({ id, key, name: res.data.name, createdAt: res.data.createdAt });
+      const outcome = await authedOperation(
+        serverUrl,
+        (bearer, deadlineAt) => api.createSpace(serverUrl, { id, key, name: msg.name }, { bearer, deadlineAt }),
+        true,
+      );
+      if (!outcome.ok) return outcome.resp;
+      await upsertSyncSpace({ id, key, name: outcome.data.name, createdAt: outcome.data.createdAt });
       await setSyncCurrentSpace(id);
-      return { ok: true, space: { id, name: res.data.name } };
+      return { ok: true, space: { id, name: outcome.data.name } };
     }
 
     // Join parses the share code locally, then verifies it against the server before storing —
@@ -124,15 +139,19 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       if (typeof serverUrl !== 'string') return serverUrl.resp;
       const parsed = api.parseSpaceCode(msg.code.trim());
       if (parsed === null) return { ok: false, reason: 'bad-space-code' };
-      const res = await api.getSpace(serverUrl, parsed.id, parsed.key);
-      if (!res.ok) return fail(res.error);
+      const outcome = await authedOperation(
+        serverUrl,
+        (bearer, deadlineAt) => api.getSpace(serverUrl, parsed.id, parsed.key, { bearer, deadlineAt }),
+        false,
+      );
+      if (!outcome.ok) return outcome.resp;
       await upsertSyncSpace({
-        id: res.data.id,
+        id: outcome.data.id,
         key: parsed.key,
-        name: res.data.name,
-        createdAt: res.data.createdAt,
+        name: outcome.data.name,
+        createdAt: outcome.data.createdAt,
       });
-      return { ok: true, space: { id: res.data.id, name: res.data.name } };
+      return { ok: true, space: { id: outcome.data.id, name: outcome.data.name } };
     }
 
     case 'sp:syncSelectSpace': {
@@ -149,8 +168,12 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
     case 'sp:syncDeleteSpace': {
       const ctx = await requireSpace(msg.spaceId);
       if ('resp' in ctx) return ctx.resp;
-      const res = await api.deleteSpace(ctx.serverUrl, ctx.space.id, ctx.space.key);
-      if (!res.ok) return fail(res.error);
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        (bearer, deadlineAt) => api.deleteSpace(ctx.serverUrl, ctx.space.id, ctx.space.key, { bearer, deadlineAt }),
+        true,
+      );
+      if (!outcome.ok) return outcome.resp;
       await forgetSpace(msg.spaceId);
       return { ok: true };
     }
@@ -158,10 +181,14 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
     case 'sp:syncListScripts': {
       const ctx = await requireSpace(msg.spaceId);
       if ('resp' in ctx) return ctx.resp;
-      const res = await api.listScripts(ctx.serverUrl, ctx.space.key, msg.spaceId);
-      if (!res.ok) return fail(res.error);
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        (bearer, deadlineAt) => api.listScripts(ctx.serverUrl, ctx.space.key, msg.spaceId, { bearer, deadlineAt }),
+        false,
+      );
+      if (!outcome.ok) return outcome.resp;
       const [links, flows] = await Promise.all([loadSyncLinks(), loadFlows()]);
-      const scriptRows: ScriptRowView[] = res.data.map((script) => {
+      const scriptRows: ScriptRowView[] = outcome.data.map((script) => {
         const link = findLinkByScript(links, msg.spaceId, script.id);
         if (link === undefined) return { ...script };
         const flow = flows.find((r) => r.id === link.flowId);
@@ -182,17 +209,30 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
     case 'sp:syncListVersions': {
       const ctx = await requireSpace(msg.spaceId);
       if ('resp' in ctx) return ctx.resp;
-      const res = await api.listScriptVersions(ctx.serverUrl, ctx.space.key, msg.spaceId, msg.scriptId);
-      if (!res.ok) return fail(res.error);
-      return { ok: true, versionMetas: res.data };
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        (bearer, deadlineAt) =>
+          api.listScriptVersions(ctx.serverUrl, ctx.space.key, msg.spaceId, msg.scriptId, { bearer, deadlineAt }),
+        false,
+      );
+      if (!outcome.ok) return outcome.resp;
+      return { ok: true, versionMetas: outcome.data };
     }
 
     case 'sp:syncPreviewVersion': {
       const ctx = await requireSpace(msg.spaceId);
       if ('resp' in ctx) return ctx.resp;
-      const res = await api.getScriptVersion(ctx.serverUrl, ctx.space.key, msg.spaceId, msg.scriptId, msg.versionNumber);
-      if (!res.ok) return fail(res.error);
-      const validated = importFlowContent(res.data.flowContent);
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        (bearer, deadlineAt) =>
+          api.getScriptVersion(ctx.serverUrl, ctx.space.key, msg.spaceId, msg.scriptId, msg.versionNumber, {
+            bearer,
+            deadlineAt,
+          }),
+        false,
+      );
+      if (!outcome.ok) return outcome.resp;
+      const validated = importFlowContent(outcome.data.flowContent);
       if (!validated.ok) return { ok: false, reason: 'invalid-content', errors: validated.errors };
       const draft = validated.draft;
       return {
@@ -218,9 +258,17 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
     case 'sp:syncPullVersion': {
       const ctx = await requireSpace(msg.spaceId);
       if ('resp' in ctx) return ctx.resp;
-      const res = await api.getScriptVersion(ctx.serverUrl, ctx.space.key, msg.spaceId, msg.scriptId, msg.versionNumber);
-      if (!res.ok) return fail(res.error);
-      const validated = importFlowContent(res.data.flowContent);
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        (bearer, deadlineAt) =>
+          api.getScriptVersion(ctx.serverUrl, ctx.space.key, msg.spaceId, msg.scriptId, msg.versionNumber, {
+            bearer,
+            deadlineAt,
+          }),
+        false,
+      );
+      if (!outcome.ok) return outcome.resp;
+      const validated = importFlowContent(outcome.data.flowContent);
       if (!validated.ok) return { ok: false, reason: 'invalid-content', errors: validated.errors };
       const draft = validated.draft;
       const links = await loadSyncLinks();
@@ -269,23 +317,35 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       // caller might have attached to it.
       const checked = validateFlow(flow, 'full');
       if (!checked.ok || !checked.flow) return { ok: false, reason: 'flow-not-found' };
-      const res = await api.createScript(ctx.serverUrl, ctx.space.key, ctx.space.id, {
-        id: api.generateScriptId(),
-        name: msg.name,
-        note: msg.note,
-        versionNote: msg.versionNote,
-        flowContent: checked.flow,
-      });
-      if (!res.ok) return fail(res.error);
+      const uploadable = checked.flow;
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        (bearer, deadlineAt) =>
+          api.createScript(
+            ctx.serverUrl,
+            ctx.space.key,
+            ctx.space.id,
+            {
+              id: api.generateScriptId(),
+              name: msg.name,
+              note: msg.note,
+              versionNote: msg.versionNote,
+              flowContent: uploadable,
+            },
+            { bearer, deadlineAt },
+          ),
+        true,
+      );
+      if (!outcome.ok) return outcome.resp;
       await upsertSyncLink({
         flowId: flow.id,
         spaceId: ctx.space.id,
-        scriptId: res.data.id,
+        scriptId: outcome.data.id,
         scriptName: msg.name,
         pinnedVersionNumber: 1,
         pinnedContentHash: flowDraftHash(flow),
       });
-      return { ok: true, scriptId: res.data.id };
+      return { ok: true, scriptId: outcome.data.id };
     }
 
     case 'sp:syncPublishVersion': {
@@ -298,13 +358,27 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       // Same whitelist serialization as upload: the published version carries definitions only
       const checked = validateFlow(flow, 'full');
       if (!checked.ok || !checked.flow) return { ok: false, reason: 'flow-not-found' };
-      const res = await api.createScriptVersion(ctx.serverUrl, ctx.space.key, link.spaceId, link.scriptId, {
-        versionNote: msg.versionNote,
-        flowContent: checked.flow,
+      const publishable = checked.flow;
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        (bearer, deadlineAt) =>
+          api.createScriptVersion(
+            ctx.serverUrl,
+            ctx.space.key,
+            link.spaceId,
+            link.scriptId,
+            { versionNote: msg.versionNote, flowContent: publishable },
+            { bearer, deadlineAt },
+          ),
+        true,
+      );
+      if (!outcome.ok) return outcome.resp;
+      await upsertSyncLink({
+        ...link,
+        pinnedVersionNumber: outcome.data.versionNumber,
+        pinnedContentHash: flowDraftHash(flow),
       });
-      if (!res.ok) return fail(res.error);
-      await upsertSyncLink({ ...link, pinnedVersionNumber: res.data.versionNumber, pinnedContentHash: flowDraftHash(flow) });
-      return { ok: true, versionNumber: res.data.versionNumber };
+      return { ok: true, versionNumber: outcome.data.versionNumber };
     }
 
     case 'sp:syncUpdateScript': {
@@ -312,11 +386,20 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       if (link === undefined) return { ok: false, reason: 'not-linked' };
       const ctx = await requireSpace(link.spaceId);
       if ('resp' in ctx) return ctx.resp;
-      const res = await api.updateScript(ctx.serverUrl, ctx.space.key, link.spaceId, link.scriptId, {
-        name: msg.name,
-        note: msg.note,
-      });
-      if (!res.ok) return fail(res.error);
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        (bearer, deadlineAt) =>
+          api.updateScript(
+            ctx.serverUrl,
+            ctx.space.key,
+            link.spaceId,
+            link.scriptId,
+            { name: msg.name, note: msg.note },
+            { bearer, deadlineAt },
+          ),
+        true,
+      );
+      if (!outcome.ok) return outcome.resp;
       if (msg.name !== undefined) await upsertSyncLink({ ...link, scriptName: msg.name });
       return { ok: true };
     }

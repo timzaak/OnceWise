@@ -23,6 +23,10 @@ function errorText(res: { ok: false; reason: string; detail?: string } | undefin
   if (res.reason === 'bad-space-key') return t('sync.error.badKey');
   if (res.reason === 'space-not-found') return t('sync.scripts.spaceGone');
   if (res.reason === 'invalid-input') return res.detail ?? t('sync.error.invalidInput');
+  if (res.reason === 'sign-in-required') return t('sync.auth.required');
+  if (res.reason === 'auth-unavailable') return t('sync.auth.unavailable');
+  if (res.reason === 'operation-uncertain') return t('sync.auth.operationUncertain');
+  if (res.reason === 'auth-changed') return t('sync.auth.relogin');
   return res.detail ?? fallback;
 }
 

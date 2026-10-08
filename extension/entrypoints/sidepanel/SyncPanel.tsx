@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { useSync } from '@/lib/use-sync';
 import { t } from '@/lib/i18n';
+import SyncAuthCard from './SyncAuthCard';
 import SyncSpacesView from './SyncSpacesView';
 import SyncScriptsView from './SyncScriptsView';
 import SyncScriptDetail from './SyncScriptDetail';
@@ -22,8 +23,15 @@ const SYNC_CSS = `
 `;
 
 export default function SyncPanel() {
-  const { status, health, load, call, probeHealth } = useSync();
+  const { status, auth, health, load, call, probeHealth, refreshAuth, signIn, signOut } = useSync();
   const [view, setView] = useState<SyncView>({ kind: 'spaces' });
+
+  // Space/server mutations also refresh the auth state — e.g. a server switch must immediately
+  // re-probe the mode and drop the old server's signed-in card
+  const onChanged = () => {
+    void load();
+    void refreshAuth();
+  };
 
   if (status === null) {
     return <div className="sp-loading">{t('sync.loading')}</div>;
@@ -35,6 +43,10 @@ export default function SyncPanel() {
   return (
     <>
       <style>{SYNC_CSS}</style>
+      {status.serverUrl !== '' && auth?.mode === 'herald' && (
+        <SyncAuthCard auth={auth} signIn={signIn} signOut={signOut} />
+      )}
+
       {status.serverUrl !== '' && view.kind !== 'spaces' && (
         <section className="sp-card" aria-label={t('sync.server.title')}>
           <div className="sp-row" style={{ justifyContent: 'space-between' }}>
@@ -63,7 +75,7 @@ export default function SyncPanel() {
           health={health}
           call={call}
           probeHealth={probeHealth}
-          onChanged={() => void load()}
+          onChanged={onChanged}
           onOpenScripts={() => setView({ kind: 'scripts' })}
         />
       )}

@@ -57,6 +57,12 @@ export type ExtensionMessage =
   | { type: 'sp:syncPublishVersion'; flowId: string; versionNote: string }
   | { type: 'sp:syncUpdateScript'; flowId: string; name?: string; note?: string }
   | { type: 'sp:syncUnlink'; flowId: string }
+  // Herald-gated servers: the sign-in lifecycle lives in lib/sync-auth.ts in the background. The
+  // messages carry no URL, token or proof — the SW builds the safe navigation itself; the auth
+  // state that comes back is non-secret facts only (mode + signedIn).
+  | { type: 'sp:syncGetAuthState' }
+  | { type: 'sp:syncSignIn' }
+  | { type: 'sp:syncSignOut' }
   // background <-> content (when initiated by an extension page, background routes to the active flow-site tab)
   // The preview runs on the same XState runtime as automatic execution
   | { type: 'bg:startDryRun'; flow: Flow }
@@ -140,6 +146,13 @@ export interface SyncStateView {
   currentSpaceId: string | null;
 }
 
+// Non-secret sign-in facts for the sync tab's auth card: 'unknown' means the mode probe could not
+// establish the server's auth mode (probe failure is never treated as none)
+export interface SyncAuthView {
+  mode: 'herald' | 'none' | 'unknown';
+  signedIn: boolean;
+}
+
 // The local join of a space script with the local pinning link (undefined when not linked)
 export interface ScriptLocalInfo {
   flowId: string;
@@ -176,6 +189,8 @@ export type ExtensionResponse =
       values?: InputSnapshot;
       inputIssues?: InputIssue[];
       syncState?: SyncStateView;
+      // sp:syncGetAuthState — non-secret sign-in facts (mode + signedIn), never tokens
+      authState?: SyncAuthView;
       health?: 'ok' | 'unreachable';
       space?: { id: string; name: string };
       spaces?: SyncSpaceView[];
@@ -210,6 +225,11 @@ const log = createLogger('msg');
 // Sync hop: the self-hosted server may sit behind a VPN or slow links, so the generic 10s budget is
 // too tight
 export const SYNC_TIMEOUT_MS = 30_000;
+// Auth-gated business messages: the background may spend up to 115s (mode probe + one refresh +
+// all requests incl. one retry), so the UI hop must outlive it. Sign-in spans a real authorization
+// window (background budget 280s).
+export const SYNC_AUTH_OP_TIMEOUT_MS = 120_000;
+export const SYNC_SIGN_IN_TIMEOUT_MS = 285_000;
 
 const MESSAGE_TYPES = new Set([
   'sp:getFlows', 'sp:saveFlow', 'sp:setFlowStatus', 'sp:deleteFlow',
@@ -219,6 +239,7 @@ const MESSAGE_TYPES = new Set([
   'sp:syncJoinSpace', 'sp:syncSelectSpace', 'sp:syncForgetSpace', 'sp:syncDeleteSpace',
   'sp:syncListScripts', 'sp:syncListVersions', 'sp:syncPreviewVersion', 'sp:syncPullVersion',
   'sp:syncUploadScript', 'sp:syncPublishVersion', 'sp:syncUpdateScript', 'sp:syncUnlink',
+  'sp:syncGetAuthState', 'sp:syncSignIn', 'sp:syncSignOut',
   'bg:startDryRun', 'bg:abortDryRun', 'bg:getContentState', 'bg:reloadFlows', 'bg:handoverStaged',
   'ct:getEnabledFlows', 'ct:getInputSnapshot', 'ct:claimBusiness', 'ct:releaseBusiness', 'ct:flowRunStatus', 'ct:dryRunProgress', 'ct:dryRunFinished',
   'ct:stageHandover', 'ct:probeHandover', 'ct:takeHandover', 'ct:dropHandover',

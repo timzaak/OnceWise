@@ -59,6 +59,7 @@ import {
   type PendingHandover,
 } from '@/lib/flow-handover';
 import { handleSyncMessage } from '@/lib/sync-service';
+import { initAuthReady } from '@/lib/sync-auth';
 import type { Browser } from '@wxt-dev/browser';
 
 type Tab = Browser.tabs.Tab;
@@ -354,6 +355,11 @@ export default defineBackground(() => {
     if (msg.type.startsWith('sp:sync')) return handleSyncMessage(msg);
     return handleUiPage(msg);
   });
+
+  // Restrict storage.local to trusted contexts (content scripts must not read the sync sign-in
+  // tokens). Listeners above are registered first; every auth read/write/orchestration in
+  // lib/sync-auth.ts awaits this promise and refuses auth operations if the call fails.
+  void initAuthReady();
 
   // Toolbar icon click opens the sidepanel workbench directly (the popup middleman is gone); the
   // sidepanel's default view is the flows list, so one click lands on the work page.

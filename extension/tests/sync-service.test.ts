@@ -6,7 +6,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { handleSyncMessage } from '@/lib/sync-service';
-import { syncConfigItem, syncLinksItem, syncUiItem } from '@/lib/sync-storage';
+import { initAuthReady } from '@/lib/sync-auth';
+import { syncAuthItem, syncConfigItem, syncLinksItem, syncUiItem } from '@/lib/sync-storage';
 import { upsertSyncLink, upsertSyncSpace, writeSyncConfig } from '@/lib/sync-storage';
 import { buildFlowStore, loadFlows, flowInputValuesItem, flowStoreItem } from '@/lib/storage';
 import { flowDraftHash, type InputDefinition, type Flow } from '@/lib/flow-schema';
@@ -112,6 +113,9 @@ async function seededLink(seedFlow: Flow): Promise<void> {
 
 beforeEach(() => {
   fakeBrowser.reset();
+  // fakeBrowser ships setAccessLevel as a throwing placeholder; the sync auth gate awaits the
+  // real call, so pin a resolving no-op (mocked call — not evidence of real storage isolation)
+  (fakeBrowser.storage.local as unknown as Record<string, unknown>).setAccessLevel = async () => undefined;
   // The pull path's post-write step (afterFlowsWrite → syncFlowSiteScripts) touches the scripting
   // API, which fakeBrowser ships unimplemented — same in-memory stubs as tests/site-scripts.test.ts
   const scripting = fakeBrowser.scripting as unknown as Record<string, (arg: unknown) => Promise<unknown>>;
@@ -225,7 +229,8 @@ describe('space lifecycle (no accounts: ids and keys are generated locally)', ()
     expect(res?.ok).toBe(true);
     if (res?.ok) expect(res.space?.name).toBe('Fresh');
     // The POST body carries a locally generated id (sp- + 16 base62) and a 32-char key
-    const body = JSON.parse(String(fetchMock.mock.calls[0]![1]!.body)) as { id: string; key: string; name: string };
+    const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.body !== undefined)!;
+    const body = JSON.parse(String((post[1] as RequestInit).body)) as { id: string; key: string; name: string };
     expect(body.id).toMatch(/^sp-[A-Za-z0-9]{16}$/);
     expect(body.key).toMatch(/^[A-Za-z0-9]{32}$/);
     // Stored only after acceptance, and selected as current
@@ -287,7 +292,7 @@ describe('space lifecycle (no accounts: ids and keys are generated locally)', ()
     const fetchMock = mockFetch((url) => (url === `${SERVER}/api/spaces/${SPACE_ID}` ? noContent() : ok({})));
     const res = await handleSyncMessage({ type: 'sp:syncDeleteSpace', spaceId: SPACE_ID });
     expect(res).toEqual({ ok: true });
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls.filter(([u]) => u === `${SERVER}/api/spaces/${SPACE_ID}`)).toHaveLength(1);
     const config = await syncConfigItem.getValue();
     expect(config.spaces.map((s) => s.id)).toEqual(['sp-other00000000001']);
     expect(await syncLinksItem.getValue()).toEqual([]);
@@ -318,7 +323,7 @@ describe('pull / switch data flow', () => {
     expect(links).toHaveLength(1);
     expect(links[0]).toMatchObject({ spaceId: SPACE_ID, scriptId: SCRIPT_ID, pinnedVersionNumber: 2 });
     expect(links[0]!.pinnedContentHash).toBe(flowDraftHash(flows[0]!));
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/versions/2'))).toHaveLength(1);
   });
 
   it('switch keeps the flowId, resets status to draft and updates the pin/hash', async () => {
@@ -430,7 +435,8 @@ describe('upload / publish / rename / unlink', () => {
       versionNote: 'v1',
     });
     expect(res?.ok).toBe(true);
-    const body = JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit | undefined)?.body)) as {
+    const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.body !== undefined)!;
+    const body = JSON.parse(String((post[1] as RequestInit).body)) as {
       id: string;
       flowContent: Record<string, unknown>;
     };
@@ -463,7 +469,8 @@ describe('upload / publish / rename / unlink', () => {
     );
     const res = await handleSyncMessage({ type: 'sp:syncUploadScript', flowId: flow.id, name: 'S', note: '', versionNote: '' });
     expect(res?.ok).toBe(true);
-    const body = JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit | undefined)?.body)) as Record<string, unknown>;
+    const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.body !== undefined)!;
+    const body = JSON.parse(String((post[1] as RequestInit).body)) as Record<string, unknown>;
     // The request body is the script envelope + flowContent only; no store sections travel
     expect(Object.keys(body).sort()).toEqual(['flowContent', 'id', 'name', 'note', 'versionNote']);
     expect(body.flowContent).toEqual(flow as unknown as Record<string, unknown>);
@@ -641,7 +648,8 @@ describe('input values never enter sync payloads', () => {
     );
     const res = await handleSyncMessage({ type: 'sp:syncUploadScript', flowId: base.id, name: 'S', note: '', versionNote: '' });
     expect(res?.ok).toBe(true);
-    const body = JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit | undefined)?.body)) as {
+    const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.body !== undefined)!;
+    const body = JSON.parse(String((post[1] as RequestInit).body)) as {
       flowContent: Record<string, unknown>;
     };
     expect(body.flowContent.inputs).toEqual(inputDefs);
@@ -656,7 +664,8 @@ describe('input values never enter sync payloads', () => {
     const fetchMock = mockFetch(() => ok({ versionNumber: 2, note: 'v2', createdAt: 't' }, 201));
     const res = await handleSyncMessage({ type: 'sp:syncPublishVersion', flowId: base.id, versionNote: 'v2' });
     expect(res?.ok).toBe(true);
-    const body = JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit | undefined)?.body)) as {
+    const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.body !== undefined)!;
+    const body = JSON.parse(String((post[1] as RequestInit).body)) as {
       flowContent: Record<string, unknown>;
     };
     expect(body.flowContent.inputs).toEqual(inputDefs);
@@ -673,5 +682,106 @@ describe('input values never enter sync payloads', () => {
     expect(flows[0]!.inputs).toEqual(inputDefs);
     // No local values were created or inferred by the pull — the puller fills their own
     expect(await flowInputValuesItem.getValue()).toEqual({});
+  });
+});
+
+// Herald-gated servers: the auth lifecycle handlers are wired through the same router, every
+// business call rides authedOperation (probe → bearer → renewal), and the storage trusted-contexts
+// gate refuses auth-writing paths when it cannot be established.
+describe('sign-in gate wiring (herald mode)', () => {
+  const CONFIG_URL = `${SERVER}/api/auth/config`;
+  const REFRESH_URL = `${SERVER}/api/auth/refresh`;
+
+  function heraldProbe() {
+    mockFetch((url) => (url === CONFIG_URL ? ok({ enabled: true, loginUrl: '/api/auth/oauth/start' }) : ok({})));
+  }
+
+  async function seedSession() {
+    await syncAuthItem.setValue({
+      serverUrl: SERVER,
+      accessToken: 'at-1',
+      refreshToken: 'rt-1',
+      accessTokenExpiresAt: Date.now() + 3_600_000,
+      epoch: 1,
+    });
+  }
+
+  it('sp:syncGetAuthState reports the probed mode + signedIn facts and never echoes tokens', async () => {
+    await configured();
+    await seedSession();
+    heraldProbe();
+    const res = await handleSyncMessage({ type: 'sp:syncGetAuthState' });
+    expect(res).toEqual({ ok: true, authState: { mode: 'herald', signedIn: true } });
+    expect(JSON.stringify(res)).not.toContain('at-1');
+    expect(JSON.stringify(res)).not.toContain('rt-1');
+  });
+
+  it('sp:syncGetAuthState on a pre-auth server (404 config) answers none without a sign-in card state', async () => {
+    await configured();
+    mockFetch((url) => (url === CONFIG_URL ? apiError(404, 'NOT_FOUND') : ok({})));
+    expect(await handleSyncMessage({ type: 'sp:syncGetAuthState' })).toEqual({
+      ok: true,
+      authState: { mode: 'none', signedIn: false },
+    });
+  });
+
+  it('a herald-mode business call carries Authorization alongside X-Space-Key', async () => {
+    await configured();
+    await seedSession();
+    const fetchMock = mockFetch((url, init) =>
+      url === CONFIG_URL
+        ? ok({ enabled: true, loginUrl: '/api/auth/oauth/start' })
+        : url === `${SERVER}/api/spaces/${SPACE_ID}/scripts`
+          ? ok([])
+          : ok({}),
+    );
+    const res = await handleSyncMessage({ type: 'sp:syncListScripts', spaceId: SPACE_ID });
+    expect(res?.ok).toBe(true);
+    const business = fetchMock.mock.calls.find(([u]) => u === `${SERVER}/api/spaces/${SPACE_ID}/scripts`)!;
+    expect((business[1]!.headers as Record<string, string>)['Authorization']).toBe('Bearer at-1');
+    expect((business[1]!.headers as Record<string, string>)['X-Space-Key']).toBe(SPACE_KEY);
+  });
+
+  it('a business 401 AUTH_REQUIRED renews once through the refresh proxy and retries with the rotated token', async () => {
+    await configured();
+    await seedSession();
+    let businessCalls = 0;
+    mockFetch((url) => {
+      if (url === CONFIG_URL) return ok({ enabled: true, loginUrl: '/api/auth/oauth/start' });
+      if (url === REFRESH_URL) {
+        return ok({ accessToken: 'at-2', refreshToken: 'rt-2', expiresIn: 3600, refreshExpiresIn: 86400, tokenType: 'Bearer' });
+      }
+      businessCalls += 1;
+      return businessCalls === 1
+        ? apiError(401, 'AUTH_REQUIRED', 'Sign in required')
+        : ok([{ id: SCRIPT_ID, name: 'S', note: '', latestVersionNumber: 1, latestVersionNote: '', updatedAt: 't' }]);
+    });
+    const res = await handleSyncMessage({ type: 'sp:syncListScripts', spaceId: SPACE_ID });
+    expect(res?.ok).toBe(true);
+    expect(businessCalls).toBe(2);
+    // The rotation is persisted before the retry is dispatched
+    expect(await syncAuthItem.getValue()).toMatchObject({ accessToken: 'at-2', refreshToken: 'rt-2' });
+  });
+
+  it('a failed trusted-contexts gate refuses auth-writing paths: setServer neither resets nor probes', async () => {
+    await configured();
+    (fakeBrowser.storage.local as unknown as Record<string, unknown>).setAccessLevel = async () => {
+      throw new Error('cannot restrict');
+    };
+    void initAuthReady();
+    const fetchMock = mockFetch(() => {
+      throw new Error('must not probe');
+    });
+    expect(await handleSyncMessage({ type: 'sp:syncSetServer', serverUrl: 'https://other.example.com' })).toEqual({
+      ok: false,
+      reason: 'auth-unavailable',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await syncConfigItem.getValue()).serverUrl).toBe(SERVER);
+
+    // Restore the resolving gate so later tests in this file are not poisoned by the module-level
+    // authReadyPromise carrying the failure
+    (fakeBrowser.storage.local as unknown as Record<string, unknown>).setAccessLevel = async () => undefined;
+    void initAuthReady();
   });
 });
