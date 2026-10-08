@@ -206,9 +206,6 @@ jobs:
     # CWS_PUBLISHER_ID secrets. vars (not secrets) gates the job because the secrets
     # context is not available in job-level `if`. !cancelled() guards against the same
     # transitive-skip that silenced the v1.1.2 release.
-    # No approval gate on purpose: the upload only creates an unreviewed console
-    # draft — the human decision point is the manual review submission in the
-    # Developer Console (docs/store-listing/README.md 步骤 7).
     if: ${{ !cancelled() && needs.release.result == 'success' && vars.CWS_UPLOAD_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     permissions:
@@ -236,10 +233,8 @@ jobs:
         working-directory: extension
         run: echo "zip=.output/oncewise-ai-$(jq -r .version .output/chrome-mv3/manifest.json)-chrome-store.zip" >> "$GITHUB_OUTPUT"
 
-      # Upload only — submitting the new package for review stays a manual console
-      # action so the store-side sequencing discipline in docs/store-listing/README.md
-      # 步骤 7 keeps a human decision point. Token minting lives in the script
-      # (self-signed SA JWT exchange) — see its header for why not google-github-actions/auth.
+      # Token minting lives in the script (self-signed SA JWT exchange) — see its
+      # header for why not google-github-actions/auth.
       - name: Upload package as new console draft
         working-directory: extension
         env:

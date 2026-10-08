@@ -7,7 +7,7 @@
 的 GitHub Release；后端镜像仅当 backend/ 或 docker/Dockerfile 相对上一版本有
 改动时才重新构建，否则跳过构建、直接将上一版镜像别名到新版本 tag。仓库变量
 CWS_UPLOAD_ENABLED=true 时，同一 CD 还会把剥 key 的商店包上传为控制台新版本
-草稿（仅草稿不提审，一次性配置见 docs/store-listing/README.md 步骤 5）。
+草稿（一次性配置见 docs/store-listing/README.md 步骤 5）。
 """
 
 import argparse

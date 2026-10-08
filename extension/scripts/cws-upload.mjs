@@ -1,7 +1,6 @@
 // Store-upload shipping: uploads the zip produced by zip-store.mjs to the Chrome Web
-// Store Publish API as a new console draft (no publish/submit — review submission
-// stays a manual console action, docs/store-listing/README.md 步骤 7). CI counterpart
-// of zip-store.mjs; also usable for manual uploads by exporting the same env vars.
+// Store Publish API as a new console draft. CI counterpart of zip-store.mjs; also
+// usable for manual uploads by exporting the same env vars.
 //
 // Auth is a self-signed RS256 service-account JWT exchanged for an access token at
 // oauth2.googleapis.com (RFC 7523 jwt-bearer), scope chromewebstore. Deliberately NOT
