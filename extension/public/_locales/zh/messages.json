@@ -1,8 +1,8 @@
 {
   "extName": {
-    "message": "OnceWise AI"
+    "message": "OnceWise Flow – 网页自动化与 AI 流程"
   },
   "extDescription": {
-    "message": "把验证过的网页操作固化为本地优先、按站点生效的可开关流程，由 AI 工具导入；启用后自动执行。"
+    "message": "用 AI 自动化重复网页操作：向 AI 助手描述例行工作，它构建验证过的本地流程，打开匹配页面即自动执行。"
   }
 }

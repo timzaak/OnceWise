@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// User-level installer for the OnceWise AI native messaging host. What it does:
+// User-level installer for the OnceWise Flow native messaging host. What it does:
 //
 //   1. copies host.mjs + protocol.mjs to a stable user-level directory (never run them from the
 //      skill checkout — moving it would break the manifest path),

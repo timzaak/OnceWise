@@ -1,4 +1,4 @@
-# OnceWise AI — Privacy Policy / 隐私政策
+# OnceWise Flow — Privacy Policy / 隐私政策
 
 > 用途说明（中文）：本文档是 Chrome Web Store 上架所需隐私政策的唯一来源；"Permissions" 一节的权限理由同时可用作控制台权限说明字段的填写素材。发布页已备好：本地 `gh-pages` 分支（仅含自包含 `index.html`，内容取自本文档，更新政策后需同步重做该页）。仓库当前为私有，GitHub Pages 需公开仓库；**开源后**两步上线：
 >
@@ -11,13 +11,13 @@
 
 ## English
 
-**OnceWise AI Browser Extension — Privacy Policy**
+**OnceWise Flow Browser Extension — Privacy Policy**
 
-Effective date: 2026-09-30
+Effective date: 2026-10-07
 
 ### Overview
 
-OnceWise AI is a self-service browser automation extension. It turns web page operations you specify into automation flows ("constrained step trees") and runs them on the target pages you choose. The extension is local-first: your data is processed in your browser, and the extension developer does not collect, receive, or sell any of your data.
+OnceWise Flow is a self-service browser automation extension. It turns web page operations you specify into automation flows ("constrained step trees") and runs them on the target pages you choose. The extension is local-first: your data is processed in your browser, and the extension developer does not collect, receive, or sell any of your data.
 
 ### What the extension stores on your device
 
@@ -36,7 +36,7 @@ The extension makes network requests to exactly one kind of destination, and onl
 
 Besides network requests, the extension exchanges data over one kind of channel that never leaves your device:
 
-- **A local flow-handover channel (optional).** If you install the OnceWise native host shipped with the OnceWise AI agent skills, your AI tool can deliver automation flows/scripts and configuration to the extension. Your AI tool writes them to a local IPC endpoint served by the native host (a small Node.js script registered at your operating-system user level), which relays them to the extension through Chrome's native messaging; save results and validation summaries travel back the same way. The host relays data in memory and writes no flow data to disk beyond creating the socket directory it listens on. Everything in this loop stays on your device, and the extension developer is not part of it.
+- **A local flow-handover channel (optional).** If you install the OnceWise native host shipped with the OnceWise Flow agent skills, your AI tool can deliver automation flows/scripts and configuration to the extension. Your AI tool writes them to a local IPC endpoint served by the native host (a small Node.js script registered at your operating-system user level), which relays them to the extension through Chrome's native messaging; save results and validation summaries travel back the same way. The host relays data in memory and writes no flow data to disk beyond creating the socket directory it listens on. Everything in this loop stays on your device, and the extension developer is not part of it.
 
 There is no analytics, telemetry, advertising, or tracking of any kind, and the extension contains no remotely hosted code.
 
@@ -65,13 +65,13 @@ zsy.evan@gmail.com
 
 ## 中文
 
-**OnceWise AI 浏览器扩展 — 隐私政策**
+**OnceWise Flow 浏览器扩展 — 隐私政策**
 
-生效日期：2026-09-30
+生效日期：2026-10-07
 
 ### 概述
 
-OnceWise AI 是一个自助浏览器自动化扩展。它把你指定的网页操作固化为自动化流程（受约束步骤树），并只在你选择的目标页面上运行。扩展以本地优先方式工作：数据在你的浏览器内处理，扩展开发者不收集、不接收、不出售你的任何数据。
+OnceWise Flow 是一个自助浏览器自动化扩展。它把你指定的网页操作固化为自动化流程（受约束步骤树），并只在你选择的目标页面上运行。扩展以本地优先方式工作：数据在你的浏览器内处理，扩展开发者不收集、不接收、不出售你的任何数据。
 
 ### 扩展在设备上存储的内容
 
@@ -90,7 +90,7 @@ OnceWise AI 是一个自助浏览器自动化扩展。它把你指定的网页�
 
 除网络请求外，扩展还会通过一类完全不离开你设备的通道收发数据：
 
-- **本机流程交接通道（可选）。** 若你安装 OnceWise AI agent skills 随附的 OnceWise 本机宿主，你的 AI 工具即可把自动化流程/脚本及配置交付给扩展：AI 工具将数据写入本机宿主监听的本地 IPC 端点（宿主是一个注册在操作系统用户层级的 Node.js 小脚本），宿主再经 Chrome 原生消息转发给扩展；保存结果与校验摘要沿同一通道返回。宿主仅在内存中转发数据，除创建监听所需的套接字目录外不向磁盘写入任何流程数据。这条链路上的一切都留在你的设备内，扩展开发者不在其中。
+- **本机流程交接通道（可选）。** 若你安装 OnceWise Flow agent skills 随附的 OnceWise 本机宿主，你的 AI 工具即可把自动化流程/脚本及配置交付给扩展：AI 工具将数据写入本机宿主监听的本地 IPC 端点（宿主是一个注册在操作系统用户层级的 Node.js 小脚本），宿主再经 Chrome 原生消息转发给扩展；保存结果与校验摘要沿同一通道返回。宿主仅在内存中转发数据，除创建监听所需的套接字目录外不向磁盘写入任何流程数据。这条链路上的一切都留在你的设备内，扩展开发者不在其中。
 
 扩展不含任何分析、遥测、广告或追踪代码，也不含远程托管代码。
 

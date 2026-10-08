@@ -1,4 +1,4 @@
-# OnceWise AI
+# OnceWise Flow
 
 English | [简体中文](README.zh.md)
 
@@ -58,7 +58,7 @@ When developing in this repository, `skills/` is the single source of truth and 
 
 Once the repository is published and reachable, you can replace `.` with the repository Git URL or `owner/repo`. The installer picks the target AI tool and install location; `--list` only lists available skills and installs nothing. If a tool doesn't support the Skills CLI, import **all three complete skill directories** per that tool's instructions — do not copy just `SKILL.md`. Restart or refresh the tool if new skills don't show up.
 
-Invoke `oncewise-setup` in whatever way your host tool supports to complete the environment checks, then invoke `oncewise-flow` and describe the web actions to automate. Installing the skills does **not** automatically install Chrome DevTools MCP or the OnceWise AI extension; configure MCP per the [setup guide](skills/oncewise-setup/references/mcp-setup.md) and confirm it can invoke browser tools such as `list_pages`, `take_snapshot`, `fill`, and `click`.
+Invoke `oncewise-setup` in whatever way your host tool supports to complete the environment checks, then invoke `oncewise-flow` and describe the web actions to automate. Installing the skills does **not** automatically install Chrome DevTools MCP or the OnceWise Flow extension; configure MCP per the [setup guide](skills/oncewise-setup/references/mcp-setup.md) and confirm it can invoke browser tools such as `list_pages`, `take_snapshot`, `fill`, and `click`.
 
 Compatibility is settled by one actual connectivity check: the host must be able to read the accompanying materials, connect to the browser MCP running on the user's own machine (target-page exploration and verification), and run `skills/oncewise-message/client.mjs` on that machine to complete the Native Messaging handoff (Node 22+; `oncewise-setup` handles installation and `ping` verification). The extension is the sole validator and persistence point: explicit user confirmation in the conversation is required before saving, a saved flow starts out disabled, and enabling and rollback are performed only by the user in the extension UI. Skill upload alone, or only built-in web browsing, is not enough to prove the full flow works. Cloud execution environments in particular must confirm whether they can reach the user's local Chrome and the local channel.
 

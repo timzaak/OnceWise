@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" role="img" aria-labelledby="title desc">
-  <title id="title">OnceWise AI 工作台设计方向示意</title>
+  <title id="title">OnceWise Flow 工作台设计方向示意</title>
   <desc id="desc">左侧是流程侧边栏，右侧是流程导入页。中性浅底、白色表面、近黑色主操作、青绿色启用状态。</desc>
   <rect width="960" height="560" fill="#F7F7F5"/>
-  <text x="40" y="37" fill="#151515" font-family="system-ui, sans-serif" font-size="16" font-weight="700">OnceWise AI · 编辑式工作台方向</text>
+  <text x="40" y="37" fill="#151515" font-family="system-ui, sans-serif" font-size="16" font-weight="700">OnceWise Flow · 编辑式工作台方向</text>
   <text x="920" y="37" text-anchor="end" fill="#626262" font-family="system-ui, sans-serif" font-size="12">设计示意 · 非实际界面</text>
 
   <rect x="40" y="58" width="306" height="466" rx="6" fill="#FFFFFF" stroke="#E2E2E0"/>
   <rect x="41" y="59" width="304" height="86" rx="6" fill="#FFFFFF"/>
   <rect x="57" y="75" width="28" height="28" rx="5" fill="#151515"/>
   <path d="M64 89l5 5 10-12" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="96" y="94" fill="#151515" font-family="system-ui, sans-serif" font-size="15" font-weight="700">OnceWise AI</text>
+  <text x="96" y="94" fill="#151515" font-family="system-ui, sans-serif" font-size="15" font-weight="700">OnceWise Flow</text>
   <circle cx="65" cy="125" r="3" fill="#008F83"/>
   <text x="99" y="130" text-anchor="middle" fill="#151515" font-family="system-ui, sans-serif" font-size="12" font-weight="700">流程</text>
   <text x="190" y="130" text-anchor="middle" fill="#626262" font-family="system-ui, sans-serif" font-size="12">同步</text>

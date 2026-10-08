@@ -1,4 +1,4 @@
-// Shared protocol definitions for the OnceWise AI native messaging channel. Both host.mjs and
+// Shared protocol definitions for the OnceWise Flow native messaging channel. Both host.mjs and
 // client.mjs import this file; the extension side re-implements the same guards in
 // extension/lib/native-messaging.ts (double validation — host and background each enforce the op
 // whitelist and payload shapes).
@@ -239,7 +239,7 @@ export function chromeHostRegistration(browser = 'chrome', { registryRoot, manif
 export function hostManifest(launcherPath, extensionId = EXTENSION_ID) {
   return {
     name: HOST_NAME,
-    description: 'OnceWise AI flow handover host (relays validated flow requests to the extension)',
+    description: 'OnceWise Flow flow handover host (relays validated flow requests to the extension)',
     type: 'stdio',
     path: launcherPath,
     allowed_origins: [`chrome-extension://${extensionId}/`],

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// AI-side CLI for the OnceWise AI native channel. Sends ONE request to the host over local IPC and
+// AI-side CLI for the OnceWise Flow native channel. Sends ONE request to the host over local IPC and
 // prints exactly ONE JSON result on stdout; diagnostics go to stderr.
 //
 // Result semantics (results must be real):

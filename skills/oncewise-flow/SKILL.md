@@ -1,9 +1,9 @@
 ---
 name: oncewise-flow
-description: Create or revise OnceWise AI JSON automation flows, including pre-run input forms and sequential pages on the same site. Use Chrome DevTools MCP for target pages and the Native Messaging client for validation, saving, and verification. Obtain explicit confirmation of the validated flow before saving; the user enables it in the extension. If either channel is unavailable, use oncewise-setup first.
+description: Create or revise OnceWise Flow JSON automation flows, including pre-run input forms and sequential pages on the same site. Use Chrome DevTools MCP for target pages and the Native Messaging client for validation, saving, and verification. Obtain explicit confirmation of the validated flow before saving; the user enables it in the extension. If either channel is unavailable, use oncewise-setup first.
 ---
 
-# Create OnceWise AI flows
+# Create OnceWise Flow flows
 
 Produce a pure JSON flow. The extension validates, stores, and executes it; flows cannot contain executable code.
 

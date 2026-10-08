@@ -1,4 +1,4 @@
-# OnceWise AI Extension (Chrome MV3)
+# OnceWise Flow Extension (Chrome MV3)
 
 A Chrome extension built with WXT + React: clicking the toolbar icon opens the flow workbench sidepanel, plus the extension's import/management page (`entrypoints/import/`), a content-script runtime injected dynamically per the flow's site, and the "Sync" tab.
 

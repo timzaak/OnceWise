@@ -143,7 +143,7 @@ function App() {
     <>
       <style>{CSS}</style>
       <div className="sp-shell">
-        <div className="sp-brand"><span className="sp-brand-mark" aria-hidden="true">✓</span>OnceWise AI</div>
+        <div className="sp-brand"><span className="sp-brand-mark" aria-hidden="true">✓</span>OnceWise Flow</div>
         {!showOnboardingOverlay && (
           <nav className="sp-nav" aria-label={t('nav.views')}>
             <button type="button" className={`sp-tab${view.kind === 'flows' || view.kind === 'edit' ? ' active' : ''}`} aria-current={view.kind === 'flows' || view.kind === 'edit' ? 'page' : undefined} onClick={() => { setView({ kind: 'flows' }); void probeContent(); }}>

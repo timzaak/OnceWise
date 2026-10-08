@@ -168,7 +168,7 @@ const en = {
   'import.list.opTimeout': 'Operation timed out. Try again.',
   'import.list.sidepanelHint': 'Editing, history and rollback live in the sidepanel — click the toolbar icon.',
 
-  'welcome.title': 'Welcome to OnceWise AI',
+  'welcome.title': 'Welcome to OnceWise Flow',
   'welcome.intro':
     'Turn repetitive web work into flows that run themselves — locally, with you in control of every site and every step.',
   'welcome.steps.title': 'Get started in four steps',
@@ -185,13 +185,13 @@ const en = {
     'Describe the repetitive web work. The agent tries it on the real page, distills it into a constrained flow, and hands it over through a channel that never leaves your machine.',
   'welcome.step4.title': 'Review and enable the flow yourself',
   'welcome.step4.body':
-    'A saved flow starts out disabled. One click enables it; from then on, whenever you open a matching page, OnceWise AI runs the steps for you.',
+    'A saved flow starts out disabled. One click enables it; from then on, whenever you open a matching page, OnceWise Flow runs the steps for you.',
   'welcome.explore.title': 'Where things live',
   'welcome.explore.sidepanel': 'Click the toolbar icon to open the workbench sidepanel — flows, run history, sync spaces and settings live there.',
   'welcome.explore.localFirst':
     'Local-first: flows, settings and version history stay in this browser. No accounts, no telemetry; nothing leaves your device unless you explicitly share a flow to a sync space.',
   'welcome.star.title': 'Finding it helpful? Rate it on the Chrome Web Store',
-  'welcome.star.body': 'A five-star rating or a short review on the store helps more people discover OnceWise AI.',
+  'welcome.star.body': 'A five-star rating or a short review on the store helps more people discover OnceWise Flow.',
   'welcome.star.button': 'Rate on Chrome Web Store',
   'welcome.openFlows': 'Open flow list',
 
@@ -508,7 +508,7 @@ const zh: Catalog = {
   'import.list.opTimeout': '操作超时，请重试。',
   'import.list.sidepanelHint': '编辑、历史与回滚请在侧栏工作台（点击工具栏图标）完成。',
 
-  'welcome.title': '欢迎使用 OnceWise AI',
+  'welcome.title': '欢迎使用 OnceWise Flow',
   'welcome.intro': '把重复的网页工作变成会自动执行的流程——一切都在本地完成，每个站点、每一步都由你掌控。',
   'welcome.steps.title': '四步上手',
   'welcome.step1.title': '在你的 AI 工具中安装 OnceWise skills',
@@ -520,12 +520,12 @@ const zh: Catalog = {
   'welcome.step3.title': '让 AI 助手把重复操作做成流程',
   'welcome.step3.body': '把重复的网页工作描述给它。智能体会在真实页面上试做，提炼为受约束的流程，并经本机通道交付——全程不离开你的设备。',
   'welcome.step4.title': '亲自核对并启用流程',
-  'welcome.step4.body': '流程保存后默认停用。点击一次即可启用；此后每当你打开匹配的页面，OnceWise AI 就会替你执行这些步骤。',
+  'welcome.step4.body': '流程保存后默认停用。点击一次即可启用；此后每当你打开匹配的页面，OnceWise Flow 就会替你执行这些步骤。',
   'welcome.explore.title': '功能入口',
   'welcome.explore.sidepanel': '点击工具栏图标打开侧栏工作台——流程、运行历史、同步空间与设置都在那里。',
   'welcome.explore.localFirst': '本地优先：流程、设置与版本历史都保存在本浏览器。无账号、无遥测；除非你主动把流程分享到同步空间，任何数据都不离开设备。',
   'welcome.star.title': '觉得有帮助？去 Chrome 商店点个五星',
-  'welcome.star.body': '在 Chrome Web Store 给 OnceWise AI 留下五星和几句使用评价，能让更多人发现它。',
+  'welcome.star.body': '在 Chrome Web Store 给 OnceWise Flow 留下五星和几句使用评价，能让更多人发现它。',
   'welcome.star.button': '去 Chrome 商店好评',
   'welcome.openFlows': '打开流程列表',
 

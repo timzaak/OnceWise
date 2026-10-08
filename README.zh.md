@@ -1,4 +1,4 @@
-# OnceWise AI
+# OnceWise Flow
 
 [English](README.md) | 简体中文
 
@@ -58,7 +58,7 @@ npx skills add . --skill oncewise-setup --skill oncewise-flow --skill oncewise-m
 
 仓库发布并可被安装者访问后，也可把 `.` 换成仓库 Git URL 或 `owner/repo`。安装器负责选择目标 AI 工具和安装位置；`--list` 只列出可用 skill，不安装。若工具不支持 Skills CLI，可按该工具的说明导入**完整的三个 skill 目录**，不要只复制 `SKILL.md`。新 skill 未显示时，重启或刷新该工具。
 
-按宿主工具支持的方式调用 `oncewise-setup` 完成环境检查，再调用 `oncewise-flow` 描述要自动化的网页操作。安装 skill **不会自动安装** Chrome DevTools MCP 或 OnceWise AI 扩展；需按[初始化指引](skills/oncewise-setup/references/mcp-setup.md)配置 MCP，并确认它能调用 `list_pages`、`take_snapshot`、`fill`、`click` 等浏览器工具。
+按宿主工具支持的方式调用 `oncewise-setup` 完成环境检查，再调用 `oncewise-flow` 描述要自动化的网页操作。安装 skill **不会自动安装** Chrome DevTools MCP 或 OnceWise Flow 扩展；需按[初始化指引](skills/oncewise-setup/references/mcp-setup.md)配置 MCP，并确认它能调用 `list_pages`、`take_snapshot`、`fill`、`click` 等浏览器工具。
 
 兼容性以一次实际连通性检查为准：宿主须能读取随附资料、连接运行在用户本机的浏览器 MCP（目标网页探索与验证），并在用户本机运行 `skills/oncewise-message/client.mjs` 完成 Native Messaging 交接（Node 22+，`oncewise-setup` 负责安装与 `ping` 验证）；扩展是唯一的校验与持久化方，保存前须取得用户在对话中的明确确认，流程保存后未启用，启用与回滚仅由用户本人在扩展界面操作。仅支持上传 skill 或仅有内置网页浏览能力，不足以证明完整流程可用。云端执行环境尤其需要确认是否能连接用户本机的 Chrome 与本机通道。
 

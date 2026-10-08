@@ -2,7 +2,7 @@
 name = "oncewise-ai-sync"
 version = "0.1.0"
 edition = "2021"
-description = "OnceWise AI 脚本同步与空间协作的自建轻量后端（存储分发，不解读流程内容）"
+description = "OnceWise Flow 脚本同步与空间协作的自建轻量后端（存储分发，不解读流程内容）"
 
 [dependencies]
 axum = "0.8"

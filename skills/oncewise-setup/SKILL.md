@@ -1,9 +1,9 @@
 ---
 name: oncewise-setup
-description: Connect the current agent to the user's regular Chrome through Chrome DevTools MCP, install the OnceWise AI Native Messaging host, and verify both channels. Use on first setup or when either channel fails.
+description: Connect the current agent to the user's regular Chrome through Chrome DevTools MCP, install the OnceWise Flow Native Messaging host, and verify both channels. Use on first setup or when either channel fails.
 ---
 
-# Set up the OnceWise AI browser and local channel
+# Set up the OnceWise Flow browser and local channel
 
 Complete setup only when the current agent reads the user's tab and the extension page through Chrome DevTools MCP, and `client.mjs ping` returns `ok:true`. Use `oncewise-flow` to create flows.
 
@@ -17,7 +17,7 @@ Complete setup only when the current agent reads the user's tab and the extensio
 
 ## 2. Verify the extension
 
-1. Use `list_extensions` over the same MCP connection when available. Check OnceWise AI is enabled and its ID is `fkkfdckchahnjkcbimnbhonbgcefnafi`. If the ID differs, reinstall the fixed-key build; flows under another ID are not available here.
+1. Use `list_extensions` over the same MCP connection when available. Check OnceWise Flow is enabled and its ID is `fkkfdckchahnjkcbimnbhonbgcefnafi`. If the ID differs, reinstall the fixed-key build; flows under another ID are not available here.
 2. If absent, use MCP `install_extension` with this project's unpacked build when available; otherwise ask the user to load it following `README.md`. Verify again through MCP.
 3. Find `chrome-extension://<id>/import.html` with this MCP's `list_pages` and inspect it with `take_snapshot`. If absent, open it through MCP using the verified ID, or ask the user to open it from the side panel (Settings → Open import page). Verify the flow list and channel status. Do not fill in or save flows on this page.
 

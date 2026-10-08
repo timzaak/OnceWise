@@ -1,11 +1,11 @@
 ---
 name: oncewise-message
-description: Local flow-handoff channel programs for OnceWise AI — install and verify the native-messaging host, or run client.mjs for ping, flow.read, flow.validate, flow.save, and flow.verify. Required companion of oncewise-setup and oncewise-flow; load this when either reports the channel missing.
+description: Local flow-handoff channel programs for OnceWise Flow — install and verify the native-messaging host, or run client.mjs for ping, flow.read, flow.validate, flow.save, and flow.verify. Required companion of oncewise-setup and oncewise-flow; load this when either reports the channel missing.
 ---
 
-# OnceWise AI native-messaging programs
+# OnceWise Flow native-messaging programs
 
-`skills/oncewise-message/` holds the host and CLI that hand flows between an AI agent and the OnceWise AI Chrome extension: `install.mjs`, `uninstall.mjs`, `host.mjs`, `client.mjs`, `protocol.mjs`. Nothing here operates pages or enables, deletes, or rolls back flows; the extension stays the only validator and store.
+`skills/oncewise-message/` holds the host and CLI that hand flows between an AI agent and the OnceWise Flow Chrome extension: `install.mjs`, `uninstall.mjs`, `host.mjs`, `client.mjs`, `protocol.mjs`. Nothing here operates pages or enables, deletes, or rolls back flows; the extension stays the only validator and store.
 
 - Install (user-level, once): `node install.mjs` — add `--browser chromium` or `--extension-id <id>` when the target differs. Requires Node 22+.
 - Verify: `node client.mjs ping` must return one JSON result with `ok:true`.

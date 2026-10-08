@@ -1,6 +1,6 @@
 # Chrome Web Store 上线材料包
 
-本文件夹是 OnceWise AI 扩展上架 Chrome Web Store 的全部材料与发布清单。除截图产物外,所有文案为"粘贴即用"形态;隐私相关声明与 `docs/privacy-policy.md`(2026-09-30 版)同源,政策变更后需同步修订。
+本文件夹是 OnceWise Flow 扩展上架 Chrome Web Store 的全部材料与发布清单。除截图产物外,所有文案为"粘贴即用"形态;隐私相关声明与 `docs/privacy-policy.md`(2026-10-07 版)同源,政策变更后需同步修订。
 
 ## 文件索引
 
@@ -10,12 +10,13 @@
 | `listing-zh.md` | 中文 listing:详细描述(ZH) |
 | `privacy-declarations.md` | Privacy 标签页:单一用途声明、逐权限理由、数据用途问卷答案、审核备注 |
 | `screenshots.md` | 截图/宣传图清单、上传顺序、拍摄纪律、再生成方法 |
-| `screenshots/` | 9 张图形产物(7 截图 + 2 宣传图),采集脚本自动生成 |
+| `screenshots/` | 8 张图形产物(6 宣传式截图 + 2 宣传图),采集脚本自动生成 |
 
 ## 控制台字段映射
 
 | 控制台位置 | 取材 |
 | --- | --- |
+| Store listing → Name(名称) | `extension/public/_locales/{en,zh}/messages.json` 的 `extName`(manifest `name` 引用;改后需随新版本包上传过审才生效) |
 | Store listing → Summary(短描述) | `extension/public/_locales/{en,zh}/messages.json` 的 `extDescription` |
 | Store listing → Detailed description | `listing-en.md` / `listing-zh.md` 正文 |
 | Store listing → Category / Language | Productivity;English(默认)+ Chinese(Simplified,可选) |
@@ -44,6 +45,7 @@
 
 ## 维护纪律
 
+- 名称与短描述是商店站内搜索权重最高的两个字段(分别取 `extName`/`extDescription`):修改任一后,同步更新本包 `listing-en.md`/`listing-zh.md` 顶部引用的文案,并随下一版发布生效;名称须保持"品牌 + 关键词描述"形态,纯品牌名排不上关键词。
 - 扩展 UI 变化后重跑采集刷新全部截图:`uv run scripts/web-demo-test-runner.py demo/e2e/extension/listing/capture-listing.e2e.ts --run-id <唯一ID>`(入口说明见 `scripts/index.md`)。
 - 隐私政策修订后:更新 `docs/privacy-policy.md` 生效日期 → 同步 `gh-pages` 的 `index.html` → 核对本包 `privacy-declarations.md` 与政策无出入。
 - 版本号递增:`extension/package.json`(以最新 `git tag` 为准,不在此维护具体版本号)。

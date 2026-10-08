@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// OnceWise AI native messaging host. Chrome launches this process when the extension calls
+// OnceWise Flow native messaging host. Chrome launches this process when the extension calls
 // connectNative('ai.oncewise.native'); it then bridges two channels:
 //
 //   AI client <--local IPC (newline-delimited JSON)--> this host <--Native Messaging frames--> extension

@@ -1,7 +1,7 @@
 ---
 version: alpha
-name: OnceWise AI Workbench
-description: Editorial utility style inspired by impeccable.style for the OnceWise AI extension.
+name: OnceWise Flow Workbench
+description: Editorial utility style inspired by impeccable.style for the OnceWise Flow extension.
 colors:
   ink: "#151515"
   muted: "#626262"
@@ -64,7 +64,7 @@ components:
     padding: "{spacing.lg}"
 ---
 
-# OnceWise AI · 设计方向
+# OnceWise Flow · 设计方向
 
 ## Overview
 
@@ -76,7 +76,7 @@ components:
 
 ### 先看样子
 
-![OnceWise AI 工作台方向示意图，含侧边栏流程列表与导入页](docs/oncewise-design-preview.svg)
+![OnceWise Flow 工作台方向示意图，含侧边栏流程列表与导入页](docs/oncewise-design-preview.svg)
 
 示意图用于讨论层级、密度和配色；它不是已实现页面，也不新增图中的示例流程。打开 SVG 可放大查看。直接打开 [Impeccable 首页](https://impeccable.style/)可对照原始视觉来源。
 

@@ -53,7 +53,7 @@ function App() {
       <style>{CSS}</style>
       <header className="wl-header">
         <div className="wl-header-inner">
-          <div className="wl-brand"><span className="wl-brand-mark" aria-hidden="true">✓</span>OnceWise AI</div>
+          <div className="wl-brand"><span className="wl-brand-mark" aria-hidden="true">✓</span>OnceWise Flow</div>
           <h1>{t('welcome.title')}</h1>
           <p className="wl-intro">{t('welcome.intro')}</p>
         </div>

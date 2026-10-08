@@ -1,6 +1,6 @@
 {
   "name": "oncewise-ai-extension-demo",
-  "description": "OnceWise AI Chrome 扩展（extension/，WXT MV3）的 Playwright 用户故事 Demo。依赖尚未安装：首次在 demo/ 执行 npm install 时解析版本并生成锁文件。",
+  "description": "OnceWise Flow Chrome 扩展（extension/，WXT MV3）的 Playwright 用户故事 Demo。依赖尚未安装：首次在 demo/ 执行 npm install 时解析版本并生成锁文件。",
   "private": true,
   "version": "0.0.0",
   "type": "module",

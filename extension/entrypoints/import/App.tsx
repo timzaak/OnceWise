@@ -45,7 +45,7 @@ function App() {
       <style>{CSS}</style>
       <header className="im-header">
         <div className="im-header-inner">
-          <div className="im-brand"><span className="im-brand-mark" aria-hidden="true">✓</span>OnceWise AI</div>
+          <div className="im-brand"><span className="im-brand-mark" aria-hidden="true">✓</span>OnceWise Flow</div>
           <h1>{t('import.docTitle')}</h1>
           <p className="im-boundary" role="note">{t('import.boundary')}</p>
         </div>

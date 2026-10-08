@@ -1,10 +1,10 @@
 # Native Messaging host installation, troubleshooting, and removal
 
-OnceWise AI uses `skills/oncewise-message/` to hand flows to its Chrome extension. Install and verify the host during `oncewise-setup`.
+OnceWise Flow uses `skills/oncewise-message/` to hand flows to its Chrome extension. Install and verify the host during `oncewise-setup`.
 
 ## Prerequisites
 
-- Desktop Chrome 114+ on Windows, macOS, or Linux, with the OnceWise AI extension installed.
+- Desktop Chrome 114+ on Windows, macOS, or Linux, with the OnceWise Flow extension installed.
 - Node.js 22 or later (prefer a supported LTS release). Check with `node --version`; the installer, host, and client enforce the minimum version.
 - The skill repository's `skills/oncewise-message/` directory, containing `protocol.mjs`, `host.mjs`, `client.mjs`, `install.mjs`, and `uninstall.mjs`.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""OnceWise AI 版本发布：更新产品版本文件，验证后创建 release commit 和 vX.Y.Z 标签。
+"""OnceWise Flow 版本发布：更新产品版本文件，验证后创建 release commit 和 vX.Y.Z 标签。
 
 版本载体是 extension/package.json（连同 package-lock.json 的根版本）和
 .claude-plugin/marketplace.json 的 oncewise 插件条目。backend/ 与 demo/ 各自维护

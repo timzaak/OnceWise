@@ -20,7 +20,7 @@ type ExtensionManifest = {
   options_page?: string
 }
 
-// OnceWise AI 扩展 Demo 基础 fixture（加载纯生产构建产物，verification/ 冒烟使用）：
+// OnceWise Flow 扩展 Demo 基础 fixture（加载纯生产构建产物，verification/ 冒烟使用）：
 // - extensionManifest：读取并校验 MV3 构建产物，缺失或非 MV3 直接失败（不用 skip 隐藏加载错误）
 // - context：覆盖 Playwright 默认 context，用自带 Chromium（channel: 'chromium'，headless 由
 //   demo-fast project 传入）以独立临时 profile 加载构建产物，并把 extension-build 信息附加到

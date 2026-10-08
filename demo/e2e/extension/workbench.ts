@@ -239,7 +239,7 @@ export function expectHostPhoneFilled(page: Page, value: string, timeout: number
 // demo 流程 JSON（schemaVersion 1 流程）：进入 form-page.html 即把 #contactPhone 填为常量值。
 // 值用 7+ 位电话样式，兼证脱敏展示。导入校验会重写 envelope（id/status/provenance），故只需
 // 内容字段；无提交类动作，无需 businessKey。
-export function demoFlowJson(site: string, opts: { name?: string; value: string }): string {
+export function demoFlowJson(site: string, opts: { name?: string; value: string; label?: string }): string {
   return JSON.stringify({
     schemaVersion: 1,
     name: opts.name ?? `Demo flow ${opts.value.slice(0, 3)}`,
@@ -255,7 +255,7 @@ export function demoFlowJson(site: string, opts: { name?: string; value: string 
           kind: 'action',
           action: {
             type: 'setInputValue',
-            target: { clues: { id: 'contactPhone' }, componentType: 'input', displayLabel: '联系电话' },
+            target: { clues: { id: 'contactPhone' }, componentType: 'input', displayLabel: opts.label ?? '联系电话' },
             value: opts.value,
           },
         },

@@ -273,7 +273,7 @@ def launch_browser(logger: "Logger", urls: list[str], debug_port: int | None = D
             return None
         logger.warning(
             "Playwright Chromium not found; falling back to system Chrome. Note: branded Chrome 137+ "
-            f"may ignore --load-extension; if the OnceWise AI toolbar icon is missing, load {EXTENSION_BUILD} "
+            f"may ignore --load-extension; if the OnceWise Flow toolbar icon is missing, load {EXTENSION_BUILD} "
             "manually per README"
         )
     command = [
@@ -494,7 +494,7 @@ def _print_summary(
         if import_url:
             lines += [f"  Extension import page  {import_url}"]
     next_steps = [
-        "Click the OnceWise AI toolbar icon to open the flow workbench (the extension is loaded in the browser just launched)",
+        "Click the OnceWise Flow toolbar icon to open the flow workbench (the extension is loaded in the browser just launched)",
     ]
     if sync:
         next_steps.append(

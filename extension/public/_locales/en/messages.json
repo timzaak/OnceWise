@@ -1,8 +1,8 @@
 {
   "extName": {
-    "message": "OnceWise AI"
+    "message": "OnceWise Flow – Web Automation & AI Flows"
   },
   "extDescription": {
-    "message": "Turn verified web interactions into local-first, site-scoped flows your AI tool imports; enable a flow and it runs automatically."
+    "message": "Automate repetitive web tasks with AI: describe a routine, your AI tool builds a verified flow that auto-runs on matching pages."
   }
 }
