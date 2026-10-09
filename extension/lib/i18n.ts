@@ -207,6 +207,8 @@ const en = {
   'sync.intro.body':
     'Local flows live on this device and keep working without a server. Sync shares them as scripts to a space on your self-hosted server; anyone with the space code can use the same scripts.',
   'sync.server.title': 'Server',
+  'sync.server.selfHost':
+    'The sync server is self-hosted: you can deploy the server-side container image published by this project yourself — source and deployment docs: https://github.com/timzaak/OnceWise',
   'sync.server.current': 'Address: {url}{state}',
   'sync.server.state.ok': ' · reachable',
   'sync.server.state.unreachable': ' · unreachable',
@@ -555,6 +557,8 @@ const zh: Catalog = {
   'sync.intro.title': '脚本同步',
   'sync.intro.body': '本机流程保存在本设备、无服务器也完全可用。同步把流程以脚本形式分享到自建服务器的空间；持有空间码的人即可使用同一批脚本。',
   'sync.server.title': '服务器',
+  'sync.server.selfHost':
+    '同步服务器为自部署服务：可自行部署本项目发布的服务器端镜像，源码与部署文档见 https://github.com/timzaak/OnceWise',
   'sync.server.current': '当前地址：{url}{state}',
   'sync.server.state.ok': ' · 正常',
   'sync.server.state.unreachable': ' · 不可达',

@@ -7,6 +7,10 @@ import type { SyncCall, SyncHealth } from '@/lib/use-sync';
 import type { ExtensionResponse, SyncStateView } from '@/lib/messaging';
 import { t } from '@/lib/i18n';
 
+// Self-host pointer shown as the ⓘ tooltip beside the server title — the repo behind the
+// server-side image users may deploy themselves (same URL as the store listing)
+const SELF_HOST_REPO_URL = 'https://github.com/timzaak/OnceWise';
+
 interface Props {
   status: SyncStateView;
   health: SyncHealth;
@@ -174,7 +178,19 @@ export default function SyncSpacesView({ status, health, call, probeHealth, onCh
   return (
     <>
       <section className="sp-card" aria-label={t('sync.server.title')}>
-        <h2 className="sp-title">{t('sync.server.title')}</h2>
+        <h2 className="sp-title">
+          {t('sync.server.title')}{' '}
+          <a
+            className="sync-intro"
+            style={{ color: 'inherit', textDecoration: 'none' }}
+            href={SELF_HOST_REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            title={t('sync.server.selfHost')}
+          >
+            ⓘ
+          </a>
+        </h2>
         {configured && (
           <p className="sp-sub">
             {t('sync.server.current', {
