@@ -58,6 +58,25 @@ async function buildBinary(): Promise<string> {
   return built
 }
 
+async function resolveOrBuildBinary(): Promise<string> {
+  let binary = resolveBinary()
+  if (binary === '') binary = await buildBinary()
+  return binary
+}
+
+async function createDemoDatabase(): Promise<string> {
+  const database = `oncewise_demo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+  await withAdmin(async client => {
+    // 幂等建库：并发残留/重跑时 42P04（duplicate database）不视为失败
+    await client.query(`CREATE DATABASE "${database}"`).catch(error => {
+      if ((error as { code?: string }).code !== '42P04') throw error
+    })
+  }).catch(error => {
+    throw new Error(`无法在 ${SYNC_ADMIN_URL} 上创建测试数据库 ${database}（SYNC_DATABASE_URL 可覆盖）：${error instanceof Error ? error.message : String(error)}`)
+  })
+  return database
+}
+
 // 探测一个空闲端口（host-site 等同目录 harness 也复用）。
 export async function freePort(): Promise<number> {
   return await new Promise((resolve, reject) => {
@@ -75,31 +94,49 @@ export async function freePort(): Promise<number> {
 export class SyncServer {
   readonly port: number
   readonly origin: string
+  readonly callbackUri: string
   private database: string
   private binary: string
   private proc: ChildProcess | null = null
   private output: string[] = []
+  private extraEnv: Record<string, string>
 
-  private constructor(port: number, database: string, binary: string) {
+  private constructor(
+    port: number,
+    database: string,
+    binary: string,
+    extraEnv: Record<string, string> = {},
+  ) {
     this.port = port
     this.origin = `http://127.0.0.1:${port}`
+    this.callbackUri = `${this.origin}/api/auth/oauth/callback`
     this.database = database
     this.binary = binary
+    this.extraEnv = extraEnv
   }
 
   static async start(): Promise<SyncServer> {
-    let binary = resolveBinary()
-    if (binary === '') binary = await buildBinary()
-    const database = `oncewise_demo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-    await withAdmin(async client => {
-      // 幂等建库：并发残留/重跑时 42P04（duplicate database）不视为失败
-      await client.query(`CREATE DATABASE "${database}"`).catch(error => {
-        if ((error as { code?: string }).code !== '42P04') throw error
-      })
-    }).catch(error => {
-      throw new Error(`无法在 ${SYNC_ADMIN_URL} 上创建测试数据库 ${database}（SYNC_DATABASE_URL 可覆盖）：${error instanceof Error ? error.message : String(error)}`)
+    const server = new SyncServer(await freePort(), await createDemoDatabase(), await resolveOrBuildBinary())
+    await server.start()
+    return server
+  }
+
+  // Herald 鉴权模式工厂：env 注入四项 HERALD_* 配置，指向 scripts/test-start.py 起的真实
+  // docker Herald；HERALD_REDIRECT_URI 是本实例自己的 callback（loopback HTTP），调用方须先把
+  // 它并入 Herald 播种 client 的 redirect_uris 白名单（herald.ts seedHeraldFixture）。
+  static async startWithHerald(herald: {
+    baseUrl: string
+    realmId: string
+    clientId: string
+  }): Promise<SyncServer> {
+    const port = await freePort()
+    const server = new SyncServer(port, await createDemoDatabase(), await resolveOrBuildBinary(), {
+      AUTH_MODE: 'herald',
+      HERALD_BASE_URL: herald.baseUrl,
+      HERALD_REALM_ID: herald.realmId,
+      HERALD_CLIENT_ID: herald.clientId,
+      HERALD_REDIRECT_URI: `http://127.0.0.1:${port}/api/auth/oauth/callback`,
     })
-    const server = new SyncServer(await freePort(), database, binary)
     await server.start()
     return server
   }
@@ -119,6 +156,7 @@ export class SyncServer {
         // 后端对 trim 后为空的 AUTH_MODE 按默认 herald 处理，原样透传会让后端启动失败。
         AUTH_MODE: process.env.AUTH_MODE?.trim() || 'none',
         RUST_LOG: 'info',
+        ...this.extraEnv,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     })

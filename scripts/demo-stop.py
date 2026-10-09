@@ -8,7 +8,7 @@ from lib.logger import Logger, LogLevel
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Stop the oncewise-ai manual demo environment (browser, oncewise-ai-sync, host pages, demo PostgreSQL container)",
+        description="Stop the oncewise-ai manual demo environment (browser, oncewise-ai-sync, host pages, demo Herald containers, demo PostgreSQL container)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

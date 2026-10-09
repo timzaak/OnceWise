@@ -49,16 +49,15 @@ test('T1 配置服务器并创建空间：空间码本机生成、清单选中�
   }
 })
 
-test('T2 不配置不影响本地：同步页仅配置引导，流程闭环照常', async ({ page, extensionId }) => {
+test('T2 不配置不影响本地：同步页预置默认服务器，流程闭环照常', async ({ page, extensionId }) => {
   await openWorkbench(page, extensionId)
   // 首启 onboarding 流程不变（确认后进入工作台导航）
   await ackOnboarding(page)
 
-  // 不配置服务器：同步页只呈现服务器配置卡；创建/加入表单不渲染
+  // 未显式配置服务器：地址栏预置托管默认（产品内置 DEFAULT_SYNC_SERVER_URL），
+  // 空间清单为空态；同步面板可用与否不影响本地
   await openSyncTab(page)
-  await expect(page.locator('#sync-server')).toBeVisible()
-  await expect(page.locator('#sync-space-name')).toHaveCount(0)
-  await expect(page.locator('#sync-join-code')).toHaveCount(0)
+  await expect(page.locator('#sync-server')).toHaveValue('https://auto.fornetcode.com')
   await expect(page.locator('p.sp-hint', { hasText: /No spaces yet|尚无空间/ })).toBeVisible()
 
   // 流程视图照常可用（空态提示，无任何同步前置）

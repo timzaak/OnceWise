@@ -3,6 +3,7 @@
 > 角色：**空间参与者**（创建者 / 加入者，同一角色的两种进入方式），定义见 [`docs/user-stories/_roles.md`](../_roles.md)。
 > 关联：[正式 PRD](../../prd/core/data-sync.md)、[self-service-browser-automation 用户故事](self-service-browser-automation.md)。
 > 术语：脚本 = 自动化流程（受约束步骤树定义）进入同步空间后的称呼，数据格式与安全语义与流程一致；空间码 = `空间ID#密钥`，本机生成、经现有渠道分享。
+> 门禁前置：所连服务器启用 Herald 鉴权时，使用同步前需先完成服务级登录（见 [`auth/herald-support.md`](../auth/herald-support.md)）；登录后以下全部故事语义不变，无鉴权服务器上行为与下文完全一致。
 
 ## 用户故事
 

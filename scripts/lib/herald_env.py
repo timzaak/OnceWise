@@ -48,34 +48,63 @@ def ensure_herald_database(pg_container: str, logger: "Logger") -> bool:  # noqa
     return False
 
 
-def _write_herald_config() -> Path:
-    """Generate Herald's config.toml (points at the shared host PostgreSQL and test Redis)."""
-    conf_dir = ensure_dir(LOG_DIR / "herald-test")
-    config = conf_dir / "config.toml"
-    config.write_text(
+def write_herald_config(
+    config_path: Path,
+    *,
+    database: str,
+    redis_port: int,
+    app_env: str,
+    port: int,
+    jwt_secret: str,
+    custom_domain: tuple[str, str],
+) -> None:
+    """Generate a Herald config.toml pointing at the shared host PostgreSQL and a loopback
+    Redis port. Shared by the test and manual-demo environments, which differ only in
+    parameters (ports / database / secrets)."""
+    ask_key, cname_target = custom_domain
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
         f"""[database]
-url = "postgresql://postgres:postgres@host.docker.internal:5432/{HERALD_DATABASE_NAME}?sslmode=disable"
+url = "postgresql://postgres:postgres@host.docker.internal:5432/{database}?sslmode=disable"
 
 [redis]
-url = "redis://host.docker.internal:{REDIS_PORT}"
+url = "redis://host.docker.internal:{redis_port}"
 
 [server]
 bind_address = "0.0.0.0:3000"
 log_level = "warn"
-app_env = "test"
+app_env = "{app_env}"
 
 [frontend]
-url = "http://localhost:{HERALD_PORT}"
+url = "http://localhost:{port}"
+# Serve the image's bundled SPA so browser-driven flows (the extension demo's
+# authorization window) can load the real login page on the API origin.
+static_dir = "/app/frontend/dist"
 
 [jwt]
-secret = "oncewise-herald-test-jwt-secret"
+secret = "{jwt_secret}"
 
 # Required by Herald: startup guard rejects an empty ask_key/cname_target.
 [custom_domain]
-ask_key = "oncewise-herald-test-custom-domain-ask-key"
-cname_target = "custom.test.oncewise.local"
+ask_key = "{ask_key}"
+cname_target = "{cname_target}"
 """,
         encoding="utf-8",
+    )
+
+
+def _write_herald_config() -> Path:
+    """Generate the test Herald's config.toml (shared writer, test parameters)."""
+    conf_dir = ensure_dir(LOG_DIR / "herald-test")
+    config = conf_dir / "config.toml"
+    write_herald_config(
+        config,
+        database=HERALD_DATABASE_NAME,
+        redis_port=REDIS_PORT,
+        app_env="test",
+        port=HERALD_PORT,
+        jwt_secret="oncewise-herald-test-jwt-secret",
+        custom_domain=("oncewise-herald-test-custom-domain-ask-key", "custom.test.oncewise.local"),
     )
     return config
 

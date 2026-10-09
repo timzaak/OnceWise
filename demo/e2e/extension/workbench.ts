@@ -1,5 +1,6 @@
 import type { BrowserContext, Page } from '@playwright/test'
 import { expect, extensionEntryUrl } from './fixtures'
+import { clearHeraldRateLimits, HERALD_ACCOUNT_PASSWORD } from './herald'
 
 // 故事驱动 helper：同步用户故事用例（stories/us-ds-*.e2e.ts）共用的 UI 驱动原语。
 // 断言文案一律 en/zh 双语 regex（lib/i18n.ts 按浏览器 UI 语言选择目录，不依赖运行语言）。
@@ -226,6 +227,119 @@ export async function renameFlowViaEditor(page: Page, flowName: string, newName:
   await expect(flowCardLocation(page, newName)).toBeVisible({ timeout: 15_000 })
 }
 
+// 同步登录卡（仅 herald 模式渲染；aria-label 随语言取 Sign-in/登录）
+export function authCard(page: Page) {
+  return page.locator('section.sp-card[aria-label="Sign-in"], section.sp-card[aria-label="登录"]')
+}
+
+export async function expectSignInPrompt(page: Page): Promise<void> {
+  // 换服/冷启动后登录卡取决于一次真实的模式探测（含 SW 冷启动），给足有界收敛窗口
+  await expect(authCard(page)).toBeVisible({ timeout: 30_000 })
+  await expect(authCard(page).locator('p.sp-hint', { hasText: /requires signing in|要求登录后才能同步/ }))
+    .toBeVisible({ timeout: 15_000 })
+}
+
+export async function expectSignedIn(page: Page): Promise<void> {
+  await expect(authCard(page).locator('.sp-badge', { hasText: /^(Signed in|已登录)$/ }))
+    .toBeVisible({ timeout: 20_000 })
+}
+
+export async function signOutViaUi(page: Page): Promise<void> {
+  await authCard(page).getByRole('button', { name: /^(Sign out|登出)$/ }).click()
+  await expectSignInPrompt(page)
+}
+
+// 未登录设备走到同步页：连接服务器并确认出现登录引导（us-hs 各用例共用前置）。
+export async function connectAndExpectSignIn(page: Page, origin: string): Promise<void> {
+  await openSyncTab(page)
+  await connectServer(page, origin)
+  await expectSignInPrompt(page)
+}
+
+// 经真实授权窗口登录：launchWebAuthFlow(interactive) 的窗口以普通页面出现在扩展 context 内，
+// 链路是真实 OAuth——窗口先落在本服务器 /api/auth/oauth/start，302 到 Herald authorize 再到
+// 真实登录页（cas-2 前端的 data-testid 稳定），提交后 Herald 发码、BFF 交换并回交接码，窗口
+// 落到 chromiumapp.org 终点即自动关闭。自动填表只替代 Herald 侧的用户输入，不改任何协议环节。
+export async function signInViaUi(context: BrowserContext, page: Page, email: string): Promise<void> {
+  await clearHeraldRateLimits()
+  await authCard(page).getByRole('button', { name: /^(Sign in|登录)$/ }).click({ timeout: 20_000 })
+  const authWindow = await context.waitForEvent('page', { timeout: 20_000 })
+  const form = authWindow.locator('[data-testid="login-form"]')
+  await expect(form, '授权窗口未呈现 Herald 登录页').toBeVisible({ timeout: 20_000 })
+  await authWindow.locator('[data-testid="email-input"]').fill(email, { timeout: 20_000 })
+  await authWindow.locator('[data-testid="password-input"]').fill(HERALD_ACCOUNT_PASSWORD, { timeout: 20_000 })
+  await authWindow.locator('[data-testid="login-submit-button"]').click({ timeout: 20_000 })
+  await authWindow.waitForEvent('close', { timeout: 30_000 })
+  await expectSignedIn(page)
+}
+
+// 经扩展页读 chrome.storage 指定区域（受信任上下文可读）：观察原始记录形状（epoch/tokens
+// 是否存在），不把令牌写进断言消息或日志。
+export async function peekExtensionStorage(
+  page: Page,
+  area: 'local' | 'session',
+  key: string,
+): Promise<unknown> {
+  return await page.evaluate(async ([a, k]) => {
+    const store = (globalThis as any).chrome?.storage?.[a]
+    if (!store) throw new Error(`当前页不是扩展页（chrome.storage.${a} 不可用）`)
+    const values = await store.get(k)
+    return values[k]
+  }, [area, key])
+}
+
+export async function peekExtensionLocal(page: Page, key: string): Promise<unknown> {
+  return await peekExtensionStorage(page, 'local', key)
+}
+
+export interface SyncAuthFacts {
+  serverUrl: string
+  accessToken: string
+  refreshToken: string
+  accessTokenExpiresAt: number
+  epoch: number
+}
+
+export async function peekSyncAuth(page: Page): Promise<SyncAuthFacts | null> {
+  const value = await peekExtensionLocal(page, 'syncAuth') as Partial<SyncAuthFacts> | null | undefined
+  if (value === null || value === undefined || value.accessToken === '') return null
+  return {
+    serverUrl: value.serverUrl ?? '',
+    accessToken: value.accessToken ?? '',
+    refreshToken: value.refreshToken ?? '',
+    accessTokenExpiresAt: value.accessTokenExpiresAt ?? 0,
+    epoch: value.epoch ?? 0,
+  }
+}
+
+// local:syncAuth 的原始记录：登出/换服后记录仍在（令牌清空、epoch 递增），raw 读取让用例
+// 能观察到清空后的世代事实（peekSyncAuth 把无凭证记录归一为 null）。
+export interface RawAuth {
+  accessToken?: string
+  refreshToken?: string
+  epoch?: number
+}
+
+export async function peekRawAuth(page: Page): Promise<RawAuth | null> {
+  return await peekExtensionLocal(page, 'syncAuth') as RawAuth | null
+}
+
+// 时间前置替身：把本机会话的过期视图改写为已过期（仅在受信任扩展页改本机存储）。令牌本身、
+// 续期 POST、服务端轮换与回写持久化保持真实——Herald 访问令牌 TTL 固定 900s，等待真实过期
+// 对演示不可行，故以此构造「过期后继续操作」的入口条件。
+export async function expireStoredAccessToken(page: Page): Promise<void> {
+  const ok = await page.evaluate(async () => {
+    const store = (globalThis as any).chrome.storage.local
+    const values = await store.get('syncAuth')
+    const auth = values.syncAuth
+    if (!auth || !auth.accessToken) return false
+    auth.accessTokenExpiresAt = Date.now() - 1_000
+    await store.set({ syncAuth: auth })
+    return true
+  })
+  expect(ok, 'local:syncAuth 无可供过期的会话').toBe(true)
+}
+
 export async function openHostPage(context: BrowserContext, url: string): Promise<Page> {
   const page = await context.newPage()
   await page.goto(url)
@@ -385,12 +499,7 @@ export async function expectPackingPreviewHidden(page: Page): Promise<void> {
 // 跨页用例用来直接观察移交「暂存 → 认领」的内部状态，是页面可观测面之外的补充证据，
 // 不替代页面侧断言。调用时 page 必须停在扩展页。
 export async function peekSessionStore(page: Page, key: string): Promise<unknown> {
-  return await page.evaluate(async (k) => {
-    const store = (globalThis as any).chrome?.storage?.session
-    if (!store) throw new Error('当前页不是扩展页（chrome.storage.session 不可用）')
-    const values = await store.get(k)
-    return values[k]
-  }, key)
+  return await peekExtensionStorage(page, 'session', key)
 }
 
 // 在途移交条数（pendingHandovers 是数组，空数组为 truthy——不能用真值断言观察清空）

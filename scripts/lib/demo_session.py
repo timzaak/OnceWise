@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .cli import require_executable, run_cmd
+from .herald_env import write_herald_config
 from .logger import LogLevel
 from .net import is_port_open, wait_for_http_ok, wait_for_tcp
 from .paths import LOG_DIR, REPO_ROOT, ensure_dir
@@ -41,6 +42,27 @@ DEFAULT_DEBUG_PORT = 9222
 DEMO_PG_CONTAINER = "oncewise-demo-pg"
 DEMO_PG_PORT = 5432
 DEMO_DATABASE_URL_DEFAULT = "postgres://postgres:postgres@127.0.0.1:5432/oncewise_demo_manual"
+
+# Demo-owned Herald sign-in dependency: dedicated containers/ports/database, fully separate
+# from the backend test environment (scripts/test-start.py -> 13001 / herald_test / 16381),
+# so both can run at the same time. The Herald database rides on the demo PostgreSQL
+# (herald_demo) and survives demo-stop; the containers themselves are stateless and are
+# recreated on each start. Seeding mirrors backend/tests/scenario_herald_auth.rs: the demo
+# account reuses the image's bootstrap-admin password hash (so the password is "password")
+# and carries no roles — a valid sign-in is enough for the sync gate.
+DEMO_HERALD_CONTAINER = "oncewise-demo-herald"
+DEMO_REDIS_CONTAINER = "oncewise-demo-redis"
+DEMO_HERALD_PORT = 13101
+DEMO_REDIS_PORT = 16481
+DEMO_HERALD_DATABASE = "herald_demo"
+DEMO_HERALD_URL = f"http://127.0.0.1:{DEMO_HERALD_PORT}"
+DEMO_HERALD_IMAGE_DEFAULT = "ghcr.io/timzaak/herald:0.6.1"
+DEMO_REDIS_IMAGE = "redis:8.4-alpine"
+DEMO_HERALD_REALM = "oncewise"
+DEMO_HERALD_CLIENT_ID = "oncewise-sync"
+DEMO_HERALD_ACCOUNT_EMAIL = "demo@oncewise.local"
+DEMO_HERALD_ACCOUNT_PASSWORD = "password"
+DEMO_HERALD_CONFIG = LOG_DIR / "herald-demo" / "config.toml"
 
 EXTENSION_DIR = REPO_ROOT / "extension"
 EXTENSION_BUILD = EXTENSION_DIR / ".output" / "chrome-mv3"
@@ -159,14 +181,188 @@ def stop_demo_postgres(logger: "Logger") -> bool:
     return True
 
 
-def start_sync_backend(logger: "Logger", binary: Path, port: int) -> int:
+def _docker() -> str:
+    docker = shutil.which("docker")
+    if docker is None:
+        raise RuntimeError(
+            "The demo Herald sign-in needs docker (Herald + Redis containers). "
+            "Install docker, or run with --no-herald for the no-sign-in demo."
+        )
+    return docker
+
+
+def _demo_pg_is_managed() -> bool:
+    """True when 127.0.0.1:5432 is served by the demo-owned oncewise-demo-pg container.
+
+    The demo Herald's database and seeding ride on that container; a custom
+    DEMO_DATABASE_URL / externally managed PostgreSQL is the operator's own setup.
+    """
+    docker = shutil.which("docker")
+    if docker is None:
+        return False
+    running = run_cmd(
+        [docker, "container", "inspect", "-f", "{{.State.Running}}", DEMO_PG_CONTAINER],
+        capture=True,
+    )
+    if running.returncode != 0 or running.stdout.strip() != "true":
+        return False
+    ports = run_cmd([docker, "port", DEMO_PG_CONTAINER], capture=True)
+    return f"->{DEMO_PG_PORT}" in ports.stdout.replace(" ", "") or f":{DEMO_PG_PORT}" in ports.stdout
+
+
+def _psql_herald(sql: str) -> None:
+    """Run SQL against the demo Herald database via the demo PostgreSQL container."""
+    result = run_cmd([
+        _docker(), "exec", DEMO_PG_CONTAINER,
+        "psql", "-U", "postgres", "-d", DEMO_HERALD_DATABASE, "-v", "ON_ERROR_STOP=1", "-c", sql,
+    ])
+    if result.returncode != 0:
+        raise RuntimeError(f"Herald demo seeding failed:\n{result.stdout}\n{result.stderr}")
+
+
+def ensure_demo_herald(logger: "Logger", backend_port: int) -> None:
+    """Start (or reuse) the demo-owned Herald + Redis containers and seed the demo sign-in.
+
+    Reuses an already-healthy instance (a previous demo-start that was not stopped).
+    The Herald database (herald_demo) lives on the demo PostgreSQL and survives restarts;
+    seeding is idempotent and resets the demo account's status on every run.
+    """
+    docker = _docker()
+    if not _demo_pg_is_managed():
+        raise RuntimeError(
+            "The demo Herald rides on the demo PostgreSQL container "
+            f"({DEMO_PG_CONTAINER}); a custom database setup cannot host it. "
+            "Set AUTH_MODE/HERALD_* explicitly to point the demo backend at your own Herald."
+        )
+    # 容器不在运行时（常见：demo-stop 会移除容器）跳过注定失败的健康探测，直接走创建路径
+    herald_running = run_cmd(
+        [docker, "container", "inspect", "-f", "{{.State.Running}}", DEMO_HERALD_CONTAINER],
+        capture=True,
+    )
+    if (
+        herald_running.returncode == 0
+        and herald_running.stdout.strip() == "true"
+        and wait_for_http_ok(f"{DEMO_HERALD_URL}/health", 2, logger=logger)
+    ):
+        logger.info(f"Reusing the running demo Herald ({DEMO_HERALD_URL})")
+    else:
+        created = run_cmd([
+            docker, "exec", DEMO_PG_CONTAINER, "psql", "-U", "postgres", "-d", "postgres",
+            "-c", f"CREATE DATABASE {DEMO_HERALD_DATABASE}",
+        ], capture=True)
+        if created.returncode != 0 and "already exists" not in created.stdout + created.stderr:
+            raise RuntimeError(f"failed to create the {DEMO_HERALD_DATABASE} database:\n{created.stdout}\n{created.stderr}")
+        write_herald_config(
+            DEMO_HERALD_CONFIG,
+            database=DEMO_HERALD_DATABASE,
+            redis_port=DEMO_REDIS_PORT,
+            app_env="demo",
+            port=DEMO_HERALD_PORT,
+            jwt_secret="oncewise-herald-demo-jwt-secret",
+            custom_domain=("oncewise-herald-demo-custom-domain-ask-key", "custom.demo.oncewise.local"),
+        )
+        removed = run_cmd([docker, "rm", "-f", DEMO_REDIS_CONTAINER, DEMO_HERALD_CONTAINER], capture=True)
+        if removed.returncode != 0:
+            raise RuntimeError(f"failed to clean stale demo Herald containers:\n{removed.stdout}\n{removed.stderr}")
+        redis = run_cmd([
+            docker, "run", "-d", "--name", DEMO_REDIS_CONTAINER,
+            "--memory=128m", "--log-opt", "max-size=10m", "--log-opt", "max-file=3",
+            "-p", f"127.0.0.1:{DEMO_REDIS_PORT}:6379",
+            DEMO_REDIS_IMAGE,
+        ])
+        if redis.returncode != 0:
+            raise RuntimeError(f"failed to start the {DEMO_REDIS_CONTAINER} container:\n{redis.stdout}\n{redis.stderr}")
+        image = os.environ.get("HERALD_IMAGE", DEMO_HERALD_IMAGE_DEFAULT)
+        herald = run_cmd([
+            docker, "run", "-d", "--name", DEMO_HERALD_CONTAINER,
+            "--memory=512m", "--add-host", "host.docker.internal:host-gateway",
+            "--log-opt", "max-size=10m", "--log-opt", "max-file=3",
+            "-e", "HERALD_CONFIG=/app/config.toml",
+            "--mount", f"type=bind,source={DEMO_HERALD_CONFIG.resolve()},target=/app/config.toml,readonly",
+            "-p", f"127.0.0.1:{DEMO_HERALD_PORT}:3000",
+            image,
+        ])
+        if herald.returncode != 0:
+            raise RuntimeError(f"failed to start the {DEMO_HERALD_CONTAINER} container ({image}):\n{herald.stdout}\n{herald.stderr}")
+        if not wait_for_http_ok(f"{DEMO_HERALD_URL}/health", 120, logger=logger):
+            raise RuntimeError(
+                f"The demo Herald did not become healthy on {DEMO_HERALD_URL}/health "
+                f"(inspect with: docker logs {DEMO_HERALD_CONTAINER})"
+            )
+
+    # Idempotent seed: realm incl. the two first-party client apps Herald's realm
+    # provisioning would create (the login page resolves clientId=admin-web-console inside
+    # the realm; without them browser logins are rejected), the BFF client whitelisting
+    # exactly this backend's callback (converged on every run — stale entries from an
+    # earlier --backend-port do not accumulate, same semantics as scenario_herald_auth),
+    # and the no-role demo account (consent pre-recorded so login goes straight to the
+    # code).
+    callback = f"http://127.0.0.1:{backend_port}/api/auth/oauth/callback"
+    realm = DEMO_HERALD_REALM
+    client = DEMO_HERALD_CLIENT_ID
+    email = DEMO_HERALD_ACCOUNT_EMAIL
+    seed = f"""DO $seed$
+DECLARE v_hash text; v_user uuid;
+BEGIN
+  SELECT password INTO v_hash FROM account WHERE realm_id = 'admin' LIMIT 1;
+  INSERT INTO realm (id, name) VALUES ('{realm}', 'OnceWise Demo') ON CONFLICT (id) DO NOTHING;
+  INSERT INTO client_app (id, realm_id, client_id, name, is_first_party, enabled)
+  VALUES (uuidv7(), '{realm}', 'admin-web-console', 'Admin Web Console', true, true)
+  ON CONFLICT (realm_id, client_id) DO NOTHING;
+  INSERT INTO client_app (id, realm_id, client_id, name, is_first_party, enabled)
+  VALUES (uuidv7(), '{realm}', 'user-account-center', 'User Account Center', true, true)
+  ON CONFLICT (realm_id, client_id) DO NOTHING;
+  INSERT INTO client_app (id, realm_id, client_id, name, redirect_uris)
+  VALUES (uuidv7(), '{realm}', '{client}', 'OnceWise Sync BFF', '["{callback}"]'::jsonb)
+  ON CONFLICT (realm_id, client_id) DO UPDATE SET redirect_uris = EXCLUDED.redirect_uris;
+  INSERT INTO account (id, realm_id, email, password, status)
+  VALUES (uuidv7(), '{realm}', '{email}', v_hash, 1)
+  ON CONFLICT (realm_id, email) DO UPDATE SET status = 1;
+  SELECT id INTO v_user FROM account WHERE realm_id = '{realm}' AND email = '{email}';
+  INSERT INTO profile (id, realm_id, nickname) VALUES (v_user, '{realm}', 'Demo User')
+  ON CONFLICT (id, realm_id) DO NOTHING;
+  INSERT INTO user_agreement_consent (id, user_id, realm_id, agreement_type, consented_version_id)
+  SELECT uuidv7(), v_user, '{realm}', v.agreement_type, v.id FROM legal_agreement_version v
+  WHERE v.id IN (SELECT DISTINCT ON (lv.agreement_type) lv.id FROM legal_agreement_version lv
+    WHERE (lv.realm_id IS NULL OR lv.realm_id = '{realm}')
+    ORDER BY lv.agreement_type, (lv.realm_id IS NULL), lv.version_no DESC)
+  ON CONFLICT (user_id, agreement_type) DO UPDATE SET
+    consented_version_id = EXCLUDED.consented_version_id, consented_at = CURRENT_TIMESTAMP;
+END $seed$;"""
+    _psql_herald(seed)
+    logger.info(f"Herald demo sign-in account seeded: {email} / {DEMO_HERALD_ACCOUNT_PASSWORD}")
+
+
+def stop_demo_herald(logger: "Logger") -> bool:
+    """Remove the demo Herald/Redis containers (stateless; the database survives on the
+    demo PostgreSQL). Tolerates absent containers."""
+    docker = shutil.which("docker")
+    if docker is None:
+        return False
+    result = run_cmd([docker, "rm", "-f", DEMO_HERALD_CONTAINER, DEMO_REDIS_CONTAINER], capture=True)
+    if result.returncode != 0:
+        logger.warning(f"failed to remove the demo Herald containers: {result.stdout}{result.stderr}")
+        return False
+    return bool(result.stdout.strip())
+
+
+def start_sync_backend(
+    logger: "Logger",
+    binary: Path,
+    port: int,
+    auth_env: dict[str, str] | None = None,
+) -> int:
     ensure_demo_postgres(logger)
     env = dict(os.environ)
-    # 后端默认 AUTH_MODE=herald，缺 Herald 配置会启动失败；人工 demo 默认显式 none（原行为），
-    # 操作者显式设置的 AUTH_MODE / HERALD_* 从 os.environ 透传保留。空白串视同未设置：
-    # 后端对 trim 后为空的 AUTH_MODE 按默认 herald 处理，原样透传会让 demo 后端启动失败。
+    # 操作者显式设置的 AUTH_MODE / HERALD_* 从 os.environ 透传优先；未设置时按本会话的
+    # 鉴权决策注入（demo 默认 herald 指向自管镜像，--no-herald 显式 none）。空白串视同
+    # 未设置：后端对 trim 后为空的 AUTH_MODE 按默认 herald 处理，原样透传会让 demo 后端
+    # 启动失败。
     if not env.get("AUTH_MODE", "").strip():
-        env["AUTH_MODE"] = "none"
+        if auth_env is not None:
+            env.update(auth_env)
+        else:
+            env["AUTH_MODE"] = "none"
     env.update({
         "BIND_ADDR": f"127.0.0.1:{port}",
         # Persistent manual-demo database: created on first run, survives restarts.
@@ -387,8 +583,20 @@ def stop_demo_session(logger: "Logger", *, stop_pg: bool = True) -> bool:
         logger.info(f"Stopped {DEMO_PG_CONTAINER} container (data persists; next demo-start revives it)")
         killed = True
 
+    if stop_pg and stop_demo_herald(logger):
+        logger.info(f"Removed the demo Herald containers ({DEMO_HERALD_CONTAINER}, {DEMO_REDIS_CONTAINER})")
+
     STATE_FILE.unlink(missing_ok=True)
     return killed
+
+
+def _operator_auth_configured() -> bool:
+    """The operator explicitly set the backend's auth configuration — their values pass
+    through untouched and the demo does not start its own Herald."""
+    return any(
+        os.environ.get(key, "").strip()
+        for key in ("AUTH_MODE", "HERALD_BASE_URL", "HERALD_REALM_ID", "HERALD_CLIENT_ID", "HERALD_REDIRECT_URI")
+    )
 
 
 def start_demo_session(
@@ -400,14 +608,31 @@ def start_demo_session(
     build: bool = True,
     sync: bool = True,
     browser: bool = True,
+    herald: bool = True,
 ) -> bool:
     """Start the manual demo environment and print follow-up instructions."""
     ensure_dir(LOG_DIR)
     backend_pid: int | None = None
     host_pid: int | None = None
     browser_pid: int | None = None
+    # demo 默认起自管 Herald 并以 herald 模式跑后端；操作者显式设置 AUTH_MODE/HERALD_* 时
+    # 完全透传（不起镜像），--no-herald 保留原无鉴权形态
+    herald_active = sync and herald and not _operator_auth_configured()
+    auth_env: dict[str, str] | None = None
+    if sync and not _operator_auth_configured():
+        auth_env = (
+            {
+                "AUTH_MODE": "herald",
+                "HERALD_BASE_URL": DEMO_HERALD_URL,
+                "HERALD_REALM_ID": DEMO_HERALD_REALM,
+                "HERALD_CLIENT_ID": DEMO_HERALD_CLIENT_ID,
+                "HERALD_REDIRECT_URI": f"http://127.0.0.1:{backend_port}/api/auth/oauth/callback",
+            }
+            if herald_active
+            else {"AUTH_MODE": "none"}
+        )
     try:
-        total_steps = 1 + (1 if build else 0) + (1 if sync else 0) + (1 if browser else 0) + 1
+        total_steps = 1 + (1 if build else 0) + (1 if sync else 0) + (1 if herald_active else 0) + (1 if browser else 0) + 1
         current = 0
 
         current += 1
@@ -421,12 +646,17 @@ def start_demo_session(
         elif not (EXTENSION_BUILD / "manifest.json").is_file():
             raise RuntimeError(f"Extension build missing but --no-build given: {EXTENSION_BUILD}")
 
+        if herald_active:
+            current += 1
+            with logger.step(current, total_steps, f"Start demo Herald ({DEMO_HERALD_URL})"):
+                ensure_demo_herald(logger, backend_port)
+
         if sync:
             current += 1
             with logger.step(current, total_steps, f"Start oncewise-ai-sync (127.0.0.1:{backend_port})"):
                 binary = resolve_sync_binary(logger)
                 logger.verbose_info(f"Binary: {binary}")
-                backend_pid = start_sync_backend(logger, binary, backend_port)
+                backend_pid = start_sync_backend(logger, binary, backend_port, auth_env=auth_env)
 
         current += 1
         with logger.step(current, total_steps, f"Start host test pages (127.0.0.1:{host_port})"):
@@ -446,7 +676,15 @@ def start_demo_session(
         raise
 
     _write_state(_collect_state(backend_pid, host_pid, browser_pid, backend_port, host_port))
-    _print_summary(logger, backend_port=backend_port, host_port=host_port, debug_port=debug_port, sync=sync, browser=browser)
+    _print_summary(
+        logger,
+        backend_port=backend_port,
+        host_port=host_port,
+        debug_port=debug_port,
+        sync=sync,
+        browser=browser,
+        herald=herald_active,
+    )
     return True
 
 
@@ -474,6 +712,7 @@ def _print_summary(
     debug_port: int | None,
     sync: bool,
     browser: bool,
+    herald: bool = False,
 ) -> None:
     if logger.level < LogLevel.NORMAL:
         return
@@ -487,6 +726,10 @@ def _print_summary(
         lines += [
             f"  oncewise-ai-sync       http://127.0.0.1:{backend_port}  (persistent data in log/demo-data)",
         ]
+        if herald:
+            lines += [
+                f"  Herald sign-in   {DEMO_HERALD_URL}  (docker {DEMO_HERALD_CONTAINER}; account {DEMO_HERALD_ACCOUNT_EMAIL} / {DEMO_HERALD_ACCOUNT_PASSWORD})",
+            ]
     if browser:
         lines += [
             "  Browser          dedicated profile with the extension (log/demo-profile; grants and settings persist across restarts)",
@@ -502,9 +745,15 @@ def _print_summary(
         "Click the OnceWise Flow toolbar icon to open the flow workbench (the extension is loaded in the browser just launched)",
     ]
     if sync:
-        next_steps.append(
-            f"To use sync, set Server to http://127.0.0.1:{backend_port} in the extension's \"Sync\" tab, then register/create a space"
-        )
+        if herald:
+            next_steps.append(
+                f"To use sync, set Server to http://127.0.0.1:{backend_port} in the extension's \"Sync\" tab, "
+                f"sign in with {DEMO_HERALD_ACCOUNT_EMAIL} / {DEMO_HERALD_ACCOUNT_PASSWORD}, then register/create a space"
+            )
+        else:
+            next_steps.append(
+                f"To use sync, set Server to http://127.0.0.1:{backend_port} in the extension's \"Sync\" tab, then register/create a space"
+            )
     if browser and debug_port is not None:
         next_steps.append(
             f"To drive this demo browser with Chrome DevTools MCP: npx chrome-devtools-mcp --browserUrl http://127.0.0.1:{debug_port} "

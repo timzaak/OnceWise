@@ -9,11 +9,12 @@ from lib.paths import ensure_dir
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Start the oncewise-ai manual demo environment (build extension + oncewise-ai-sync + host pages + extension-loaded browser)",
+        description="Start the oncewise-ai manual demo environment (build extension + Herald sign-in dependency + oncewise-ai-sync + host pages + extension-loaded browser)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  uv run scripts/demo-start.py              # Full environment
+  uv run scripts/demo-start.py              # Full environment (backend in Herald sign-in mode)
+  uv run scripts/demo-start.py --no-herald  # Backend without sign-in (AUTH_MODE=none, no Herald container)
   uv run scripts/demo-start.py --no-sync    # Skip oncewise-ai-sync backend (extension local-only mode)
   uv run scripts/demo-start.py --no-browser # Start services only, no browser launch
   uv run scripts/demo-start.py -v           # Verbose mode
@@ -67,6 +68,11 @@ Examples:
         help="Skip oncewise-ai-sync backend (no Rust toolchain needed)",
     )
     parser.add_argument(
+        "--no-herald",
+        action="store_true",
+        help="Run the backend without sign-in (AUTH_MODE=none) and skip the Herald container",
+    )
+    parser.add_argument(
         "--no-browser",
         action="store_true",
         help="Do not launch the extension-loaded browser",
@@ -100,6 +106,7 @@ Examples:
             build=not args.no_build,
             sync=not args.no_sync,
             browser=not args.no_browser,
+            herald=not args.no_herald,
         )
     except RuntimeError as exc:
         logger.error(str(exc))
