@@ -2,7 +2,7 @@
   "name": "oncewise-ai",
   "description": "Self-service browser automation flows (English-first, i18n-ready)",
   "private": true,
-  "version": "1.1.6",
+  "version": "1.1.7",
   "type": "module",
   "scripts": {
     "dev": "wxt",
