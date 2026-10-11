@@ -50,6 +50,13 @@ export default defineConfig({
   server: {
     port: 3001,
   },
+  // The build's prerender step serves .output through a vite preview server
+  // and fetches it back over HTTP. Binding to "localhost" listens on ::1 only
+  // on Linux while node's fetch resolves localhost to 127.0.0.1 — every page
+  // fetch gets ECONNREFUSED and the build silently emits 0 prerendered pages.
+  preview: {
+    host: "127.0.0.1",
+  },
   plugins: [
     mdx(),
     tailwindcss(),
