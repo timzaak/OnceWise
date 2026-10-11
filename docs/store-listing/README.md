@@ -31,8 +31,8 @@
 ## 发布步骤(按序执行)
 
 1. **开发者账号**:Chrome Web Store 开发者注册(一次性 $5)。
-2. **开源**——决策已定(2026-09-30):仓库**全部内容公开**,包括 `docs/prd/`、`docs/user-stories/`、`DESIGN.md`("都暴露",不做裁剪)。操作:`gh repo edit timzaak/OnceWise --visibility public` 后 `git push origin main`。
-3. **隐私政策页面上线**(详见 `docs/privacy-policy.md` 头部):隐私页随 `docs-web` 文档站发布,`.github/workflows/docs-pages.yml` 在 main 改动后自动部署;开源后一次性启用 Pages(Source 选 GitHub Actions)。控制台 Privacy 标签页填 `https://timzaak.github.io/OnceWise/en/privacy`。**切勿**改用 main 的 `/docs` 发布。
+2. **开源**——已完成:仓库**全部内容公开**,包括 `docs/prd/`、`docs/user-stories/`、`DESIGN.md`("都暴露",不做裁剪)。已执行 `gh repo edit timzaak/OnceWise --visibility public`(2026-10-11 验证为 public)。
+3. **隐私政策页面上线**——已完成(2026-10-11):隐私页随 `docs-web` 文档站发布,`.github/workflows/docs-pages.yml` 在 main 改动后自动部署;Pages 已启用 Actions 模式(`build_type=workflow`,`github-pages` 环境仅允许 main 部署),站点上线于 `https://timzaak.github.io/OnceWise/`。控制台 Privacy 标签页填 `https://timzaak.github.io/OnceWise/en/privacy`。**切勿**改用 main 的 `/docs` 发布。
 4. **打包**:`cd extension && npm run build && npm run zip:store` → 产物 `.output/oncewise-ai-<版本>-chrome-store.zip`(`extension/scripts/zip-store.mjs` 复制 `.output/chrome-mv3`、剥掉 manifest 的 `key` 字段后打包,manifest 位于 zip 根)。控制台**拒绝 manifest 含 `key` 字段的上传包**(2026-10-02 实测);`npm run zip` 的产物含 key,不用于商店上传。
 5. **上传与填报**:
    - 手动路径:开发者控制台 → 条目 → Package → 上传步骤 4 的 zip(新上架时为 New item,并按上表逐项粘贴/上传)。
