@@ -21,7 +21,7 @@
 | Store listing → Detailed description | `listing-en.md` / `listing-zh.md` 正文 |
 | Store listing → Category / Language | Productivity;English(默认)+ Chinese(Simplified,可选) |
 | Store listing → Screenshots / Promo tiles | `screenshots/`(顺序见 `screenshots.md`) |
-| Privacy → Privacy policy URL | `https://timzaak.github.io/OnceWise/`(发布步骤见下) |
+| Privacy → Privacy policy URL | `https://timzaak.github.io/OnceWise/en/privacy`(发布步骤见 `docs/privacy-policy.md` 头部) |
 | Privacy → Single purpose | `privacy-declarations.md` §1 |
 | Privacy → 权限理由(逐条) | `privacy-declarations.md` §2 |
 | Privacy → 数据用途 / 认证 | `privacy-declarations.md` §3 |
@@ -32,7 +32,7 @@
 
 1. **开发者账号**:Chrome Web Store 开发者注册(一次性 $5)。
 2. **开源**——决策已定(2026-09-30):仓库**全部内容公开**,包括 `docs/prd/`、`docs/user-stories/`、`DESIGN.md`("都暴露",不做裁剪)。操作:`gh repo edit timzaak/OnceWise --visibility public` 后 `git push origin main`。
-3. **隐私政策页面上线**(两步,详见 `docs/privacy-policy.md` 头部):`git push origin gh-pages` → 启用 Pages(gh-pages 分支根目录)。得到 URL 后填入控制台 Privacy 标签页。**切勿**改用 main 的 `/docs` 发布。
+3. **隐私政策页面上线**(详见 `docs/privacy-policy.md` 头部):隐私页随 `docs-web` 文档站发布,`.github/workflows/docs-pages.yml` 在 main 改动后自动部署;开源后一次性启用 Pages(Source 选 GitHub Actions)。控制台 Privacy 标签页填 `https://timzaak.github.io/OnceWise/en/privacy`。**切勿**改用 main 的 `/docs` 发布。
 4. **打包**:`cd extension && npm run build && npm run zip:store` → 产物 `.output/oncewise-ai-<版本>-chrome-store.zip`(`extension/scripts/zip-store.mjs` 复制 `.output/chrome-mv3`、剥掉 manifest 的 `key` 字段后打包,manifest 位于 zip 根)。控制台**拒绝 manifest 含 `key` 字段的上传包**(2026-10-02 实测);`npm run zip` 的产物含 key,不用于商店上传。
 5. **上传与填报**:
    - 手动路径:开发者控制台 → 条目 → Package → 上传步骤 4 的 zip(新上架时为 New item,并按上表逐项粘贴/上传)。
@@ -47,5 +47,5 @@
 
 - 名称与短描述是商店站内搜索权重最高的两个字段(分别取 `extName`/`extDescription`):修改任一后,同步更新本包 `listing-en.md`/`listing-zh.md` 顶部引用的文案,并随下一版发布生效;名称须保持"品牌 + 关键词描述"形态,纯品牌名排不上关键词。
 - 扩展 UI 变化后重跑采集刷新全部截图:`uv run scripts/web-demo-test-runner.py demo/e2e/extension/listing/capture-listing.e2e.ts --run-id <唯一ID>`(入口说明见 `scripts/index.md`)。
-- 隐私政策修订后:更新 `docs/privacy-policy.md` 生效日期 → 同步 `gh-pages` 的 `index.html` → 核对本包 `privacy-declarations.md` 与政策无出入。
+- 隐私政策修订后:更新 `docs/privacy-policy.md` 生效日期 → 同步 `docs-web/src/components/privacy-page.tsx` 的双语文案与生效日期 → 核对本包 `privacy-declarations.md` 与政策无出入。
 - 版本号递增:`extension/package.json`(以最新 `git tag` 为准,不在此维护具体版本号)。

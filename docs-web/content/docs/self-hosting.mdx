@@ -1,0 +1,67 @@
+---
+title: Self-hosting the sync server
+description: Run oncewise-ai-sync — from a one-command dev setup to the published container image, environment variables, and the Herald sign-in gate.
+---
+
+The sync backend (`oncewise-ai-sync`) is a Rust/Axum service over PostgreSQL. It stores and distributes structured script data for [spaces](/docs/sync); it never generates or executes flows, and the space model has no accounts, ownership or membership — the deployment may, however, sit behind a sign-in gate (below).
+
+## Quick run from source
+
+For trying things out or developing:
+
+```bash
+docker run -d --name oncewise-demo-pg -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5432:5432 postgres:18-alpine
+
+cd backend
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres AUTH_MODE=none cargo run
+```
+
+The server listens on `0.0.0.0:8080` by default and runs database migrations at startup. Verify with:
+
+```bash
+curl http://127.0.0.1:8080/api/health        # → 200
+curl http://127.0.0.1:8080/api/openapi.json  # the OpenAPI 3 document
+```
+
+`AUTH_MODE=none` is used above because the default mode requires Herald configuration (below). For anything reachable beyond your machine, do not ship `none`.
+
+## Container image
+
+Every `v*.*.*` tag publishes an image:
+
+```bash
+docker pull ghcr.io/timzaak/oncewise:latest
+docker run -d --name oncewise-sync \
+  -e DATABASE_URL=postgres://user:pass@db:5432/oncewise \
+  -e AUTH_MODE=none \
+  -p 8080:8080 \
+  ghcr.io/timzaak/oncewise:latest
+```
+
+Point the extension's Sync tab at the server's origin (for example `https://sync.example.com`) and you are done on the client side.
+
+## Environment variables
+
+| Variable | Default | Required | Notes |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | — | yes | `postgres://user:pass@host:5432/dbname` |
+| `BIND_ADDR` | `0.0.0.0:8080` | no | Listen address |
+| `AUTH_MODE` | `herald` | no | `herald` or `none` |
+| `HERALD_BASE_URL` | — | when `herald` | HTTPS origin (HTTP only on loopback), no path/query/fragment |
+| `HERALD_REALM_ID` | — | when `herald` | The deployment-level realm; must match the status response |
+| `HERALD_CLIENT_ID` | — | when `herald` | OAuth client app id registered in Herald |
+| `HERALD_REDIRECT_URI` | — | when `herald` | HTTPS URL whose path is exactly `/api/auth/oauth/callback` |
+
+Startup fails fast with the names (never the values) of whatever is missing or malformed, so a broken config is safe to paste into an issue.
+
+## The Herald sign-in gate
+
+By default (`AUTH_MODE=herald`) the server puts its business endpoints behind a sign-in: clients obtain a bearer token through the server's OAuth flow against a [Herald](https://github.com/timzaak/herald) deployment (also open source; its image is `ghcr.io/timzaak/herald`). Health, the OpenAPI document and the auth endpoints stay public. The gate is service-level only — it does not add accounts, ownership or audit to spaces, and it does not change any of the semantics in [Sync and spaces](/docs/sync).
+
+On the extension side this is the login card in the Sync tab: one authorization window, then silent renewal.
+
+`AUTH_MODE=none` restores the space-key-only behavior explicitly. Anyone who obtains a space code can then use your server's space endpoints against it, so treat `none` as a loopback/dev convenience, not a deployment posture. Setting Herald variables while `AUTH_MODE=none` is active logs that they are being ignored.
+
+## HTTP surface
+
+Endpoints group into `auth` (sign-in mode probe, OAuth start/callback, token refresh), `spaces`, `scripts` and `ops` (health, OpenAPI). Space requests authenticate with the `X-Space-Key` header; gated deployments also require the bearer token in front of it. The full request/response schemas are rendered from the backend's utoipa annotations in the [OpenAPI reference](/docs/openapi) and served live at `/api/openapi.json`.

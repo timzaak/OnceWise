@@ -21,8 +21,10 @@ fn space_not_found() -> ApiError {
     }
 }
 
-/// Register a space: 201 on first registration; 200 (idempotent) when the id already exists under
-/// the same key; 409 SPACE_KEY_MISMATCH when it exists under a different key.
+/// Register a space.
+///
+/// 201 on first registration; 200 (idempotent) when the id already exists under the same key;
+/// 409 SPACE_KEY_MISMATCH when it exists under a different key.
 #[utoipa::path(
     post,
     path = "/api/spaces",
@@ -154,8 +156,9 @@ pub async fn create_space(
     ))
 }
 
-/// Read one space — the join verification endpoint (a code is only remembered client-side after
-/// this succeeds).
+/// Read one space — the join verification endpoint.
+///
+/// A code is only remembered client-side after this succeeds.
 #[utoipa::path(
     get,
     path = "/api/spaces/{spaceId}",
@@ -194,8 +197,9 @@ pub async fn get_space(
     }))
 }
 
-/// Delete a space (cascades scripts + versions). Holders of the code keep whatever they already
-/// pulled to their devices.
+/// Delete a space (cascades scripts + versions).
+///
+/// Holders of the code keep whatever they already pulled to their devices.
 #[utoipa::path(
     delete,
     path = "/api/spaces/{spaceId}",
@@ -232,6 +236,7 @@ pub async fn delete_space(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Liveness probe.
 #[utoipa::path(
     get,
     path = "/api/health",

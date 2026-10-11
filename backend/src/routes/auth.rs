@@ -270,6 +270,7 @@ fn bearer_token(headers: &HeaderMap) -> Result<String, ApiError> {
     Ok(token.to_string())
 }
 
+/// Probe the sign-in mode.
 #[utoipa::path(
     get,
     path = "/api/auth/config",
@@ -286,6 +287,7 @@ pub async fn get_auth_config(State(state): State<AppState>) -> Json<AuthConfigDt
     })
 }
 
+/// Start the OAuth sign-in (redirect to Herald authorize).
 #[utoipa::path(
     get,
     path = "/api/auth/oauth/start",
@@ -366,6 +368,7 @@ pub async fn oauth_start(
     ))
 }
 
+/// OAuth callback: exchange the code and hand back a one-time handoff code.
 #[utoipa::path(
     get,
     path = "/api/auth/oauth/callback",
@@ -554,6 +557,7 @@ pub async fn oauth_callback(
     ))
 }
 
+/// Redeem a handoff code for the token pair.
 #[utoipa::path(
     post,
     path = "/api/auth/redeem",
@@ -619,6 +623,7 @@ pub async fn redeem_token(
     })))
 }
 
+/// Refresh the access token (rotated pair).
 #[utoipa::path(
     post,
     path = "/api/auth/refresh",

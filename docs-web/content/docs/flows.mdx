@@ -1,0 +1,100 @@
+---
+title: Flows
+description: The flow format — constrained step trees, triggers, pre-run inputs, budgets, cross-page wizards, and the lifecycle of a saved flow.
+---
+
+A flow is a pure JSON document. The extension validates it against a closed vocabulary and executes exactly that vocabulary; a flow cannot carry code, expressions or scripts. That constraint is the point: it is what makes a flow safe to run unattended on a page you are logged into, because every step is one the engine knows how to bound and abort.
+
+The authoritative validators are `extension/lib/flow-schema.ts` and `extension/lib/step-schema.ts` in the repository; the full field reference is [`skills/oncewise-flow/references/flow-format.md`](https://github.com/timzaak/OnceWise/blob/main/skills/oncewise-flow/references/flow-format.md). This page is the working summary.
+
+## Top-level shape
+
+```json
+{
+  "schemaVersion": 1,
+  "name": "Morning report",
+  "site": "https://erp.example.com",
+  "page": { "urlIncludes": "/report/new" },
+  "trigger": { "kind": "pageEnter" },
+  "steps": [ { "...": "step tree" } ],
+  "inputs": [ { "...": "optional input declarations" } ],
+  "businessKey": { "...": "optional scalar read identifying the business instance" }
+}
+```
+
+| Field | Requirement | Notes |
+| --- | --- | --- |
+| `schemaVersion` | required | Numeric `1` only |
+| `name` | required | Nonempty after trimming |
+| `site` | required | HTTP(S) origin, optional port, no path |
+| `page` | required | Entry-page fingerprint; the only trigger binding surface |
+| `pages` | optional | Declared continuation pages for cross-page flows |
+| `trigger` | required | `pageEnter` or `fieldChange` (below) |
+| `steps` | required | Nonempty step tree |
+| `inputs` | optional | Pre-run input declarations (below) |
+| `budget` | optional | Limits that can only lower the engine caps |
+| `businessKey` | conditional | Required for a submit-like flow to auto-start |
+
+A page fingerprint is a narrow, stable fragment: `urlIncludes` matches a substring of the page URL's path and hash (query excluded), and an optional `contentIncludes` requires specific elements to be present. Choose fragments that identify the page, not the session.
+
+## Triggers
+
+```json
+{ "kind": "pageEnter" }
+{ "kind": "fieldChange", "field": { "...": "FieldRef" }, "condition": { "kind": "anyChange" } }
+{ "kind": "fieldChange", "field": { "...": "FieldRef" }, "condition": { "kind": "codeEquals", "code": "SZ" } }
+```
+
+`pageEnter` starts when the entry fingerprint becomes matched — including content that appears after loading — or when the declared business key changes while matched. `fieldChange` starts on a field change; `codeEquals` compares the selected code of an option (the text inside `[xxx]` in an Ant Design option, or the whole option text when brackets are absent).
+
+Each flow starts at most once per document and business instance, and submit-like flows additionally claim the business instance for the browser session, so the same order is never submitted twice.
+
+## Step kinds
+
+| `kind` | Behavior |
+| --- | --- |
+| `sequence` | Run children in order; stop on failure |
+| `read` | Store page data in `vars.<slot>` |
+| `action` | Perform an allowed action (set text, select option, check/uncheck, click, wait for an element) |
+| `if` | Branch on a predicate; continue when false with no `else` |
+| `foreach` | Iterate a collection sequentially, within the loop budget |
+| `wait` | Read-only polling with a deadline |
+| `assert` | Fail if the invariant is false |
+| `navigate` | Declare the expected jump to a continuation page |
+
+The engine caps what a flow can do regardless of what the JSON asks: at most 200 nodes and 8 levels of nesting in the tree, 100 items per loop, 60 seconds per wait, 15 minutes and 2,000 executed nodes per run. A flow's `budget` can only lower those caps, never raise them.
+
+## Pre-run inputs
+
+A flow can declare typed inputs instead of hardcoding values that change between runs:
+
+```json
+"inputs": [
+  { "key": "phone", "label": "Contact phone", "type": "text", "required": true },
+  { "key": "warehouse", "label": "Shipping warehouse", "type": "single", "required": false,
+    "options": [{ "value": "SZ", "label": "Shenzhen" }] }
+]
+```
+
+Types are `text`, `number`, `single`, `checkbox`, `date`, `time` and `multi`. You fill and save the values in the flow details in the side panel; the definitions travel with the flow, but your values stay on your device and are excluded from sync and logs. Steps consume them through references — `"value": { "ref": "inputs.phone" }` in a `setInputValue` action, for example; a bare string `"inputs.phone"` would be literal text.
+
+Saving input values does not start a run. The enabled flow still waits for its trigger, and a run uses the input snapshot taken at start. If an attempt was skipped because a required input was missing, save the values and re-enter (or reload) the entry page to trigger again.
+
+## Cross-page wizards
+
+For a routine that spans several sequential pages of the same site — form, then confirmation, then result — write one flow, not three. Declare each continuation page in `pages` with a fingerprint taken from that page's real DOM, and put a `navigate` node immediately after the click that causes the jump. The input snapshot, variables and loop progress carry across the jump automatically, and the extension rechecks the declared `businessKey` on arrival when its field is present.
+
+Two limits are structural: the extension never navigates by itself (if the click does not leave the page, the flow fails at the `navigate` deadline and does not retry), and only sequential full-page jumps within one origin are supported — including a next page opened in a new tab, but not cross-site orchestration, parallel tabs, or recovery of an interrupted run.
+
+## What a flow may never do
+
+The format excludes `delete`, `remove`, `payment`, `purchase` and `publish` actions, and flows are not created for platforms the usage instructions exclude, including Taobao and Amazon. When you ask for something the format cannot express (cross-site orchestration, parallel tabs), the assistant is instructed to say so plainly and point you to [the issue tracker](https://github.com/timzaak/OnceWise/issues) rather than improvise.
+
+## Lifecycle of a saved flow
+
+- Every import and every AI delivery arrives **disabled**. Enabling is a button only you can press, in the side panel.
+- Each flow keeps the last 10 saved versions; you can roll back from the history section, and you can delete the flow at any time.
+- Sensitive values are redacted when a flow is displayed in the side panel.
+- Content scripts are injected only on origins that actually carry your flows, and are removed when the last flow for a site is deleted.
+
+To have a flow written for you rather than by hand, see [AI handoff](/docs/ai-handoff). To share an enabled flow with teammates, see [Sync and spaces](/docs/sync).

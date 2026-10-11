@@ -1,0 +1,12 @@
+{
+  "title": "教程",
+  "pages": [
+    "getting-started",
+    "flows",
+    "ai-handoff",
+    "sync",
+    "self-hosting",
+    "architecture",
+    "openapi"
+  ]
+}

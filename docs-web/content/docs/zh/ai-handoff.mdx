@@ -1,0 +1,53 @@
+---
+title: AI 交接
+description: 你的 AI 助手如何检查页面、验证步骤并经本机通道交付流程，以及通往一条已保存流程之间的确认门。
+---
+
+交接是 AI 工具与扩展之间的回路。它跑在两条通道上，写任何流程之前两条都必须可用：
+
+- **Chrome DevTools MCP**——助手做页面发现、DOM 检查与交互（`list_pages`、`take_snapshot`、`fill`、`click`）的唯一工具。终端 HTTP 请求和其他浏览器控制工具不算数。
+- **本机流程通道**——`oncewise-message` skill 里的 `client.mjs` 与注册在操作系统用户层级的原生消息宿主（`ai.oncewise.native`）通信。宿主只在内存中转发，不向磁盘写流程数据，不经网络传输任何内容。
+
+两者的安装在[快速上手](/docs/zh/getting-started)；`oncewise-setup` skill 跑端到端检查。本页讲通道可用之后发生什么。
+
+## 客户端与它的五个动作
+
+```bash
+node skills/oncewise-message/client.mjs ping
+node skills/oncewise-message/client.mjs flow.read --flow-id <id>
+node skills/oncewise-message/client.mjs flow.validate --file flow.json
+node skills/oncewise-message/client.mjs flow.save --file flow.json
+node skills/oncewise-message/client.mjs flow.verify --ref <ref>
+```
+
+每条命令向 stdout 输出一行 JSON 结果。通道能交付和校验流程，不能操作页面，也不能启用、删除或回滚——这些都留在扩展 UI 的你这一侧。
+
+## 写一条流程
+
+助手按顺序做这些事：
+
+1. 用 `list_pages` 找到目标页，用 `take_snapshot` 检查，收集真实的 `id`、`name`、`label`、`placeholder`、`aria-label` 线索。定位符从不凭空发明。
+2. 在你授权的测试数据或记录上，用同一个 MCP 的 `fill`/`click` 验证定位符、取值与可逆动作，每步之后快照确认。任何保存、提交或其他业务状态变更之前，先确认目标与后果确实被授权。执行不安全时，它在该动作前停下并告知哪些步骤未验证。
+3. 写一份 schemaVersion 1 的 JSON 流程（格式摘要见[流程](/docs/zh/flows)）。
+4. 跑 `flow.validate --file <file>`，修掉每个错误直到通过。
+5. 向你展示校验后的 JSON、扩展的摘要、验证过什么、以及启用后会自动执行的提交类动作。**然后等你对"就是这份内容"的明确批准。**"帮我建个流程"的请求、点击"用 AI 优化"、或同意启用，都不算批准保存。任何修改后它会重新校验、重新展示、重新征求批准。
+6. 获批后用 `flow.save` 保存——`ok:true` 表示已保存且为禁用态——并用 `flow.verify --ref <ref>` 核对读回状态。
+
+之后助手会提醒你：若声明了输入项，去流程详情里填写。启用是你自己的事：在侧边栏按下开关，然后进入匹配页面。若编写期间没有做过真实运行，助手会说明——执行仍是未验证的。
+
+## 修订一条流程
+
+修订从你这一侧开始：在侧边栏打开流程，按**用 AI 优化**。扩展暂停该流程，并给助手 15 分钟的读取窗口。助手用 `flow.read --flow-id <id>` 读到完整流程（`updatedAt` 以此响应为准，不从摘要推断），只改你要求的部分，复查受影响的页面操作，保存前向你描述替换内容与差异。保存要同时带上两个标识：
+
+```bash
+node client.mjs flow.save --file flow.json --flow-id <id> --expected-updated-at <updatedAt>
+```
+
+替换成功后与任何保存一样落在禁用态。助手报 `read-not-authorized` 说明窗口未开或已过期——重新按一次"用 AI 优化"；报 `revision-stale`、`flow-enabled` 或 `flow-not-found` 时，它会停下来请你从侧边栏重新发起修订。放弃修订的话，被暂停的流程留给你恢复或处理。
+
+## 出错时
+
+- `extension-not-connected` 表示请求没到宿主。通道需要修复——跑 `oncewise-setup` 的检查。
+- `result-unknown` 表示一次保存可能发出去了也可能没有。助手会先用 `flow.verify` 和扩展状态核对，绝不假设成败，也绝不盲目重试。被拒绝或结果不确定之后的一次新保存，需要你重新确认。
+
+助手不操作扩展自身的控件，不通过存储或猜测的 URL 绕过它们；导入页面始终是留给你的确认面。当你要求的能力格式里没有时，它会说明限制并指向 [issue 跟踪器](https://github.com/timzaak/OnceWise/issues)——请勿在 issue 里粘贴流程 JSON、输入值或业务数据。

@@ -1,0 +1,56 @@
+@import url("https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,500;1,6..72,600&display=swap");
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+@import "fumadocs-openapi/css/preset.css";
+
+@theme {
+  --font-serif:
+    "Newsreader", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+:root {
+  --color-fd-primary: oklch(0.5424 0.2454 293.016);
+  --color-fd-primary-foreground: oklch(0.9843 0.0017 247.8393);
+  --color-fd-accent: oklch(0.9544 0.0226 302.568);
+  --color-fd-accent-foreground: oklch(0.5424 0.2454 293.016);
+}
+
+.dark {
+  --color-fd-primary: oklch(0.4865 0.2423 291.8661);
+  --color-fd-primary-foreground: oklch(0.9838 0.0035 247.8583);
+  --color-fd-accent: oklch(0.2302 0.0714 298.2794);
+  --color-fd-accent-foreground: oklch(0.4865 0.2423 291.8661);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  /* biome-ignore lint/complexity/noImportantStyles: must match the !important inline
+     styles react-remove-scroll injects to neutralise its scrollbar compensation */
+  margin-right: 0px !important;
+  /* biome-ignore lint/complexity/noImportantStyles: same scroll-lock override */
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* Mermaid SVG carries a fixed pixel width; keep wide diagrams scrollable inside
+   the prose container instead of overflowing the page. */
+.mermaid-diagram {
+  max-width: 100%;
+  overflow-x: auto;
+}

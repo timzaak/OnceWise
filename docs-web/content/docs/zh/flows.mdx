@@ -1,0 +1,100 @@
+---
+title: 流程
+description: 流程格式——受约束步骤树、触发器、运行前输入、预算、跨页向导，以及一条流程保存后的生命周期。
+---
+
+流程是纯 JSON 文档。扩展按一个封闭词表校验并执行它；流程不能携带代码、表达式或脚本。这个约束是刻意的：正因为每个步骤都是引擎认识、能限界、能中止的动作，在登录过的页面上无人值守运行才是可接受的。
+
+权威校验器是仓库里的 `extension/lib/flow-schema.ts` 与 `extension/lib/step-schema.ts`；完整字段参考在 [`skills/oncewise-flow/references/flow-format.md`](https://github.com/timzaak/OnceWise/blob/main/skills/oncewise-flow/references/flow-format.md)。本页是工作摘要。
+
+## 顶层结构
+
+```json
+{
+  "schemaVersion": 1,
+  "name": "Morning report",
+  "site": "https://erp.example.com",
+  "page": { "urlIncludes": "/report/new" },
+  "trigger": { "kind": "pageEnter" },
+  "steps": [ { "...": "步骤树" } ],
+  "inputs": [ { "...": "可选的输入声明" } ],
+  "businessKey": { "...": "可选：标识业务实例的标量读取" }
+}
+```
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `schemaVersion` | 是 | 只接受数字 `1` |
+| `name` | 是 | 去除首尾空格后非空 |
+| `site` | 是 | HTTP(S) origin，可带端口，无路径 |
+| `page` | 是 | 入口页指纹；唯一的触发绑定面 |
+| `pages` | 否 | 跨页流程声明的后续页面 |
+| `trigger` | 是 | `pageEnter` 或 `fieldChange`（见下） |
+| `steps` | 是 | 非空步骤树 |
+| `inputs` | 否 | 运行前输入声明（见下） |
+| `budget` | 否 | 只能调低引擎上限的预算 |
+| `businessKey` | 条件 | 提交类流程自动启动时必需 |
+
+页面指纹是窄而稳的片段：`urlIncludes` 匹配页面 URL 路径与哈希的子串（不含查询串），可选的 `contentIncludes` 要求指定元素存在。选能识别页面本身的片段，别选跟会话有关的。
+
+## 触发器
+
+```json
+{ "kind": "pageEnter" }
+{ "kind": "fieldChange", "field": { "...": "FieldRef" }, "condition": { "kind": "anyChange" } }
+{ "kind": "fieldChange", "field": { "...": "FieldRef" }, "condition": { "kind": "codeEquals", "code": "SZ" } }
+```
+
+`pageEnter` 在入口指纹匹配时启动（含加载后才出现的内容），或匹配期间声明的业务键发生变化时启动。`fieldChange` 在字段变化时启动；`codeEquals` 比较选项的 code（Ant Design 选项里 `[xxx]` 中的文本，无方括号时为整个选项文本）。
+
+每条流程对每个文档和业务实例最多启动一次；提交类流程还会在浏览器会话内认领业务实例，同一笔业务不会被提交两次。
+
+## 步骤种类
+
+| `kind` | 行为 |
+| --- | --- |
+| `sequence` | 顺序执行子节点；失败即停 |
+| `read` | 把页面数据存入 `vars.<槽位>` |
+| `action` | 执行允许的动作（填文本、选选项、勾选/取消、点击、等待元素） |
+| `if` | 按谓词分支；无 `else` 时为假则继续 |
+| `foreach` | 在循环预算内顺序迭代集合 |
+| `wait` | 带截止时间的只读轮询 |
+| `assert` | 不变量为假则失败 |
+| `navigate` | 声明跳转到后续页的预期 |
+
+不管 JSON 写什么，引擎上限不变：树最多 200 个节点、8 层嵌套，每个循环最多 100 项，每次等待最多 60 秒，每次运行最多 15 分钟、执行 2,000 个节点。流程的 `budget` 只能调低这些上限，调不高。
+
+## 运行前输入
+
+流程可以声明类型化输入，而不是把每次都会变的值硬编码进去：
+
+```json
+"inputs": [
+  { "key": "phone", "label": "Contact phone", "type": "text", "required": true },
+  { "key": "warehouse", "label": "Shipping warehouse", "type": "single", "required": false,
+    "options": [{ "value": "SZ", "label": "Shenzhen" }] }
+]
+```
+
+类型有 `text`、`number`、`single`、`checkbox`、`date`、`time`、`multi`。你在侧边栏的流程详情里填写并保存这些值；定义随流程走，值只留在你的设备上，同步与日志都不含它。步骤通过引用消费输入——比如 `setInputValue` 动作里写 `"value": { "ref": "inputs.phone" }`；裸字符串 `"inputs.phone"` 会被当成字面文本。
+
+保存输入值不会启动运行。已启用的流程仍然等它的触发器，且每次运行使用启动那一刻的输入快照。若一次尝试因必填输入缺失被跳过，保存好值之后重新进入（或刷新）入口页即可再次触发。
+
+## 跨页向导
+
+同站的多个顺序页面——表单、确认页、结果页——写成一条流程而不是三条。在 `pages` 里为每个后续页面声明取自真实 DOM 的指纹，并在引发跳转的点击后紧跟一个 `navigate` 节点。输入快照、变量与循环进度自动带过跳转；到达后若声明的 `businessKey` 字段存在，扩展会复查它。
+
+两条结构性限制：扩展从不自己导航（点击没有离开页面时，流程在 `navigate` 的截止时间失败，不重试）；只支持同 origin 的顺序整页跳转——包括新标签页打开的下一页，但不支持跨站编排、并行标签页、或中断后续跑。
+
+## 流程永远不能做的事
+
+格式排除 `delete`、`remove`、`payment`、`purchase`、`publish` 动作；使用说明排除的平台（含淘宝、Amazon）不会为其创建流程。当你要求格式表达不了的能力（跨站编排、并行标签页）时，助手的规矩是把限制说清楚并指向 [issue 跟踪器](https://github.com/timzaak/OnceWise/issues)，而不是即兴发挥。
+
+## 保存后的生命周期
+
+- 所有导入与 AI 交付都以**禁用态**到达。启用是侧边栏里只有你能按的按钮。
+- 每条流程保留最近 10 个已保存版本，可在历史区回滚，也可随时删除。
+- 侧边栏展示流程时，敏感值打码。
+- 内容脚本只注入真正携带流程的 origin；某站点最后一条流程删除后即解除注册。
+
+想让流程被写出来而不是手写，见[AI 交接](/docs/zh/ai-handoff)。想把流程共享给同事，见[同步与空间](/docs/zh/sync)。

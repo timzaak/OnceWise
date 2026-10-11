@@ -35,4 +35,4 @@ OnceWise Flow 自动化重复的网页操作——反复填写的表单、多步
 流程也可以来自同步空间：在「同步」页签填入你的服务器地址，拉取共享脚本即可。
 
 源码与文档：https://github.com/timzaak/OnceWise
-隐私政策：https://timzaak.github.io/OnceWise/
+隐私政策：https://timzaak.github.io/OnceWise/en/privacy

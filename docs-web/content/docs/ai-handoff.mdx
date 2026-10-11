@@ -1,0 +1,53 @@
+---
+title: AI handoff
+description: How your AI assistant inspects pages, verifies steps and delivers flows through the local channel — and the approval gates between it and a saved flow.
+---
+
+The handoff is the loop between your AI tool and the extension. It runs over two channels, and both must work before any flow is written:
+
+- **Chrome DevTools MCP** — the only tool your assistant may use for page discovery, DOM inspection and interaction (`list_pages`, `take_snapshot`, `fill`, `click`). Terminal HTTP requests and other browser-control tools do not qualify.
+- **The local flow channel** — `client.mjs` in the `oncewise-message` skill talks to a native-messaging host (`ai.oncewise.native`) registered at your OS user level. The host relays data in memory, writes no flow data to disk, and carries nothing over the network.
+
+Installation of both is covered in [Getting started](/docs/getting-started); the `oncewise-setup` skill runs the end-to-end check. This page is about what happens once they work.
+
+## The client and its five verbs
+
+```bash
+node skills/oncewise-message/client.mjs ping
+node skills/oncewise-message/client.mjs flow.read --flow-id <id>
+node skills/oncewise-message/client.mjs flow.validate --file flow.json
+node skills/oncewise-message/client.mjs flow.save --file flow.json
+node skills/oncewise-message/client.mjs flow.verify --ref <ref>
+```
+
+Each command prints one JSON result to stdout. The channel can deliver and validate flows; it cannot operate pages, and it cannot enable, delete or roll back anything. Those stay on your side of the extension UI.
+
+## Writing a flow
+
+What your assistant does, in order:
+
+1. Finds the target pages with `list_pages` and inspects them with `take_snapshot`, collecting real `id`, `name`, `label`, `placeholder` and `aria-label` clues. Selectors are never invented.
+2. Verifies locators, values and reversible actions on test data or records you authorized, using the same MCP's `fill`/`click` and a snapshot after each action. Before any save, submit or other business-state change, it makes sure the target and consequence are actually authorized. If execution is unsafe, it stops before that action and tells you which steps went unverified.
+3. Writes one schemaVersion 1 JSON flow ([Flows](/docs/flows) has the format summary).
+4. Runs `flow.validate --file <file>` and fixes every error until it passes.
+5. Shows you the validated JSON, the extension's summary, what was tested, and any submit-like action that will run automatically after enablement. **It then waits for your explicit approval of exactly this content.** A request to "create a flow", a click on Improve with AI, or approval to enable does not approve saving. After any revision it revalidates, shows the content again, and asks again.
+6. On your approval, saves with `flow.save` — the response `ok:true` means saved and disabled — and verifies the read-back with `flow.verify --ref <ref>`.
+
+Afterwards the assistant tells you to fill any declared inputs in the flow details. Enabling is yours: press the switch in the side panel, then enter the matching page. If no live run was performed during authoring, the assistant says so — execution remains unverified.
+
+## Revising a flow
+
+Revision starts on your side: open the flow in the side panel and press **用 AI 优化** (Improve with AI). The extension pauses the flow and grants your assistant a 15-minute read window. The assistant reads the full flow with `flow.read --flow-id <id>` (the `updatedAt` from the response, not a summary), changes only what you asked for, rechecks the affected page operations, and describes the replacement before asking for approval to save. The save carries both IDs:
+
+```bash
+node client.mjs flow.save --file flow.json --flow-id <id> --expected-updated-at <updatedAt>
+```
+
+A successful replacement lands disabled, like any save. If the assistant reports `read-not-authorized`, the window expired or was never opened — press Improve with AI again. On `revision-stale`, `flow-enabled` or `flow-not-found`, it stops and asks you to restart the revision from the side panel. If you abandon a revision, the paused flow waits for you to resume or manage it.
+
+## When something breaks
+
+- `extension-not-connected` means the request never reached the host. The channel needs repair — run the `oncewise-setup` checks.
+- `result-unknown` means a save may or may not have gone through. The assistant checks `flow.verify` and the extension state before acting; it never assumes success or failure and never blindly retries. A fresh save after a rejected or uncertain result needs a new confirmation from you.
+
+The assistant does not operate the extension's own controls, does not bypass them through storage or guessed URLs, and the import page stays a confirmation surface for you. When a requested capability does not exist in the format, it states the limit and points to [the issue tracker](https://github.com/timzaak/OnceWise/issues) — please keep flow JSON, input values and business data out of issues.

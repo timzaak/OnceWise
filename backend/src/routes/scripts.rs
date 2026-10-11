@@ -57,8 +57,10 @@ fn script_not_found() -> ApiError {
     }
 }
 
-/// Create a script: one transaction inserts scripts + script_versions(v1). The script id comes from
-/// the client; a duplicate is a 409 SCRIPT_EXISTS, not a silent rebind.
+/// Create a script.
+///
+/// One transaction inserts scripts + script_versions(v1). The script id comes from the client; a
+/// duplicate is a 409 SCRIPT_EXISTS, not a silent rebind.
 #[utoipa::path(
     post,
     path = "/api/spaces/{spaceId}/scripts",
@@ -147,8 +149,10 @@ pub async fn create_script(
     ))
 }
 
-/// All script metadata for the space (updatedAt desc); latestVersionNumber is the only server-side
-/// support point for the client's "new version available" comparison (pinned versions are local).
+/// List all script metadata for the space (updatedAt desc).
+///
+/// latestVersionNumber is the only server-side support point for the client's "new version
+/// available" comparison (pinned versions are local).
 #[utoipa::path(
     get,
     path = "/api/spaces/{spaceId}/scripts",
@@ -180,8 +184,10 @@ pub async fn list_scripts(
     Ok(Json(rows.into_iter().map(script_dto).collect()))
 }
 
-/// Rename / edit note: takes effect immediately without creating a version (scripts row only); at
-/// least one of name/note must be present.
+/// Rename / edit note.
+///
+/// Takes effect immediately without creating a version (scripts row only); at least one of
+/// name/note must be present.
 #[utoipa::path(
     patch,
     path = "/api/spaces/{spaceId}/scripts/{scriptId}",
@@ -264,11 +270,12 @@ pub async fn update_script(
     Ok(Json(script_dto(row)))
 }
 
-/// Append an immutable new version: MAX(version_number)+1 allocation + INSERT + scripts.updated_at
-/// refresh, all inside one write transaction holding a row lock on the script (SELECT … FOR
-/// UPDATE — PostgreSQL's replacement for SQLite's whole-database BEGIN IMMEDIATE
-/// serialization); the UNIQUE(script_id, version_number)
-/// backstop hitting means an invariant broke and is treated as an internal error.
+/// Append an immutable new version of the script's content.
+///
+/// MAX(version_number)+1 allocation + INSERT + scripts.updated_at refresh, all inside one write
+/// transaction holding a row lock on the script (SELECT … FOR UPDATE — PostgreSQL's replacement
+/// for SQLite's whole-database BEGIN IMMEDIATE serialization); the UNIQUE(script_id,
+/// version_number) backstop hitting means an invariant broke and is treated as an internal error.
 #[utoipa::path(
     post,
     path = "/api/spaces/{spaceId}/scripts/{scriptId}/versions",
@@ -364,7 +371,7 @@ pub async fn create_script_version(
     ))
 }
 
-/// Version list (versionNumber desc; the browsing basis for rollback/switch).
+/// List a script's versions (versionNumber desc) — the browsing basis for rollback/switch.
 #[utoipa::path(
     get,
     path = "/api/spaces/{spaceId}/scripts/{scriptId}/versions",
@@ -419,8 +426,9 @@ pub async fn list_script_versions(
     Ok(Json(items))
 }
 
-/// Fetch one version's full flow content (the immutable snapshot; the single data source for
-/// pull/switch/rollback).
+/// Fetch one version's full flow content.
+///
+/// The immutable snapshot; the single data source for pull/switch/rollback.
 #[utoipa::path(
     get,
     path = "/api/spaces/{spaceId}/scripts/{scriptId}/versions/{versionNumber}",

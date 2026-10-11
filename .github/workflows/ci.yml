@@ -7,6 +7,7 @@ on:
     paths-ignore:
       - '*.md'
       - 'docs/**'
+      - 'docs-web/**'
       - '.github/workflows/**'
   # Manual dispatch: paths-filter has no diff to compare on dispatch, so every
   # job's `if` below ORs in the event name to run all three.

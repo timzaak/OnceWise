@@ -1,0 +1,40 @@
+---
+title: Sync and spaces
+description: Share selected flows as versioned scripts with teammates via space codes, through an optional self-hosted sync server.
+---
+
+Sync is optional. The extension is local-first: your browser storage is the data master, and everything in [Flows](/docs/flows) works with no server at all. What sync adds is one thing — a place to hand a flow to a teammate as a versioned script, without either of you creating an account.
+
+## Model
+
+- A **space** is a script shelf addressed by a pair generated on your device: a space ID and a key. The server stores and distributes structured script data; it never generates or executes flows.
+- A **space code** is the pair in text form, `SpaceID#Key`. You pass it to a teammate over whatever channel you already use (IM, email). There is no invitation system, no roles, and no in-product messaging.
+- A **script** is a flow that has entered a space. Saving a local flow as a script records its name and note; every content change is stored as a new **immutable version**. Renaming or re-noting does not create a version.
+
+Anyone holding the code has equal rights in the space: read, write, rename, publish, delete. That fits small mutually-trusting teams; it is not a permission system. If you lose the code, you lose the space — the server keeps no recovery channel, by design.
+
+## Turning sync on
+
+Open the side panel's **Sync** tab and enter the server URL (an [oncewise-ai-sync](/docs/self-hosting) deployment, run by you or someone you trust). The extension probes the server's sign-in mode first:
+
+- A server deployed with the default Herald gate shows a login card; signing in opens the server's authorization window once, and the session renews silently afterwards. Credentials live in your browser's local storage.
+- A server deployed with `AUTH_MODE=none` skips sign-in entirely and takes you straight to the spaces.
+
+## Sharing a flow
+
+1. **Create a space** in the Sync tab. The ID and key are generated on your device; the space is registered with the server and selected locally.
+2. **Copy the space code** (visible in the space list) and send it to your teammate.
+3. Your teammate **pastes the code** in their Sync tab. The server verifies it before anything is recorded on their device; a wrong or nonexistent code is rejected with the reason.
+4. **Save the flow as a script** in the space from your side.
+5. Your teammate browses the space's scripts, previews a version's summary, and **pulls the version they want** to their device.
+
+A pulled script arrives as a local flow, disabled, after passing the same validation as any other import. Your teammate enables it themselves and it runs at that version. When you publish a new version later, their side gets a notice — nothing on their device changes until they choose to pull it. Local revisions you have not published are marked as unpublished on your side; switching and rolling back are manual.
+
+## Forgetting and deleting
+
+- **Forget** removes the space from your device only — your pulled flows and local data stay.
+- **Delete** removes the space on the server, cascading to its scripts. Everyone's already-pulled local content is untouched.
+
+## Running your own server
+
+The server is a small Rust/Axum service over PostgreSQL with a published container image. See [Self-hosting](/docs/self-hosting) for the environment variables, the Herald sign-in gate, and the full HTTP surface in the [OpenAPI reference](/docs/openapi).

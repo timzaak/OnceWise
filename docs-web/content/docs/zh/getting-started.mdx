@@ -1,0 +1,91 @@
+---
+title: 快速上手
+description: 安装扩展、agent skills 与本机宿主，然后把第一条例行操作交给你的 AI 助手。
+---
+
+本页带你从一台空浏览器走到一条已启用的流程。途中会装三样东西：扩展本体、OnceWise agent skills（装进你的 AI 工具）和一个本机原生消息宿主（两者之间的本地通道）。
+
+## 流程跑起来是什么样
+
+你向 AI 助手描述一个例行操作，比如"每天早上我打开订单页，填一遍上报表单，然后提交"。助手检查页面、在你授权的数据上逐步验证，然后通过一条不离开你机器的通道把流程交付给扩展。流程到达时是**禁用态**。你在侧边栏里读完内容，亲手按下启用；之后每次打开匹配的页面，这些步骤自动完成。
+
+扩展是唯一的校验者和存储点。你的 AI 工具永远不会去点扩展的控件，任何东西在你启用之前都不会运行。
+
+## 安装扩展
+
+两种安装形态：
+
+- **Chrome Web Store 版**（上架后推荐）。商店直装；商店分配的扩展 ID 为 `dmmhmcdbkbbgbcidafhlhepdchjboenc`。
+- **源码开发版**。需要 Node.js 和 npm：
+
+```bash
+cd extension
+npm install
+npm run build        # MV3 生产构建 → .output/chrome-mv3
+```
+
+然后打开 `chrome://extensions`，开启开发者模式，点"加载已解压的扩展程序"，选择 `extension/.output/chrome-mv3`。该构建在 manifest 里固定了 key，因此扩展 ID 恒为 `fkkfdckchahnjkcbimnbhonbgcefnafi`。
+
+扩展必须装在你的 AI 工具驱动的那个 Chrome 里。单击工具栏图标打开流程工作台侧边栏；界面以英语为主，内置中文。
+
+## 安装 agent skills
+
+skills 教会你的 AI 工具（Claude Code、Cursor、ZCode，或任何支持 Agent Skills 格式的工具）如何检查页面、按正确的 JSON 格式编写流程并交付。在仓库根目录：
+
+```bash
+npx skills add timzaak/OnceWise --skill oncewise-setup --skill oncewise-flow --skill oncewise-message
+```
+
+仓库尚为私有或你在本地克隆上工作时，改用本地路径——在克隆根目录以相同的 `--skill` 参数执行 `npx skills add .`。
+
+三个 skill 一起安装，且必须并排放在同一位置：
+
+| Skill | 用途 |
+| --- | --- |
+| `oncewise-setup` | 首次检查：Chrome DevTools MCP、扩展、本机宿主 |
+| `oncewise-flow` | 编写、校验、保存与验证流程 |
+| `oncewise-message` | 另外两个 skill 依赖的本机通道程序 |
+
+你的 AI 工具还需要配置 Chrome DevTools MCP，才能读页面（`list_pages`、`take_snapshot`、`fill`、`click`）。配置指南在仓库的 [`skills/oncewise-setup/references/mcp-setup.md`](https://github.com/timzaak/OnceWise/blob/main/skills/oncewise-setup/references/mcp-setup.md)。在你的工具里调用 `oncewise-setup` 即可跑完整检查；它会端到端验证两条通道，并明确报告缺什么。
+
+## 安装本机宿主
+
+流程交接经由注册在操作系统用户层级的原生消息宿主完成。需要 Node.js 22 及以上，安装一次，不经网络传输任何内容：
+
+```bash
+cd skills/oncewise-message
+node install.mjs
+```
+
+宿主默认绑定 Chrome Web Store 版构建。源码开发版需要显式传入其 ID：
+
+```bash
+node install.mjs --extension-id fkkfdckchahnjkcbimnbhonbgcefnafi
+```
+
+浏览器是 Chromium 而非 Chrome 时追加 `--browser chromium`。安装后重启浏览器，然后验证：
+
+```bash
+node client.mjs ping
+```
+
+输出一行 `"ok":true` 的 JSON 即通道正常。其他结果说明扩展与宿主还没接上——[`oncewise-setup`](https://github.com/timzaak/OnceWise/blob/main/skills/oncewise-setup/references/native-host-setup.md) 的参考文档列了各类故障的处理。
+
+## 你的第一条流程
+
+1. 在 AI 工具驱动的 Chrome 里打开目标页。只想找个安全目标的话，仓库在 `extension/test-pages/` 下备有受控测试页（`form-page.html`、`wizard-step1.html` 等），本地起个静态服务或直接从磁盘打开都行。
+2. 请助手在这个页面上录一条流程。它会用浏览器工具检查页面，在你授权的数据上试每一步，把流程写成 JSON 并校验（`flow.validate`）。
+3. 审看它展示的内容：校验通过的流程、在真实页面上验证过什么、以及启用后会自动执行的提交类动作。**对"就是这份内容"给出明确批准**——助手会等到这一步才保存。
+4. 助手保存（`flow.save`）并核对读回状态（`flow.verify`）。流程已进入扩展，禁用态。
+5. 在侧边栏（工具栏图标）打开这条流程。若声明了运行前输入项，先填写并保存。然后按下启用。
+6. 进入匹配页面（或刷新）。流程自动运行。
+
+流程 JSON 的结构、步骤种类与边界见[流程](/docs/zh/flows)。交接全流程（含修订既有流程）见[AI 交接](/docs/zh/ai-handoff)。
+
+## 接下来看什么
+
+- [流程](/docs/zh/flows)——流程格式、触发器、输入表单、预算、跨页向导
+- [AI 交接](/docs/zh/ai-handoff)——两条通道、确认门、修订流程
+- [同步与空间](/docs/zh/sync)——用空间码与同事共享流程（可选）
+- [自托管同步服务](/docs/zh/self-hosting)——自己跑 oncewise-ai-sync
+- [架构](/docs/zh/architecture)——各部分如何协作

@@ -1,0 +1,67 @@
+---
+title: 自托管同步服务
+description: 运行 oncewise-ai-sync——从一条命令的开发形态，到已发布的容器镜像、环境变量与 Herald 登录门禁。
+---
+
+同步后端（`oncewise-ai-sync`）是跑在 PostgreSQL 上的 Rust/Axum 服务。它为[空间](/docs/zh/sync)存储和分发结构化脚本数据，从不生成或执行流程；空间模型没有账号、归属或成员概念——但部署可以加一道登录门禁（见下）。
+
+## 从源码快速运行
+
+试用或开发：
+
+```bash
+docker run -d --name oncewise-demo-pg -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5432:5432 postgres:18-alpine
+
+cd backend
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres AUTH_MODE=none cargo run
+```
+
+服务器默认监听 `0.0.0.0:8080`，启动时自动跑数据库迁移。验证：
+
+```bash
+curl http://127.0.0.1:8080/api/health        # → 200
+curl http://127.0.0.1:8080/api/openapi.json  # OpenAPI 3 文档
+```
+
+上面带 `AUTH_MODE=none` 是因为默认模式要求 Herald 配置（见下）。任何要暴露到本机之外的服务，都不要用 `none` 上线。
+
+## 容器镜像
+
+每个 `v*.*.*` 标签都会发布镜像：
+
+```bash
+docker pull ghcr.io/timzaak/oncewise:latest
+docker run -d --name oncewise-sync \
+  -e DATABASE_URL=postgres://user:pass@db:5432/oncewise \
+  -e AUTH_MODE=none \
+  -p 8080:8080 \
+  ghcr.io/timzaak/oncewise:latest
+```
+
+把扩展同步页签指向该服务器 origin（例如 `https://sync.example.com`），客户端侧就完成了。
+
+## 环境变量
+
+| 变量 | 默认值 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | — | 是 | `postgres://user:pass@host:5432/dbname` |
+| `BIND_ADDR` | `0.0.0.0:8080` | 否 | 监听地址 |
+| `AUTH_MODE` | `herald` | 否 | `herald` 或 `none` |
+| `HERALD_BASE_URL` | — | `herald` 时 | HTTPS origin（仅环回允许 HTTP），无路径/查询/片段 |
+| `HERALD_REALM_ID` | — | `herald` 时 | 部署级 realm，须与状态响应一致 |
+| `HERALD_CLIENT_ID` | — | `herald` 时 | Herald 控制台注册的 OAuth client id |
+| `HERALD_REDIRECT_URI` | — | `herald` 时 | 路径恰为 `/api/auth/oauth/callback` 的 HTTPS URL |
+
+启动时缺什么、格式错什么都会立刻报错，且只输出变量名不回显值，可以放心贴进 issue。
+
+## Herald 登录门禁
+
+默认（`AUTH_MODE=herald`）把业务端点放在登录之后：客户端经服务器对某个 [Herald](https://github.com/timzaak/herald) 部署（同样开源，镜像 `ghcr.io/timzaak/herald`）的 OAuth 流程取得 bearer token。健康检查、OpenAPI 文档与 auth 端点保持公开。门禁只在服务级——不给空间加账号、归属或审计，也不改变[同步与空间](/docs/zh/sync)里的任何语义。
+
+扩展一侧对应同步页签里的登录卡片：开一次授权窗口，之后静默续期。
+
+`AUTH_MODE=none` 显式回到仅凭空间密钥的形态。任何人拿到空间码就能用你服务器的空间端点，所以把 `none` 当作环回/开发便利，而不是部署姿态。`AUTH_MODE=none` 时设置了 Herald 变量，日志会说明它们被忽略。
+
+## HTTP 接口
+
+端点按 `auth`（登录模式探测、OAuth 发起/回调、token 刷新）、`spaces`、`scripts`、`ops`（健康、OpenAPI）分组。空间请求用 `X-Space-Key` 头认证；开门禁的部署还要在其前叠加 bearer token。完整的请求/响应 schema 由后端 utoipa 注解生成，渲染在 [OpenAPI 参考](/docs/zh/openapi)，线上亦实时提供于 `/api/openapi.json`。

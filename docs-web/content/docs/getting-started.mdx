@@ -1,0 +1,91 @@
+---
+title: Getting started
+description: Install the extension, the agent skills and the native host, then hand your first routine to your AI assistant.
+---
+
+This page takes you from an empty browser to an enabled flow. Three things get installed along the way: the extension itself, the OnceWise agent skills (for your AI tool), and a native-messaging host (the local channel between the two).
+
+## What a flow looks like when it works
+
+You describe a routine to your AI assistant, such as "every morning I open the order page, fill the report form, and submit it". The assistant inspects the page, verifies each step on data you authorize, and hands the flow to the extension over a channel that stays on your machine. The flow arrives **disabled**. You read it in the side panel, press Enable yourself, and from then on the steps run whenever you open a matching page.
+
+The extension is the only validator and store. Your AI tool never clicks extension controls, and nothing runs before you enable it.
+
+## Install the extension
+
+Two install flavors exist:
+
+- **Chrome Web Store version** (recommended once the listing is live). Install directly from the store; the store-assigned extension ID is `dmmhmcdbkbbgbcidafhlhepdchjboenc`.
+- **Source-code development version.** Requires Node.js and npm:
+
+```bash
+cd extension
+npm install
+npm run build        # MV3 production build → .output/chrome-mv3
+```
+
+Then open `chrome://extensions`, enable Developer mode, click "Load unpacked", and select `extension/.output/chrome-mv3`. This build pins a key in its manifest, so the extension ID is permanently `fkkfdckchahnjkcbimnbhonbgcefnafi`.
+
+The extension must live in the Chrome instance your AI tool drives. Clicking the toolbar icon opens the flow workbench side panel; the interface is English-first with built-in Chinese.
+
+## Install the agent skills
+
+The skills teach your AI tool (Claude Code, Cursor, ZCode, or anything that supports the Agent Skills format) how to inspect pages, author flows in the right JSON format, and deliver them. From the repository root:
+
+```bash
+npx skills add timzaak/OnceWise --skill oncewise-setup --skill oncewise-flow --skill oncewise-message
+```
+
+While the repository is private or you are working from a local clone, use the local path instead — `npx skills add .` with the same `--skill` flags, run from the clone's root.
+
+Three skills install together, and all three must sit side by side:
+
+| Skill | Purpose |
+| --- | --- |
+| `oncewise-setup` | First-time checks: Chrome DevTools MCP, extension, native host |
+| `oncewise-flow` | Author, validate, save and verify flows |
+| `oncewise-message` | The local channel programs the other two depend on |
+
+Your AI tool also needs Chrome DevTools MCP configured so it can read pages (`list_pages`, `take_snapshot`, `fill`, `click`). The setup guide lives at [`skills/oncewise-setup/references/mcp-setup.md`](https://github.com/timzaak/OnceWise/blob/main/skills/oncewise-setup/references/mcp-setup.md) in the repository. Invoke `oncewise-setup` in your tool to run the whole check; it verifies both channels end to end and reports exactly what is missing.
+
+## Install the native host
+
+The flow handover runs through a native-messaging host registered at your OS user level. It requires Node.js 22 or newer, installs once, and carries nothing over the network:
+
+```bash
+cd skills/oncewise-message
+node install.mjs
+```
+
+By default the host binds the Chrome Web Store build. For the source-code development build, pass its ID explicitly:
+
+```bash
+node install.mjs --extension-id fkkfdckchahnjkcbimnbhonbgcefnafi
+```
+
+Add `--browser chromium` when your browser is Chromium rather than Chrome. Restart the browser after installing, then verify:
+
+```bash
+node client.mjs ping
+```
+
+One JSON line with `"ok":true` means the channel works. Anything else means the extension and the host are not talking yet — the [`oncewise-setup`](https://github.com/timzaak/OnceWise/blob/main/skills/oncewise-setup/references/native-host-setup.md) reference covers the failure modes.
+
+## Your first flow
+
+1. Open the target page in the Chrome your AI tool drives. If you just want a safe target, the repository ships controlled fixtures under `extension/test-pages/` (`form-page.html`, `wizard-step1.html` and friends) — serve them locally or open them from disk.
+2. Ask your assistant to record a flow on that page. It will inspect the page through browser tools, try the steps on data you authorize, write the flow as JSON, and validate it (`flow.validate`).
+3. Review what it shows you: the validated flow, what was tested on the real page, and any submit-like action that will run automatically after you enable. **Approve exactly this content** — the assistant waits for that before saving.
+4. The assistant saves (`flow.save`) and verifies the read-back (`flow.verify`). The flow is now in the extension, disabled.
+5. In the side panel (toolbar icon), open the flow. If it declares pre-run inputs, fill and save them. Then press Enable.
+6. Enter the matching page (or reload it). The flow runs by itself.
+
+How the flow JSON is structured, what step kinds exist and what they may never do is covered in [Flows](/docs/flows). The handoff workflow in detail, including revising an existing flow, is in [AI handoff](/docs/ai-handoff).
+
+## Where to go next
+
+- [Flows](/docs/flows) — the flow format, triggers, inputs, budgets, cross-page wizards
+- [AI handoff](/docs/ai-handoff) — the two channels, the approval gates, revising a flow
+- [Sync and spaces](/docs/sync) — share flows with teammates via space codes (optional)
+- [Self-hosting the sync server](/docs/self-hosting) — run oncewise-ai-sync yourself
+- [Architecture](/docs/architecture) — how the pieces fit together

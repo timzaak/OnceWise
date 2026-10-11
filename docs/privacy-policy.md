@@ -1,11 +1,12 @@
 # OnceWise Flow — Privacy Policy / 隐私政策
 
-> 用途说明（中文）：本文档是 Chrome Web Store 上架所需隐私政策的唯一来源；"Permissions" 一节的权限理由同时可用作控制台权限说明字段的填写素材。发布页已备好：本地 `gh-pages` 分支（仅含自包含 `index.html`，内容取自本文档，更新政策后需同步重做该页）。仓库当前为私有，GitHub Pages 需公开仓库；**开源后**两步上线：
+> 用途说明（中文）：本文档是 Chrome Web Store 上架所需隐私政策的唯一来源；"Permissions" 一节的权限理由同时可用作控制台权限说明字段的填写素材。
 >
-> 1. `git push origin gh-pages`
-> 2. 启用 Pages：仓库 Settings → Pages → Source 选 `gh-pages` 分支根目录（或 `gh api -X POST repos/timzaak/OnceWise/pages -f 'source[branch]=gh-pages' -f 'source[path]=/'`）
+> **发布方式（2026-10-10 起更新）**：隐私政策页随 `docs-web/` 文档站发布（站点含英中双语 `/en/privacy`、`/zh/privacy` 页面，内容取自本文档；更新政策后同步修订 `docs-web/src/components/privacy-page.tsx` 并更新其生效日期）。发布走 `.github/workflows/docs-pages.yml`（main 分支改动 `docs-web/**` 或后端 OpenAPI 面即自动构建部署，无需 gh-pages 分支）；仓库当前为私有，GitHub Pages 需公开仓库，**开源后**一步启用：
 >
-> 上线后 URL：`https://timzaak.github.io/OnceWise/`，将其填入开发者控制台 Privacy 标签页。切勿改用 main 分支 `/docs` 目录发布——那会把内部 PRD/用户故事一起公开。
+> - `gh api -X POST repos/timzaak/OnceWise/pages -f 'build_type=workflow'`（或 Settings → Pages → Build and deployment → Source 选 GitHub Actions）
+>
+> 上线后控制台 Privacy 标签页填 `https://timzaak.github.io/OnceWise/en/privacy`。旧的独立 `gh-pages` 分支（自包含 index.html）已废弃：Pages 的 Source 只有一个，切到 Actions 模式后该分支不再参与发布。仍勿改用 main 分支 `/docs` 目录发布——那会把内部 PRD/用户故事一起公开（`docs-web/content/` 是独立维护的对外内容，不含这些）。
 
 ---
 

@@ -1,0 +1,27 @@
+import { createFileRoute, notFound } from "@tanstack/react-router";
+import { i18n } from "@/lib/i18n";
+import { getLLMText, markdownPathToSlugs, source } from "@/lib/source";
+
+export const Route = createFileRoute("/$lang/docs/{$}.md")({
+  server: {
+    handlers: {
+      GET: async ({ params }) => {
+        const locale = params.lang;
+        if (
+          !i18n.languages.includes(locale as (typeof i18n.languages)[number])
+        ) {
+          throw notFound();
+        }
+        const slugs = markdownPathToSlugs(params._splat?.split("/") ?? []);
+        const page = source.getPage(slugs, locale);
+        if (!page) throw notFound();
+
+        return new Response(await getLLMText(page), {
+          headers: {
+            "Content-Type": "text/markdown",
+          },
+        });
+      },
+    },
+  },
+});

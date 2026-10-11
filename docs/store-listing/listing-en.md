@@ -39,4 +39,4 @@ GETTING STARTED
 Flows can also arrive from a sync space: enter your server URL in the Sync tab and pull a shared script.
 
 Source code and docs: https://github.com/timzaak/OnceWise
-Privacy policy: https://timzaak.github.io/OnceWise/
+Privacy policy: https://timzaak.github.io/OnceWise/en/privacy

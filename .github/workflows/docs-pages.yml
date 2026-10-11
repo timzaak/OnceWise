@@ -1,0 +1,85 @@
+name: Docs Pages
+
+# Builds docs-web (including the OpenAPI pages generated from the backend's
+# utoipa annotations) and deploys the static output to GitHub Pages via the
+# Actions artifact flow — no gh-pages branch involved. One-time enablement
+# (repository must be public first): `gh api -X POST repos/timzaak/OnceWise/pages -f 'build_type=workflow'`
+# or Settings → Pages → Build and deployment → Source: GitHub Actions.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs-web/**'
+      - 'backend/src/**'
+      - 'backend/Cargo.toml'
+      - '.github/workflows/docs-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a new push supersedes the run in flight.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  # Project Pages URL: the site is served from a sub path, so asset URLs and
+  # router links carry this prefix at build time.
+  BASE_PATH: /OnceWise
+  SITE_URL: https://timzaak.github.io/OnceWise
+
+jobs:
+  build:
+    name: Build docs site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: docs-web/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+
+      - name: Export OpenAPI document from the backend
+        run: cargo run --manifest-path backend/Cargo.toml --bin export-openapi > docs-web/openapi.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: docs-web
+
+      - name: Build static site
+        run: npm run build
+        working-directory: docs-web
+
+      # Pages would otherwise run Jekyll over the artifact; underscore-prefixed
+      # output (e.g. _shell.html) would be dropped.
+      - name: Disable Jekyll
+        run: touch docs-web/.output/public/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-web/.output/public
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
