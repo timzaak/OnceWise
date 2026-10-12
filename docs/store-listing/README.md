@@ -40,7 +40,7 @@
      1. GCP:建项目 → 启用 **Chrome Web Store API** 即可(CI 用 SA 私钥自签 JWT 直接换 access token,`extension/scripts/cws-upload.mjs`;不走 `google-github-actions/auth`——那还需启用 IAM Service Account Credentials API 并给 SA 自授 Service Account Token Creator 角色,2026-10-07 两条坑都实测踩过)→ 建 service account(角色授予可跳过——角色目录中无 Chrome Web Store 专用角色,条目授权在下一步控制台侧完成)→ Keys 标签导出 JSON 私钥(官方步骤见 developer.chrome.com/docs/webstore/service-accounts);
      2. 开发者控制台 设置 页:把 service account 邮箱填入"服务账号"区添加(服务账号将能够通过公共 API 访问所有项),同页"发布商 ID"字段即 `CWS_PUBLISHER_ID`(UUID 形式);
      3. 仓库 Settings → Secrets and variables → Actions:Secrets 加 `CWS_SA_JSON`(JSON 私钥全文)与 `CWS_PUBLISHER_ID`(发布商 UUID),Variables 加 `CWS_UPLOAD_ENABLED=true`(删除或置 false 可随时停用 CI 上传)。
-6. **提审**:全站 host 权限的审核周期偏长(数天到数周),材料齐后尽早提交;提审时贴上 `privacy-declarations.md` §5 审核备注。
+6. **提审**:全站 host 权限的审核周期偏长(数天到数周),材料齐后尽早提交;首版上架在控制台提交并贴上 `privacy-declarations.md` §5 审核备注。版本更新走 API 提交审核:`gh workflow run cws-publish.yml`(dispatch 触发 `.github/workflows/cws-publish.yml`,以与 `store-upload` 相同的 SA 凭据调用 Publish API,把控制台当前草稿提交审核,等同控制台 Submit for review,审核备注用控制台 listing 内已存的文案)。注意:listing 截图/宣传图是控制台侧资产,API 不管控,改图后需在控制台手动重传。
 7. **上架后核验(关键)**——已核验(2026-10-02):商店分配了新 ID `dmmhmcdbkbbgbcidafhlhepdchjboenc`(商店拒绝 manifest `key` 字段,pinned ID 无法保留)。`skills/oncewise-message/protocol.mjs` 的 `EXTENSION_ID` 已同步为商店 ID(宿主默认 `allowed_origins` 绑定商店版);固定 key 开发构建(`fkkfdckchahnjkcbimnbhonbgcefnafi`,e2e 套件与其本机安装)须显式 `--extension-id fkkfdckchahnjkcbimnbhonbgcefnafi`。后续若出 v1.1.1+ 的 plugin/skills 版本,务必在商店版公开可得后发布,否则商店用户装旧 skills 会把宿主绑到旧 ID,AI 交接通道失效。
 
 ## 维护纪律

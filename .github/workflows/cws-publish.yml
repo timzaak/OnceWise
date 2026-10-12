@@ -1,0 +1,29 @@
+name: CWS Publish
+
+# Dispatch-only on purpose: submitting a release for review is a deliberate
+# per-release decision, unlike the automatic draft upload in cd.yml's
+# store-upload job that runs on every v*.*.* tag.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Submit store draft for review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Publish current draft
+        working-directory: extension
+        env:
+          CWS_SA_JSON: ${{ secrets.CWS_SA_JSON }}
+          # Public item ID, also pinned in skills/oncewise-message/protocol.mjs.
+          CWS_ITEM_ID: dmmhmcdbkbbgbcidafhlhepdchjboenc
+        run: node scripts/cws-publish.mjs
