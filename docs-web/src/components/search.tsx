@@ -13,6 +13,7 @@ import {
   type SharedProps,
 } from "fumadocs-ui/components/dialog/search";
 import { useI18n } from "fumadocs-ui/contexts/i18n";
+import { basePath } from "@/lib/shared";
 
 function initOrama() {
   return create({
@@ -26,6 +27,9 @@ export default function DefaultSearchDialog(props: SharedProps) {
   const { locale } = useI18n();
   const { search, setSearch, query } = useDocsSearch({
     type: "static",
+    // The default "/api/search" is origin-absolute and misses the sub-path
+    // deploy prefix; the prerendered index lives under basePath.
+    from: `${basePath}/api/search`,
     initOrama,
     locale,
   });

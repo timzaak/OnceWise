@@ -22,7 +22,7 @@ import { ClientAPIPage } from "@/components/api-page";
 import { useMDXComponents } from "@/components/mdx";
 import { i18n } from "@/lib/i18n";
 import { baseOptions, footerLabels, SiteFooter } from "@/lib/layout.shared";
-import { gitConfig } from "@/lib/shared";
+import { basePath, gitConfig } from "@/lib/shared";
 import { slugsToMarkdownPath, source } from "@/lib/source";
 
 export const Route = createFileRoute("/$lang/docs/$")({
@@ -102,9 +102,11 @@ const clientLoader = browserCollections.docs.createClientLoader({
         <DocsTitle>{frontmatter.title}</DocsTitle>
         <DocsDescription>{frontmatter.description}</DocsDescription>
         <div className="flex flex-row gap-2 items-center border-b -mt-4 pb-6">
-          <MarkdownCopyButton markdownUrl={markdownUrl} />
+          {/* fumadocs renders these as raw anchors/fetches (no router basepath);
+              markdownUrl itself stays route-relative for the TanStack Link below. */}
+          <MarkdownCopyButton markdownUrl={`${basePath}${markdownUrl}`} />
           <ViewOptionsPopover
-            markdownUrl={markdownUrl}
+            markdownUrl={`${basePath}${markdownUrl}`}
             githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/docs-web/content/docs/${path}`}
           />
         </div>

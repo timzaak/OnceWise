@@ -12,7 +12,8 @@ export function baseOptions(lang: string = "en"): BaseLayoutProps {
       // Point the navbar logo at the locale root instead of "/", which only
       // exists as a client-side redirect to /en. Navigating to "/" re-hydrates
       // the SPA shell and runs the beforeLoad redirect, which hangs in the
-      // prerendered build.
+      // prerendered build. Route-relative: the router basepath adds the
+      // deploy prefix.
       url: `/${lang}`,
     },
     githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,

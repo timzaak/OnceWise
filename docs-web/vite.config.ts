@@ -4,7 +4,7 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
 import mdx from "fumadocs-mdx/vite";
 import { nitro } from "nitro/vite";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
 // OpenAPI pages are virtual (one per operationId in the spec, grouped by tag).
 // The prerender crawler can't discover them from virtual pages, so we list them
@@ -43,10 +43,49 @@ function openapiPages() {
   }
 }
 
+// @tanstack/start-static-server-functions fetches its prerendered JSON cache
+// from an origin-absolute "/__tsr/..." URL with no configurable base — on the
+// /OnceWise sub-path deploy the fetch 404s into HTML and res.json() throws
+// ("Unexpected token '<'"). Rewrite the client-side fetch against the vite
+// base; the server-side cache writer must keep its unprefixed path (files land
+// at .output/public/__tsr, which is exactly base + "/__tsr"). Upstream
+// 1.167.40 still hardcodes it — the guard throws if the literal moves so the
+// patch can't silently stop applying.
+function patchStaticFnCacheBasePath(): Plugin {
+  return {
+    name: "patch-static-fn-cache-basepath",
+    enforce: "pre",
+    transform(code, id) {
+      if (!id.includes("start-static-server-functions")) return;
+      const target = 'fetch(url, { method: "GET" })';
+      if (!code.includes(target)) {
+        if (code.includes("staticServerFnCache")) {
+          throw new Error(
+            `${id}: "${target}" not found — @tanstack/start-static-server-functions changed, update the patch in vite.config.ts`,
+          );
+        }
+        return;
+      }
+      return code.replace(
+        target,
+        'fetch(import.meta.env.BASE_URL + url.slice(1), { method: "GET" })',
+      );
+    },
+  };
+}
+
 export default defineConfig({
   // Sub-path deploy (GitHub Pages project site): BASE_PATH=/OnceWise gives
   // base "/OnceWise/". Default "/" for the dev server.
   base: `${(process.env.BASE_PATH ?? "/").replace(/\/+$/, "")}/`,
+  // Client bundles have no process.env — without these defines every
+  // process.env.BASE_PATH read in client code collapses to undefined and
+  // basePath degenerates to "" (unprefixed router basepath, links and fetch
+  // URLs that 404 on the sub-path deploy).
+  define: {
+    "process.env.BASE_PATH": JSON.stringify(process.env.BASE_PATH ?? "/"),
+    "process.env.SITE_URL": JSON.stringify(process.env.SITE_URL ?? ""),
+  },
   server: {
     port: 3001,
   },
@@ -58,6 +97,7 @@ export default defineConfig({
     host: "127.0.0.1",
   },
   plugins: [
+    patchStaticFnCacheBasePath(),
     mdx(),
     tailwindcss(),
     tanstackStart({
