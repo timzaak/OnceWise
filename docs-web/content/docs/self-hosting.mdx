@@ -3,7 +3,7 @@ title: Self-hosting the sync server
 description: Run oncewise-ai-sync — from a one-command dev setup to the published container image, environment variables, and the Herald sign-in gate.
 ---
 
-The sync backend (`oncewise-ai-sync`) is a Rust/Axum service over PostgreSQL. It stores and distributes structured script data for [spaces](/docs/sync); it never generates or executes flows, and the space model has no accounts, ownership or membership — the deployment may, however, sit behind a sign-in gate (below).
+The sync backend (`oncewise-ai-sync`) is a Rust/Axum service over PostgreSQL. It stores and distributes structured script data for [spaces](./sync); it never generates or executes flows, and the space model has no accounts, ownership or membership — the deployment may, however, sit behind a sign-in gate (below).
 
 ## Quick run from source
 
@@ -56,7 +56,7 @@ Startup fails fast with the names (never the values) of whatever is missing or m
 
 ## The Herald sign-in gate
 
-By default (`AUTH_MODE=herald`) the server puts its business endpoints behind a sign-in: clients obtain a bearer token through the server's OAuth flow against a [Herald](https://github.com/timzaak/herald) deployment (also open source; its image is `ghcr.io/timzaak/herald`). Health, the OpenAPI document and the auth endpoints stay public. The gate is service-level only — it does not add accounts, ownership or audit to spaces, and it does not change any of the semantics in [Sync and spaces](/docs/sync).
+By default (`AUTH_MODE=herald`) the server puts its business endpoints behind a sign-in: clients obtain a bearer token through the server's OAuth flow against a [Herald](https://github.com/timzaak/herald) deployment (also open source; its image is `ghcr.io/timzaak/herald`). Health, the OpenAPI document and the auth endpoints stay public. The gate is service-level only — it does not add accounts, ownership or audit to spaces, and it does not change any of the semantics in [Sync and spaces](./sync).
 
 On the extension side this is the login card in the Sync tab: one authorization window, then silent renewal.
 
@@ -64,4 +64,4 @@ On the extension side this is the login card in the Sync tab: one authorization 
 
 ## HTTP surface
 
-Endpoints group into `auth` (sign-in mode probe, OAuth start/callback, token refresh), `spaces`, `scripts` and `ops` (health, OpenAPI). Space requests authenticate with the `X-Space-Key` header; gated deployments also require the bearer token in front of it. The full request/response schemas are rendered from the backend's utoipa annotations in the [OpenAPI reference](/docs/openapi) and served live at `/api/openapi.json`.
+Endpoints group into `auth` (sign-in mode probe, OAuth start/callback, token refresh), `spaces`, `scripts` and `ops` (health, OpenAPI). Space requests authenticate with the `X-Space-Key` header; gated deployments also require the bearer token in front of it. The full request/response schemas are rendered from the backend's utoipa annotations in the [OpenAPI reference](./openapi) and served live at `/api/openapi.json`.

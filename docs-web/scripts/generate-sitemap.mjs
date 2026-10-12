@@ -30,6 +30,9 @@ async function generateSitemap() {
   const urls = htmlFiles
     .map((file) => {
       const rel = relative(OUTPUT_DIR, file);
+      // /en/index.html duplicates the site root (canonical points there);
+      // only canonical URLs belong in the sitemap.
+      if (rel.replace(/\\/g, "/") === "en/index.html") return null;
       // /docs/getting-started/index.html → /docs/getting-started/
       const urlPath =
         "/" +
@@ -39,6 +42,7 @@ async function generateSitemap() {
           .replace(/\\/g, "/");
       return urlPath;
     })
+    .filter(Boolean)
     .sort()
     .map(
       (path) => `  <url>

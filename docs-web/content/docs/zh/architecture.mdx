@@ -45,7 +45,7 @@ docs-web/    本文档站
 WXT + React，四个入口：
 
 - **background**——service worker。运行时消息枢纽、流程存储、业务实例认领（防重复提交保护）与原生消息端口。
-- **content**——按流程站点动态注入，从不全局注册。承载执行受约束步骤树的步骤引擎（见[流程](/docs/zh/flows)）；某 origin 最后一条流程删除后即解除注入注册。
+- **content**——按流程站点动态注入，从不全局注册。承载执行受约束步骤树的步骤引擎（见[流程](./flows)）；某 origin 最后一条流程删除后即解除注入注册。
 - **sidepanel**——单击工具栏图标看到的工作台：流程列表、带输入与启用控制的编辑器、版本历史、"用 AI 优化"授权、同步页签。
 - **import 页面**——AI 交付的确认面，附带一个只有启用/暂停开关的紧凑流程列表。
 
@@ -62,7 +62,7 @@ WXT + React，四个入口：
 
 ## 后端
 
-`oncewise-ai-sync`（Rust/Axum，启动时跑 sqlx 迁移，utoipa 生成规范）：按客户端生成的 ID + 密钥寻址的空间、脚本、不可变版本。路由分为 `auth`、`spaces`、`scripts`、`ops`；全部接口生成到 [OpenAPI 参考](/docs/zh/openapi)并实时提供于 `/api/openapi.json`。空间模型无账号；部署级 Herald 门禁是独立的一层，不改变空间语义（见[自托管同步服务](/docs/zh/self-hosting)）。
+`oncewise-ai-sync`（Rust/Axum，启动时跑 sqlx 迁移，utoipa 生成规范）：按客户端生成的 ID + 密钥寻址的空间、脚本、不可变版本。路由分为 `auth`、`spaces`、`scripts`、`ops`；全部接口生成到 [OpenAPI 参考](./openapi)并实时提供于 `/api/openapi.json`。空间模型无账号；部署级 Herald 门禁是独立的一层，不改变空间语义（见[自托管同步服务](./self-hosting)）。
 
 客户端侧的 `sync-*` 模块实现同一套接口：服务器地址与模式探测、空间与版本、以及 Herald OAuth 流程（授权窗口、静默续期、epoch 守护的本地会话存储）。
 

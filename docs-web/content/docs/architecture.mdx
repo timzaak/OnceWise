@@ -45,7 +45,7 @@ docs-web/    This documentation site
 WXT + React, four entrypoints:
 
 - **background** — the service worker. Runtime messaging hub, flow store, business-instance claims (the duplicate-submit guard), and the native-messaging port.
-- **content** — injected dynamically per the flow's site, never globally registered. Hosts the step engine that executes the constrained tree ([Flows](/docs/flows)); when the last flow for an origin is deleted, the registration is removed.
+- **content** — injected dynamically per the flow's site, never globally registered. Hosts the step engine that executes the constrained tree ([Flows](./flows)); when the last flow for an origin is deleted, the registration is removed.
 - **sidepanel** — the workbench you see when clicking the toolbar icon: flow list, editor with inputs and enable controls, version history, the Optimize-with-AI grant, and the Sync tab.
 - **import page** — the confirmation surface for AI deliveries, plus a compact flow list with enable/pause toggles.
 
@@ -62,7 +62,7 @@ Two design calls worth knowing:
 
 ## Backend
 
-`oncewise-ai-sync` (Rust/Axum, sqlx migrations at startup, utoipa for the spec): spaces keyed by client-generated ID + key, scripts, immutable versions. Routes group into `auth`, `spaces`, `scripts`, `ops`; the whole surface is generated into the [OpenAPI reference](/docs/openapi) and served at `/api/openapi.json`. The space model has no accounts; the deployment-level Herald gate is a separate layer that does not change space semantics ([Self-hosting](/docs/self-hosting)).
+`oncewise-ai-sync` (Rust/Axum, sqlx migrations at startup, utoipa for the spec): spaces keyed by client-generated ID + key, scripts, immutable versions. Routes group into `auth`, `spaces`, `scripts`, `ops`; the whole surface is generated into the [OpenAPI reference](./openapi) and served at `/api/openapi.json`. The space model has no accounts; the deployment-level Herald gate is a separate layer that does not change space semantics ([Self-hosting](./self-hosting)).
 
 On the client, `sync-*` modules implement the same surface: server URL and mode probe, spaces and versions, and the Herald OAuth flow (authorization window, silent renewal, epoch-guarded local session storage).
 

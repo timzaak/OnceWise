@@ -8,7 +8,7 @@ description: 你的 AI 助手如何检查页面、验证步骤并经本机通道
 - **Chrome DevTools MCP**——助手做页面发现、DOM 检查与交互（`list_pages`、`take_snapshot`、`fill`、`click`）的唯一工具。终端 HTTP 请求和其他浏览器控制工具不算数。
 - **本机流程通道**——`oncewise-message` skill 里的 `client.mjs` 与注册在操作系统用户层级的原生消息宿主（`ai.oncewise.native`）通信。宿主只在内存中转发，不向磁盘写流程数据，不经网络传输任何内容。
 
-两者的安装在[快速上手](/docs/zh/getting-started)；`oncewise-setup` skill 跑端到端检查。本页讲通道可用之后发生什么。
+两者的安装在[快速上手](./getting-started)；`oncewise-setup` skill 跑端到端检查。本页讲通道可用之后发生什么。
 
 ## 客户端与它的五个动作
 
@@ -28,7 +28,7 @@ node skills/oncewise-message/client.mjs flow.verify --ref <ref>
 
 1. 用 `list_pages` 找到目标页，用 `take_snapshot` 检查，收集真实的 `id`、`name`、`label`、`placeholder`、`aria-label` 线索。定位符从不凭空发明。
 2. 在你授权的测试数据或记录上，用同一个 MCP 的 `fill`/`click` 验证定位符、取值与可逆动作，每步之后快照确认。任何保存、提交或其他业务状态变更之前，先确认目标与后果确实被授权。执行不安全时，它在该动作前停下并告知哪些步骤未验证。
-3. 写一份 schemaVersion 1 的 JSON 流程（格式摘要见[流程](/docs/zh/flows)）。
+3. 写一份 schemaVersion 1 的 JSON 流程（格式摘要见[流程](./flows)）。
 4. 跑 `flow.validate --file <file>`，修掉每个错误直到通过。
 5. 向你展示校验后的 JSON、扩展的摘要、验证过什么、以及启用后会自动执行的提交类动作。**然后等你对"就是这份内容"的明确批准。**"帮我建个流程"的请求、点击"用 AI 优化"、或同意启用，都不算批准保存。任何修改后它会重新校验、重新展示、重新征求批准。
 6. 获批后用 `flow.save` 保存——`ok:true` 表示已保存且为禁用态——并用 `flow.verify --ref <ref>` 核对读回状态。

@@ -3,7 +3,7 @@ title: Sync and spaces
 description: Share selected flows as versioned scripts with teammates via space codes, through an optional self-hosted sync server.
 ---
 
-Sync is optional. The extension is local-first: your browser storage is the data master, and everything in [Flows](/docs/flows) works with no server at all. What sync adds is one thing — a place to hand a flow to a teammate as a versioned script, without either of you creating an account.
+Sync is optional. The extension is local-first: your browser storage is the data master, and everything in [Flows](./flows) works with no server at all. What sync adds is one thing — a place to hand a flow to a teammate as a versioned script, without either of you creating an account.
 
 ## Model
 
@@ -15,7 +15,7 @@ Anyone holding the code has equal rights in the space: read, write, rename, publ
 
 ## Turning sync on
 
-Open the side panel's **Sync** tab and enter the server URL (an [oncewise-ai-sync](/docs/self-hosting) deployment, run by you or someone you trust). The extension probes the server's sign-in mode first:
+Open the side panel's **Sync** tab and enter the server URL (an [oncewise-ai-sync](./self-hosting) deployment, run by you or someone you trust). The extension probes the server's sign-in mode first:
 
 - A server deployed with the default Herald gate shows a login card; signing in opens the server's authorization window once, and the session renews silently afterwards. Credentials live in your browser's local storage.
 - A server deployed with `AUTH_MODE=none` skips sign-in entirely and takes you straight to the spaces.
@@ -37,4 +37,4 @@ A pulled script arrives as a local flow, disabled, after passing the same valida
 
 ## Running your own server
 
-The server is a small Rust/Axum service over PostgreSQL with a published container image. See [Self-hosting](/docs/self-hosting) for the environment variables, the Herald sign-in gate, and the full HTTP surface in the [OpenAPI reference](/docs/openapi).
+The server is a small Rust/Axum service over PostgreSQL with a published container image. See [Self-hosting](./self-hosting) for the environment variables, the Herald sign-in gate, and the full HTTP surface in the [OpenAPI reference](./openapi).

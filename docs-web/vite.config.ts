@@ -101,20 +101,12 @@ export default defineConfig({
     mdx(),
     tailwindcss(),
     tanstackStart({
-      spa: {
-        enabled: true,
-        prerender: {
-          enabled: true,
-          crawlLinks: true,
-        },
-      },
-
-      // Prerender tuning for the virtual OpenAPI pages.
-      // Defaults: concurrency = os.cpus().length (too high — overwhelms the
-      // localhost prerender server → ETIMEDOUT). Lower concurrency eases the
-      // server, retries absorb transient timeouts, and failOnError turns a
-      // dropped page into a build failure instead of a silent gap.
+      // Every reachable route is prerendered (seeds + crawl), so no SPA shell
+      // fallback is needed — and spa.enabled would claim "/" for the shell
+      // mask page, blocking real content at the site root.
       prerender: {
+        enabled: true,
+        crawlLinks: true,
         concurrency: 3,
         retryCount: 3,
         retryDelay: 1000,
@@ -123,13 +115,7 @@ export default defineConfig({
 
       pages: [
         {
-          path: "/docs",
-        },
-        {
-          path: "/en/docs",
-        },
-        {
-          path: "/zh/docs",
+          path: "/",
         },
         {
           path: "/en",
