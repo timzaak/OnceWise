@@ -25,7 +25,7 @@ const CSS = `${baseCss('wl', { btnMinHeight: '38px', btnPaddingX: '14px', cardPa
 .wl-header { background: var(--ow-surface); border-bottom: 1px solid var(--ow-line); padding: 18px 24px; }
 .wl-header-inner { max-width: 812px; margin: 0 auto; }
 .wl-brand { display: flex; align-items: center; gap: 7px; margin-bottom: 14px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-.wl-brand-mark { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; background: var(--ow-ink); color: #fff; font-size: 14px; line-height: 1; }
+.wl-brand-mark { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; background: var(--ow-accent); color: #fff; font-size: 14px; line-height: 1; }
 .wl-header h1 { font-size: 20px; line-height: 1.3; font-weight: 700; margin: 0 0 12px; }
 .wl-intro { font-size: 13px; color: #3d3d3d; margin: 0; line-height: 1.6; }
 .wl-main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 24px 24px 48px; display: flex; flex-direction: column; gap: 16px; }

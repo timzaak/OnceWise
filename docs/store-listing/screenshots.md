@@ -9,9 +9,9 @@
 | 大宣传图(Marquee promo tile) | 1400×560,PNG | 1(可选) |
 | 图标 | 128×128 | 已有(`extension/public/icon/128.png`,manifest 引用) |
 
-## 截图形态(2026-10-07 改版,同日二改)
+## 截图形态(2026-10-12 清新改版,取代 2026-10-07 深底版)
 
-商店截图是宣传海报,不是裸产品截图:1280×800 品牌深底画布(#151515,与宣传图同源),每张只放三样东西——左侧一句大标语(含一个品牌色重音词)+ 一行副文,右侧一个焦点卡片(真实 UI 的 1:1 元素裁片,白色圆角框 + 投影)。版式纪律:每张图一个焦点、一句标语;整面板/多卡片/特性胶囊同屏会显乱,不采用(首版教训)。焦点卡片在窄视口下按侧边栏真实宽度渲染采集(侧边栏页 480px、import 整页 640px);裸字段类裁片(无自带内边距)由白框补 28×32px 内边距。画面文案全部英文(商店默认 listing 语言,截图各语言共用);流程种子数据 displayLabel 用英文("Contact phone"),不留中文字形。
+商店截图是宣传海报,不是裸产品截图:1280×800 浅色清新画布(产品同源 #F7F7F5 暖白底 + #E8F7F4 薄荷光晕,与扩展 UI 观感一致),每张只放三样东西——左侧一句大标语(墨色 #151515,含一个青绿 #008F83 重音词)+ 一行副文,右侧一个焦点卡片(真实 UI 的 1:1 元素裁片,白色圆角框 + 1px 细边 + 轻投影)。版式纪律:每张图一个焦点、一句标语;整面板/多卡片/特性胶囊同屏会显乱,不采用(首版教训)。焦点卡片在窄视口下按侧边栏真实宽度渲染采集(侧边栏页 480px、import 整页 640px);裸字段类裁片(无自带内边距)由白框补 28×32px 内边距。画面文案全部英文(商店默认 listing 语言,截图各语言共用);流程种子数据 displayLabel 用英文("Contact phone"),不留中文字形。
 
 07-run(中文宿主表单的执行效果页)已移除:执行效果改由采集用例内的守卫断言保证(启用流程后宿主表单电话自动填值,只断言不截图),画面语境交给标语与详细描述补足。
 
@@ -29,10 +29,10 @@
 | `screenshots/04-history.png` | Ten versions kept. One click back. | 「Version history」卡(v3 当前 + v2/v1,带回滚) | 10 版历史 + 回滚,安全网 |
 | `screenshots/05-local-first.png` | Your data never leaves the browser. | 首启说明「Data boundary (local-first)」字段块 | 本地优先承诺 |
 | `screenshots/06-sync.png` | Optional, self-hosted sync. | 同步页签「Server」卡 | 可选自托管同步 |
-| `promo-440x280.png` | 小宣传图(品牌深底 + 勾选徽标 + 标语 + 三枚特性胶囊) | — | — |
+| `promo-440x280.png` | 小宣传图(浅底 + 青绿 logo + 标语 + 三枚薄荷底特性胶囊) | — | — |
 | `promo-1400x560.png` | 大宣传图(同源设计,右侧模拟流程卡) | — | — |
 
-已过视觉验收门(2026-10-07 二版,visual-judge 逐张通过):无中文字形、单一焦点无拼贴感、裁片 1:1 无拉伸无贴边截断、六张版式一致。
+已过视觉验收门(2026-10-12 清新版,visual-judge 逐张通过):无深底残留、无中文字形、单一焦点无拼贴感、裁片 1:1 无拉伸无贴边截断、六张版式一致、小宣传图特性胶囊单行不折行;图标 128/48/16 三档另过像素级核验(白环完整、勾居中、16px 可辨识)。
 
 ## 拍摄纪律
 
@@ -52,3 +52,9 @@ uv run scripts/web-demo-test-runner.py demo/e2e/extension/listing/capture-listin
 ```
 
 产物直接写入 `docs/store-listing/screenshots/`(采集脚本 `demo/e2e/extension/listing/capture-listing.e2e.ts` 不做业务验收断言,仅含一条执行效果守卫断言;它不在 CI 运行,不属于验收用例)。改 UI 或改标语后重跑即可刷新全部截图与宣传图;只改标语则编辑脚本内 `compose(...)` 调用的文案参数即可。
+
+图标 PNG 由 `extension/public/icon/source.svg` 栅格化(2026-10-12 青绿清新版):
+
+```bash
+cd demo && node scripts/render-icons.mjs   # 写回 extension/public/icon/{16,32,48,96,128}.png
+```

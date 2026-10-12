@@ -14,7 +14,7 @@ const CSS = `${baseCss('im', { btnMinHeight: '38px', btnPaddingX: '14px', cardPa
 .im-header { background: var(--ow-surface); border-bottom: 1px solid var(--ow-line); padding: 18px 24px; }
 .im-header-inner { max-width: 812px; margin: 0 auto; }
 .im-brand { display: flex; align-items: center; gap: 7px; margin-bottom: 14px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-.im-brand-mark { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; background: var(--ow-ink); color: #fff; font-size: 14px; line-height: 1; }
+.im-brand-mark { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; background: var(--ow-accent); color: #fff; font-size: 14px; line-height: 1; }
 .im-header h1 { font-size: 20px; line-height: 1.3; font-weight: 700; margin: 0 0 12px; }
 .im-boundary { font-size: 13px; color: #07645d; background: var(--ow-accent-soft); border-radius: 5px; padding: 10px 12px; margin: 0; }
 .im-main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 24px 24px 48px; display: flex; flex-direction: column; gap: 16px; }

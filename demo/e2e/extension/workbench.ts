@@ -55,7 +55,7 @@ export async function ackOnboarding(page: Page): Promise<void> {
 export async function openSyncTab(page: Page): Promise<void> {
   await openFlowsTab(page)
   await page.locator('nav.sp-nav .sp-tab', { hasText: /^(Sync|同步)$/ }).click()
-  await expect(page.locator('h2.sp-title', { hasText: /^(Server|服务器)$/ })).toBeVisible()
+  await expect(page.locator('h2.sp-title', { hasText: /^(Server|服务器)/ })).toBeVisible()
 }
 
 export async function openFlowsTab(page: Page): Promise<void> {

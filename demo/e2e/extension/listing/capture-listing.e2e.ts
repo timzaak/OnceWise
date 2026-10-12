@@ -101,10 +101,10 @@ test('capture store listing screenshots and promo tiles', async ({ page, extensi
     await expect(history.locator('li')).toHaveCount(3)
     const historyShot = await cropOf(history)
 
-    // 素材:同步页签「服务器」卡(无需真实后端)
+    // 素材:同步页签「服务器」卡(无需真实后端;标题带 ⓘ 自托管链接,前缀匹配)
     await openSyncTab(page)
     const serverCard = page.locator('section.sp-card').filter({
-      has: page.locator('h2.sp-title', { hasText: /^(Server|服务器)$/ }),
+      has: page.locator('h2.sp-title', { hasText: /^(Server|服务器)/ }),
     })
     await expect(serverCard).toBeVisible()
     const serverShot = await cropOf(serverCard)
@@ -127,8 +127,8 @@ test('capture store listing screenshots and promo tiles', async ({ page, extensi
     await expect(form.locator('#contactPhone')).toHaveValue(PHONE, { timeout: 15_000 })
     await form.close()
 
-    // 合成宣传式截图:品牌深底 + 一句大标语(含品牌色重音词)+ 一行副文 + 焦点卡片
-    // (pad: 裸字段类裁片自带无内边距,由白框补;整卡裁片自带内边距,不加)
+    // 合成宣传式截图:浅色清新画布(产品同源 #f7f7f5 + 薄荷光晕)+ 一句大标语(含青绿重音词)
+    // + 一行副文 + 焦点卡片(pad: 裸字段类裁片自带无内边距,由白框补;整卡裁片自带内边距,不加)
     const compose = async (file: string, o: { title: string; sub: string; img: string; pad?: boolean }) => {
       const tile = await page.context().newPage()
       await tile.setViewportSize({ width: CANVAS_W, height: CANVAS_H })
@@ -168,7 +168,7 @@ test('capture store listing screenshots and promo tiles', async ({ page, extensi
       img: serverShot,
     })
 
-    // 宣传图:与扩展图标同源的品牌元素(#151515 底、#008f83 勾选圆),分小/大两种版式
+    // 宣传图:与扩展图标同源的品牌元素(#008f83 青绿底、白卡、白环勾选圆),分小/大两种版式
     const tile = await page.context().newPage()
     await tile.setViewportSize({ width: 440, height: 280 })
     await tile.setContent(promoHtml('small'))
@@ -184,35 +184,36 @@ test('capture store listing screenshots and promo tiles', async ({ page, extensi
   }
 })
 
-// 宣传式截图版式:左侧一句大标语(重音词品牌色)+ 一行副文;右侧单一焦点卡片(真实 UI 的
-// 1:1 元素裁片,自适应框高)。品牌元素取自 extension/public/icon/source.svg(#151515 底、
-// #008f83 勾选圆),不引入外部资源。
+// 宣传式截图版式:浅色画布取产品同源色(#f7f7f5 暖白 + #e8f7f4 薄荷
+// 光晕),左侧一句大标语(墨色 + 青绿重音词)+ 一行副文;右侧单一焦点卡片(真实 UI 的 1:1 元素
+// 裁片,白框细边 + 轻投影)。品牌元素取自 extension/public/icon/source.svg(#008f83 底、
+// 白卡、白环勾选圆),不引入外部资源。
 function marketingHtml(o: { title: string; sub: string; img: string; pad?: boolean }): string {
   const mark = `
     <svg width="34" height="34" viewBox="0 0 128 128" aria-hidden="true">
-      <rect x="4" y="4" width="120" height="120" rx="27" fill="#ffffff"/>
-      <rect x="27" y="23" width="74" height="82" rx="10" fill="#151515"/>
-      <rect x="39" y="38" width="35" height="8" rx="4" fill="#ffffff"/>
-      <rect x="39" y="55" width="49" height="7" rx="3.5" fill="#8a8a86"/>
-      <rect x="39" y="70" width="30" height="7" rx="3.5" fill="#8a8a86"/>
-      <circle cx="85" cy="88" r="21" fill="#008f83"/>
-      <path d="m75 88 7 7 13-15" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="4" y="4" width="120" height="120" rx="24" fill="#008f83"/>
+      <rect x="27" y="23" width="74" height="82" rx="9" fill="#ffffff"/>
+      <rect x="39" y="42" width="35" height="8" rx="4" fill="#008f83"/>
+      <rect x="39" y="59" width="49" height="7" rx="3.5" fill="#cececa"/>
+      <rect x="39" y="74" width="24" height="7" rx="3.5" fill="#cececa"/>
+      <circle cx="84.5" cy="87.5" r="19" fill="#08786f" stroke="#ffffff" stroke-width="4.5"/>
+      <path d="m76.5 88 6 6 11.5-12.5" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; }
     body {
       font-family: -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
-      background: radial-gradient(1100px 760px at 74% 46%, #1e1e1c 0%, #151515 62%) #151515;
-      color: #ffffff; display: flex; align-items: center; padding: 80px; gap: 80px;
+      background: radial-gradient(1000px 700px at 80% 22%, #e8f7f4 0%, rgba(232, 247, 244, 0) 58%) #f7f7f5;
+      color: #151515; display: flex; align-items: center; padding: 80px; gap: 80px;
     }
     .col { flex: 1; min-width: 0; max-width: 560px; }
-    .eyebrow { display: flex; align-items: center; gap: 14px; color: #37c5b5; font-size: 15px; font-weight: 700; letter-spacing: 0.18em; }
+    .eyebrow { display: flex; align-items: center; gap: 14px; color: #08786f; font-size: 15px; font-weight: 700; letter-spacing: 0.18em; }
     h1 { margin-top: 28px; font-size: 62px; line-height: 1.1; font-weight: 750; letter-spacing: -0.02em; }
-    h1 em { font-style: normal; color: #37c5b5; }
-    .sub { margin-top: 22px; font-size: 20px; line-height: 1.5; color: #b9b9b4; font-weight: 500; max-width: 40ch; }
+    h1 em { font-style: normal; color: #008f83; }
+    .sub { margin-top: 22px; font-size: 20px; line-height: 1.5; color: #626262; font-weight: 500; max-width: 40ch; }
     .frame { flex: none; align-self: center; max-width: 720px; border-radius: 16px; overflow: hidden;
-      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.07);
+      box-shadow: 0 30px 70px rgba(21, 21, 21, 0.12), 0 4px 14px rgba(21, 21, 21, 0.06), 0 0 0 1px #e2e2e0;
       background: #ffffff; }
     .frame.padded { padding: 28px 32px; }
     .frame img { display: block; max-height: 620px; max-width: 720px; }
@@ -226,7 +227,8 @@ function marketingHtml(o: { title: string; sub: string; img: string; pad?: boole
   </body></html>`
 }
 
-// 品牌元素取自 extension/public/icon/source.svg(深底圆角方 + 白卡 + 勾选圆),不引入外部资源。
+// 宣传图:浅色画布与截图同源,品牌元素取自 extension/public/icon/source.svg
+// (青绿圆角方 + 白卡 + 白环勾选圆),薄荷底特性胶囊 + 白卡流程示意,不引入外部资源。
 function promoHtml(size: 'small' | 'large'): string {
   const s = size === 'small'
   const mark = s ? 76 : 152
@@ -236,13 +238,13 @@ function promoHtml(size: 'small' | 'large'): string {
   const pad = s ? 28 : 64
   const markSvg = (d: number) => `
     <svg width="${d}" height="${d}" viewBox="0 0 128 128" aria-hidden="true">
-      <rect x="4" y="4" width="120" height="120" rx="27" fill="#ffffff"/>
-      <rect x="27" y="23" width="74" height="82" rx="10" fill="#151515"/>
-      <rect x="39" y="38" width="35" height="8" rx="4" fill="#ffffff"/>
-      <rect x="39" y="55" width="49" height="7" rx="3.5" fill="#8a8a86"/>
-      <rect x="39" y="70" width="30" height="7" rx="3.5" fill="#8a8a86"/>
-      <circle cx="85" cy="88" r="21" fill="#008f83"/>
-      <path d="m75 88 7 7 13-15" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="4" y="4" width="120" height="120" rx="24" fill="#008f83"/>
+      <rect x="27" y="23" width="74" height="82" rx="9" fill="#ffffff"/>
+      <rect x="39" y="42" width="35" height="8" rx="4" fill="#008f83"/>
+      <rect x="39" y="59" width="49" height="7" rx="3.5" fill="#cececa"/>
+      <rect x="39" y="74" width="24" height="7" rx="3.5" fill="#cececa"/>
+      <circle cx="84.5" cy="87.5" r="19" fill="#08786f" stroke="#ffffff" stroke-width="4.5"/>
+      <path d="m76.5 88 6 6 11.5-12.5" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`
   const chips = ['Local-first', 'Site-scoped', 'AI-imported']
     .map(c => `<span class="chip">${c}</span>`).join('')
@@ -251,30 +253,45 @@ function promoHtml(size: 'small' | 'large'): string {
       <span class="dot"></span>
       <span class="line l${i}"></span>
     </div>`).join('')
+  // 小图(440×280)文字列只有 ~166px,三枚胶囊在标题下必折两行;改为品牌行下方整行通排,
+  // 一行放下。大图宽度充足,维持胶囊随标题的原结构。
+  const content = s
+    ? `<div class="row">
+        <div class="brand">${markSvg(mark)}<div class="text">
+          <h1>OnceWise Flow</h1>
+          <p>Web routines that run themselves.</p>
+        </div></div>
+        <div class="stack">${flows}</div>
+      </div>
+      <div class="chips">${chips}</div>`
+    : `<div class="brand">${markSvg(mark)}<div class="text">
+        <h1>OnceWise Flow</h1>
+        <p>Web routines that run themselves.</p>
+        <div class="chips">${chips}</div>
+      </div></div>
+      <div class="stack">${flows}</div>`
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; }
     body {
       font-family: -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
-      background: #151515; color: #ffffff; display: flex; align-items: center;
+      background: radial-gradient(${s ? 340 : 780}px ${s ? 260 : 520}px at 82% 20%, #e8f7f4 0%, rgba(232, 247, 244, 0) 60%) #f7f7f5;
+      color: #151515; display: flex; flex-direction: ${s ? 'column' : 'row'}; justify-content: center;
+      align-items: ${s ? 'stretch' : 'center'};
       padding: ${pad}px; gap: ${pad}px;
     }
+    .row { display: flex; align-items: center; }
     .brand { display: flex; align-items: center; gap: ${s ? 18 : 40}px; }
     .text h1 { font-size: ${title}px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.1; }
-    .text p { font-size: ${tagline}px; color: #b9b9b4; margin-top: ${s ? 8 : 18}px; font-weight: 500; }
-    .chips { display: flex; gap: ${s ? 8 : 18}px; margin-top: ${s ? 14 : 30}px; }
-    .chip { font-size: ${chip}px; font-weight: 600; color: #37c5b5; border: 1px solid #2e6a63; border-radius: 999px; padding: ${s ? 4 : 10}px ${s ? 10 : 22}px; }
+    .text p { font-size: ${tagline}px; color: #626262; margin-top: ${s ? 8 : 18}px; font-weight: 500; }
+    .chips { display: flex; gap: ${s ? 8 : 18}px; margin-top: ${s ? 2 : 30}px; }
+    .chip { font-size: ${chip}px; font-weight: 600; color: #08786f; background: #e8f7f4; border: 1px solid #c6e8e1; border-radius: 999px; padding: ${s ? 4 : 10}px ${s ? 10 : 22}px; white-space: nowrap; }
     .stack { margin-left: auto; display: flex; flex-direction: column; gap: ${s ? 10 : 22}px; width: ${s ? 96 : 210}px; }
-    .flow { background: #ffffff; border-radius: ${s ? 8 : 16}px; padding: ${s ? 10 : 22}px; display: flex; align-items: center; gap: ${s ? 8 : 16}px; }
+    .flow { background: #ffffff; border: 1px solid #e2e2e0; border-radius: ${s ? 8 : 16}px; padding: ${s ? 10 : 22}px; display: flex; align-items: center; gap: ${s ? 8 : 16}px; box-shadow: 0 6px 18px rgba(21, 21, 21, 0.06); }
     .dot { width: ${s ? 10 : 20}px; height: ${s ? 10 : 20}px; border-radius: 50%; background: #008f83; flex: none; }
     .line { height: ${s ? 8 : 16}px; border-radius: 4px; background: #cececa; }
     .l1 { width: 70%; } .l2 { width: 52%; } .l3 { width: 84%; }
   </style></head><body>
-    <div class="brand">${markSvg(mark)}<div class="text">
-      <h1>OnceWise Flow</h1>
-      <p>Web routines that run themselves.</p>
-      <div class="chips">${chips}</div>
-    </div></div>
-    <div class="stack">${flows}</div>
+    ${content}
   </body></html>`
 }

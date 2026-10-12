@@ -26,7 +26,7 @@ type View =
 const CSS = `${baseCss('sp', { btnMinHeight: '36px', btnPaddingX: '12px', cardPadding: '16px', cardGap: '8px' })}
 .sp-shell { background: var(--ow-surface); border-bottom: 1px solid var(--ow-line); position: sticky; top: 0; z-index: 10; }
 .sp-brand { display: flex; align-items: center; gap: 9px; padding: 14px 16px 8px; font-size: 15px; font-weight: 750; letter-spacing: -.02em; }
-.sp-brand-mark { display: inline-grid; place-items: center; width: 27px; height: 27px; border-radius: 5px; background: var(--ow-ink); color: #fff; font-size: 19px; line-height: 1; }
+.sp-brand-mark { display: inline-grid; place-items: center; width: 27px; height: 27px; border-radius: 5px; background: var(--ow-accent); color: #fff; font-size: 19px; line-height: 1; }
 .sp-nav { display: flex; gap: 4px; padding: 0 8px 8px; }
 .sp-tab { flex: 1; min-height: 38px; border: none; background: transparent; border-radius: 5px; font-size: 13px; font-weight: 600; color: var(--ow-muted); cursor: pointer; padding: 0 4px; }
 .sp-tab::before { content: ''; display: inline-block; width: 5px; height: 5px; margin-right: 6px; border-radius: 50%; background: transparent; vertical-align: middle; }
