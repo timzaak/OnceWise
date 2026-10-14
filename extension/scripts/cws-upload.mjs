@@ -1,6 +1,9 @@
-// Store-upload shipping: uploads the zip produced by zip-store.mjs to the Chrome Web
-// Store Publish API as a new console draft. CI counterpart of zip-store.mjs; also
-// usable for manual uploads by exporting the same env vars.
+// Store-upload shipping: uploads the signed CRX produced by crx-store.mjs to the Chrome
+// Web Store Publish API as a new console draft. CI counterpart of crx-store.mjs; also
+// usable for manual uploads by exporting the same env vars. The item opted in to
+// Verified CRX Uploads (2026-10-13), so the package must be a CRX signed with the
+// registered key — plain zips are rejected; the API headers below are the documented
+// raw-upload form for that flow.
 //
 // Auth is a self-signed RS256 service-account JWT exchanged for an access token at
 // oauth2.googleapis.com (RFC 7523 jwt-bearer), scope chromewebstore. Deliberately NOT
@@ -25,7 +28,7 @@ async function jsonBody(response, what) {
 }
 
 async function main() {
-  for (const name of ['CWS_SA_JSON', 'CWS_PUBLISHER_ID', 'CWS_ITEM_ID', 'ZIP_PATH']) {
+  for (const name of ['CWS_SA_JSON', 'CWS_PUBLISHER_ID', 'CWS_ITEM_ID', 'PACKAGE_PATH']) {
     if (!process.env[name]) {
       throw new Error(`Missing required env ${name}.`);
     }
@@ -65,16 +68,16 @@ async function main() {
     throw new Error(`Token exchange failed (${tokenResponse.status}): ${JSON.stringify(token)}`);
   }
 
-  const zipPath = path.resolve(extRoot, process.env.ZIP_PATH);
+  const packagePath = path.resolve(extRoot, process.env.PACKAGE_PATH);
   const uploadUrl = `https://chromewebstore.googleapis.com/upload/v2/publishers/${process.env.CWS_PUBLISHER_ID}/items/${process.env.CWS_ITEM_ID}:upload`;
   const uploadResponse = await fetch(uploadUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token.access_token}`,
       'X-Goog-Upload-Protocol': 'raw',
-      'X-Goog-Upload-File-Name': 'extension.zip',
+      'X-Goog-Upload-File-Name': path.basename(packagePath),
     },
-    body: await readFile(zipPath),
+    body: await readFile(packagePath),
   });
   const upload = await jsonBody(uploadResponse, 'Package upload');
   console.log(JSON.stringify(upload, null, 2));

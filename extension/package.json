@@ -12,6 +12,7 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "zip:store": "node scripts/zip-store.mjs",
+    "crx:store": "node scripts/crx-store.mjs",
     "compile": "tsc --noEmit",
     "test:run": "vitest run",
     "postinstall": "wxt prepare"

@@ -33,18 +33,19 @@
 1. **开发者账号**:Chrome Web Store 开发者注册(一次性 $5)。
 2. **开源**——已完成:仓库**全部内容公开**,包括 `docs/prd/`、`docs/user-stories/`、`DESIGN.md`("都暴露",不做裁剪)。已执行 `gh repo edit timzaak/OnceWise --visibility public`(2026-10-11 验证为 public)。
 3. **隐私政策页面上线**——已完成(2026-10-11):隐私页随 `docs-web` 文档站发布,`.github/workflows/docs-pages.yml` 在 main 改动后自动部署;Pages 已启用 Actions 模式(`build_type=workflow`,`github-pages` 环境仅允许 main 部署),站点上线于 `https://timzaak.github.io/OnceWise/`。控制台 Privacy 标签页填 `https://timzaak.github.io/OnceWise/en/privacy`。**切勿**改用 main 的 `/docs` 发布。
-4. **打包**:`cd extension && npm run build && npm run zip:store` → 产物 `.output/oncewise-ai-<版本>-chrome-store.zip`(`extension/scripts/zip-store.mjs` 复制 `.output/chrome-mv3`、剥掉 manifest 的 `key` 字段后打包,manifest 位于 zip 根)。控制台**拒绝 manifest 含 `key` 字段的上传包**(2026-10-02 实测);`npm run zip` 的产物含 key,不用于商店上传。
+4. **打包**:`cd extension && npm run build && npm run zip:store && npm run crx:store` → 产物 `.output/oncewise-ai-<版本>-chrome-store.zip`(`extension/scripts/zip-store.mjs` 复制 `.output/chrome-mv3`、剥掉 manifest 的 `key` 字段后打包,manifest 位于 zip 根;zip 仅作 Release asset)与 `.output/oncewise-ai-<版本>-chrome-store.crx`(`extension/scripts/crx-store.mjs` 同样剥 key 后经 `chrome --pack-extension` 用签名私钥打包,需 `CRX_KEY_PATH` 指向 PEM 私钥;条目已于 2026-10-13 启用 Verified CRX Uploads,**上传只收经该私钥签名的 CRX**,同版本号也必须高于已发布版)。控制台**拒绝 manifest 含 `key` 字段的上传包**(2026-10-02 实测);`npm run zip` 的产物含 key,不用于商店上传。
 5. **上传与填报**:
    - 手动路径:开发者控制台 → 条目 → Package → 上传步骤 4 的 zip(新上架时为 New item,并按上表逐项粘贴/上传)。
-   - CI 路径(版本更新推荐):`v*.*.*` 标签触发的 CD 含 `store-upload` 任务,在 GitHub Release 之后自动构建剥 key 包、经 Chrome Web Store API(V2)上传为控制台新版本草稿,并把 zip 挂到 Release assets。一次性配置(需开发者账号本人操作):
+   - CI 路径(版本更新推荐):`v*.*.*` 标签触发的 CD 含 `store-upload` 任务,在 GitHub Release 之后自动构建剥 key 包、用 `CWS_SIGNING_KEY` 签名 CRX、经 Chrome Web Store API(V2,`X-Goog-Upload-Protocol: raw`)上传为控制台新版本草稿,并把 zip 挂到 Release assets。一次性配置(需开发者账号本人操作):
      1. GCP:建项目 → 启用 **Chrome Web Store API** 即可(CI 用 SA 私钥自签 JWT 直接换 access token,`extension/scripts/cws-upload.mjs`;不走 `google-github-actions/auth`——那还需启用 IAM Service Account Credentials API 并给 SA 自授 Service Account Token Creator 角色,2026-10-07 两条坑都实测踩过)→ 建 service account(角色授予可跳过——角色目录中无 Chrome Web Store 专用角色,条目授权在下一步控制台侧完成)→ Keys 标签导出 JSON 私钥(官方步骤见 developer.chrome.com/docs/webstore/service-accounts);
      2. 开发者控制台 设置 页:把 service account 邮箱填入"服务账号"区添加(服务账号将能够通过公共 API 访问所有项),同页"发布商 ID"字段即 `CWS_PUBLISHER_ID`(UUID 形式);
-     3. 仓库 Settings → Secrets and variables → Actions:Secrets 加 `CWS_SA_JSON`(JSON 私钥全文)与 `CWS_PUBLISHER_ID`(发布商 UUID),Variables 加 `CWS_UPLOAD_ENABLED=true`(删除或置 false 可随时停用 CI 上传)。
+     3. 仓库 Settings → Secrets and variables → Actions:Secrets 加 `CWS_SA_JSON`(JSON 私钥全文)、`CWS_PUBLISHER_ID`(发布商 UUID)与 `CWS_SIGNING_KEY`(Verified CRX Uploads 签名私钥 PEM 全文,本地母本 `~/.oncewise/cws-signing/privatekey.pem`,2026-10-13 已配置),Variables 加 `CWS_UPLOAD_ENABLED=true`(删除或置 false 可随时停用 CI 上传)。
 6. **提审**:全站 host 权限的审核周期偏长(数天到数周),材料齐后尽早提交;首版上架在控制台提交并贴上 `privacy-declarations.md` §5 审核备注。版本更新走 API 提交审核:`gh workflow run cws-publish.yml`(dispatch 触发 `.github/workflows/cws-publish.yml`,以与 `store-upload` 相同的 SA 凭据调用 Publish API,把控制台当前草稿提交审核,等同控制台 Submit for review,审核备注用控制台 listing 内已存的文案)。注意:listing 截图/宣传图是控制台侧资产,API 不管控,改图后需在控制台手动重传。
 7. **上架后核验(关键)**——已核验(2026-10-02):商店分配了新 ID `dmmhmcdbkbbgbcidafhlhepdchjboenc`(商店拒绝 manifest `key` 字段,pinned ID 无法保留)。`skills/oncewise-message/protocol.mjs` 的 `EXTENSION_ID` 已同步为商店 ID(宿主默认 `allowed_origins` 绑定商店版);固定 key 开发构建(`fkkfdckchahnjkcbimnbhonbgcefnafi`,e2e 套件与其本机安装)须显式 `--extension-id fkkfdckchahnjkcbimnbhonbgcefnafi`。后续若出 v1.1.1+ 的 plugin/skills 版本,务必在商店版公开可得后发布,否则商店用户装旧 skills 会把宿主绑到旧 ID,AI 交接通道失效。
 
 ## 维护纪律
 
+- **Verified CRX Uploads 签名私钥**(2026-10-13 启用,存于 `~/.oncewise/cws-signing/privatekey.pem`,公钥已登记控制台):功能**不可自助停用**,丢失私钥或需停用都必须联系 CWS 支持、换钥最长约一周,期间无法发布任何更新。务必保留离线备份(如密码管理器/加密盘);私钥不得进仓库、不得存入 Google 账号。换机器发布前先确认该文件就位。
 - 名称与短描述是商店站内搜索权重最高的两个字段(分别取 `extName`/`extDescription`):修改任一后,同步更新本包 `listing-en.md`/`listing-zh.md` 顶部引用的文案,并随下一版发布生效;名称须保持"品牌 + 关键词描述"形态,纯品牌名排不上关键词。
 - 扩展 UI 变化后重跑采集刷新全部截图:`uv run scripts/web-demo-test-runner.py demo/e2e/extension/listing/capture-listing.e2e.ts --run-id <唯一ID>`(入口说明见 `scripts/index.md`)。
 - 隐私政策修订后:更新 `docs/privacy-policy.md` 生效日期 → 同步 `docs-web/src/components/privacy-page.tsx` 的双语文案与生效日期 → 核对本包 `privacy-declarations.md` 与政策无出入。

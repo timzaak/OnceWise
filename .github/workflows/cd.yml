@@ -203,7 +203,7 @@ jobs:
     needs: release
     # Activation switch: set the repo variable CWS_UPLOAD_ENABLED=true (Settings →
     # Secrets and variables → Actions → Variables) after configuring the CWS_SA_JSON /
-    # CWS_PUBLISHER_ID secrets. vars (not secrets) gates the job because the secrets
+    # CWS_PUBLISHER_ID / CWS_SIGNING_KEY secrets. vars (not secrets) gates the job because the secrets
     # context is not available in job-level `if`. !cancelled() guards against the same
     # transitive-skip that silenced the v1.1.2 release.
     if: ${{ !cancelled() && needs.release.result == 'success' && vars.CWS_UPLOAD_ENABLED == 'true' }}
@@ -228,10 +228,24 @@ jobs:
           npm run build
           npm run zip:store
 
+      # The item opted in to Verified CRX Uploads (2026-10-13), so the uploaded
+      # package must be a CRX signed with the registered key — see
+      # docs/store-listing/README.md 步骤 5. Key lives outside the workspace so no
+      # artifact or cache step can pick it up.
+      - name: Pack signed CRX
+        working-directory: extension
+        env:
+          CWS_SIGNING_KEY: ${{ secrets.CWS_SIGNING_KEY }}
+        run: |
+          printf '%s' "$CWS_SIGNING_KEY" > "$RUNNER_TEMP/cws-signing-key.pem"
+          CRX_KEY_PATH="$RUNNER_TEMP/cws-signing-key.pem" npm run crx:store
+
       - name: Resolve package path
         id: pkg
         working-directory: extension
-        run: echo "zip=.output/oncewise-ai-$(jq -r .version .output/chrome-mv3/manifest.json)-chrome-store.zip" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "zip=.output/oncewise-ai-$(jq -r .version .output/chrome-mv3/manifest.json)-chrome-store.zip" >> "$GITHUB_OUTPUT"
+          echo "crx=.output/oncewise-ai-$(jq -r .version .output/chrome-mv3/manifest.json)-chrome-store.crx" >> "$GITHUB_OUTPUT"
 
       # Token minting lives in the script (self-signed SA JWT exchange) — see its
       # header for why not google-github-actions/auth.
@@ -242,7 +256,7 @@ jobs:
           CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
           # Public item ID, also pinned in skills/oncewise-message/protocol.mjs.
           CWS_ITEM_ID: dmmhmcdbkbbgbcidafhlhepdchjboenc
-          ZIP_PATH: ${{ steps.pkg.outputs.zip }}
+          PACKAGE_PATH: ${{ steps.pkg.outputs.crx }}
         run: node scripts/cws-upload.mjs
 
       - name: Attach store zip to the GitHub Release
