@@ -65,3 +65,8 @@ pub fn json_of(bytes: &[u8]) -> Value {
         serde_json::from_slice(bytes).expect("body must be valid JSON")
     }
 }
+
+// Shared Herald test plumbing (container control, seeding channel, RESP client, env guard).
+// Not every scenario binary links against it (scenario_data_sync uses none) — hence the allow.
+#[allow(dead_code)]
+pub mod herald;

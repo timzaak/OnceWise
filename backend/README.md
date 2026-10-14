@@ -31,6 +31,7 @@ cargo test                   # 场景测试（tests/scenario_data_sync.rs + test
 | `HERALD_REALM_ID` | （herald 必填） | 部署级 realm（1–256 字符，无路径分隔符）；登录校验必须匹配该 realm |
 | `HERALD_CLIENT_ID` | （herald 必填） | 在 Herald 控制台注册的 client app id |
 | `HERALD_REDIRECT_URI` | （herald 必填） | 固定为本服务规范 origin 下的 `/api/auth/oauth/callback`（HTTPS；loopback 调试可 HTTP） |
+| `HERALD_ORG_API_KEY` | （herald 必填） | 组织接入凭证：绑定 `HERALD_CLIENT_ID` 对应 client app 的 API key（1–4096 字符），需携带 `orgs.view`/`orgs.manage` 策略；仅用于服务端→Herald 组织通道（`X-API-Key`），永不进入客户端请求/响应/URL/日志 |
 | `RUST_LOG` | `info` | tracing 日志级别（如 `debug`） |
 | `CREATE_DB_IF_MISSING` | （未设置） | 设为 `1` 时，目标库不存在则先在同实例上创建（仅限开发/演示自举，生产勿用） |
 
@@ -54,8 +55,25 @@ cargo test                   # 场景测试（tests/scenario_data_sync.rs + test
 1. 在 Herald 控制台的目标 realm 下创建 client app，取得 `HERALD_CLIENT_ID`。
 2. 在该 client 的回调白名单中注册本服务的规范回调地址，即 `HERALD_REDIRECT_URI`
    （如 `https://sync.example.com/api/auth/oauth/callback`；必须与扩展所连服务的 origin 完全一致）。
-3. 无需 API key、权限点或角色配置。
-4. 服务端四个 `HERALD_*` 环境变量按上表配置。
+3. 为工作区权限准备 `HERALD_ORG_API_KEY`（组织接入凭证）：
+   - 复用（或创建）`HERALD_CLIENT_ID` 对应的 client app；
+   - 在 API Keys 页签为该 client app 签发一枚 API key；
+   - 创建携带 `orgs.view` 与 `orgs.manage` 策略的角色并指派给该 API key（Manage API Key Roles）。
+4. 服务端五个 `HERALD_*` 环境变量按上表配置。
+
+Herald 版本要求：**≥ 0.6.4**（组织授权能力面所在版本；早期版本无 `/api/ext/realms/{realm}/orgs…` 端点，
+组织通道调用会 fail-closed 503）。
+
+## 工作区权限（组织绑定空间，herald 模式）
+
+在登录门禁之上，herald 模式下新建空间可走**组织绑定**路径：创建请求不随 `key`（`POST /api/spaces` 只带 `id`+`name`），
+创建者即所有者；此类空间没有空间码，访问凭「登录身份 + 成员资格 + 角色」判定：
+
+- 三档角色：只读成员（浏览/拉取）→ 管理员档（读 + 写 + 邀请码签发 + 成员管理 + 删空间）→ 所有者（管理员全部 + 唯一所有权转移权，不可移除/降级）。
+- 加入唯一途径是管理员签发的**一次性邀请码**（24h 有效、单次原子消费、固定授予只读成员档）；`POST /api/spaces/{id}/invites` 签发（明文仅出现一次），`POST /api/invites/redeem` 凭码加入。
+- 成员与角色事实的**唯一权威源是 Herald 组织层**：服务端只保存空间与组织的关联（`spaces.org_id`）和邀请码哈希（`space_invites`），不建成员/角色/用户资料表；成员列表实时代理 `GET /api/spaces/{id}/members`，不落库不进日志。移除/降级在下一次访问即生效（无缓存）。
+- 所有者/最后管理员档保护与所有权一步转移由 Herald 原生保证（409/原子），服务端不复刻。
+- 存量密钥空间与 `AUTH_MODE=none` 部署**逐字保持**升级前行为：key 随体创建照常、none 模式新端点 404 且无 key 创建 400（`GET /api/auth/config` 的 `workspacePermissions` 为 false）。
 
 ### 运行要求
 
@@ -69,7 +87,7 @@ cargo test                   # 场景测试（tests/scenario_data_sync.rs + test
 ### 升级迁移（两条出路，无第三种隐式状态）
 
 - 既有部署升级后未显式选择模式且缺 Herald 配置 → **启动失败**，报错列出缺失变量并给出两条出路；
-- 出路一：补齐四个 `HERALD_*` 配置启用登录门禁（推荐对外部署）；
+- 出路一：补齐五个 `HERALD_*` 配置启用登录门禁与工作区权限（推荐对外部署；缺 `HERALD_ORG_API_KEY` 的报错自带控制台准备三步）；
 - 出路二：显式设置 `AUTH_MODE=none`，行为与升级前一致——唯一差异是新增的公开模式探测端点 `GET /api/auth/config`（内网/本地开发的逃生通道）。
 
 ## 数据库
@@ -109,7 +127,7 @@ pg_dump -h <host> -U <user> oncewise_ai_sync > backup.sql   # 在线备份
 
 ## 当前状态
 
-- 全部 9 个业务接口已实现：空间（注册 / 读取[凭码加入验证] / 删除[级联]）、脚本与版本（创建 / 清单 / 改名改备注 / 追加版本 / 版本清单 / 取指定版本内容），另有 `health` 与 `openapi.json` 两个运维端点
-- 鉴权（双层正交）：① 服务级 Herald 登录门禁（`AUTH_MODE=herald` 默认；Bearer + 每请求 status 校验，无权限点/角色/缓存；401 `AUTH_REQUIRED` 与 503 `AUTH_UNAVAILABLE` 独立成类）② 空间密钥（`X-Space-Key` 请求头；服务端只存 SHA-256 哈希并常数时间比对，错误密钥 401、未知空间 404；空间模型无账号 / 令牌 / 成员概念，DEC-data-sync-007）
-- 服务端不持久化用户身份：不记录“哪个用户访问了哪个空间”，无审计；登录握手状态仅在内存中短时存在
-- 场景测试见 `tests/scenario_data_sync.rs`（s01–s10 对应 US-DS-001～006）与 `tests/scenario_herald_auth.rs`（a01–a09，对接真实 docker Herald——先 `uv run scripts/test-start.py` 起环境，无 mock）
+- 全部 9 个业务接口 + 6 个工作区接口已实现：空间（注册[双路径] / 读取[凭码加入验证] / 删除[级联]）、脚本与版本（创建 / 清单 / 改名改备注 / 追加版本 / 版本清单 / 取指定版本内容）、工作区（邀请码签发 / 凭码加入 / 成员列表 / 角色变更 / 移除与自退 / 所有权转移），另有 `health` 与 `openapi.json` 两个运维端点
+- 鉴权（三层正交）：① 服务级 Herald 登录门禁（`AUTH_MODE=herald` 默认；Bearer + 每请求 status 校验并注入身份；401 `AUTH_REQUIRED` 与 503 `AUTH_UNAVAILABLE` 独立成类）② 空间访问层（key 空间：`X-Space-Key` 常数时间比对，服务端只存 SHA-256 哈希；org-bound 空间：Herald 组织成员资格 + 角色逐请求判定，无缓存）③ handler 业务逻辑（读写按角色分档）
+- 服务端不持久化用户身份：不记录“哪个用户访问了哪个空间”，无审计；成员与角色事实只在 Herald 组织层；服务端新增数据仅 `spaces.org_id` 与 `space_invites` 邀请码哈希（`used_at` 不记使用者）
+- 场景测试见 `tests/scenario_data_sync.rs`（s01–s10 对应 US-DS-001～006）、`tests/scenario_herald_auth.rs`（a01–a09）与 `tests/scenario_workspace_permissions.rs`（w01–w08；后两者对接真实 docker Herald ≥0.6.4——先 `uv run scripts/test-start.py` 起环境，无 mock）

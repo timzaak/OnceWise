@@ -26,6 +26,7 @@ async fn spawn() -> TestApp {
         app: routes::build_router(AppState {
             pool: pool.clone(),
             auth: None,
+            org: None,
         }),
         pool,
     }

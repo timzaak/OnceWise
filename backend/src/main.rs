@@ -1,4 +1,5 @@
 use anyhow::Context;
+use oncewise_ai_sync::orgs::OrgClient;
 use oncewise_ai_sync::routes::auth::HeraldAuth;
 use oncewise_ai_sync::{config, db, routes, AppState};
 use tower_http::trace::TraceLayer;
@@ -16,14 +17,21 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("failed to run database migrations")?;
 
-    let auth = match &config.auth {
-        config::AuthMode::Herald(herald) => Some(
-            HeraldAuth::new(herald.clone())
-                .context("failed to assemble the Herald sign-in gate")?,
-        ),
-        config::AuthMode::None => None,
+    let (auth, org) = match &config.auth {
+        config::AuthMode::Herald(herald) => {
+            let auth = Some(
+                HeraldAuth::new(herald.clone())
+                    .context("failed to assemble the Herald sign-in gate")?,
+            );
+            let org = Some(
+                OrgClient::new(&herald.base_url, &herald.realm_id, &herald.org_api_key)
+                    .context("failed to assemble the Herald organization channel")?,
+            );
+            (auth, org)
+        }
+        config::AuthMode::None => (None, None),
     };
-    let state = AppState { pool, auth };
+    let state = AppState { pool, auth, org };
     if let Some(herald) = state.auth.as_ref() {
         // Drops expired login handshakes even during idle periods; exits with the server state.
         herald.start_sweep_task();

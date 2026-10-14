@@ -26,12 +26,41 @@ pub enum ApiError {
     /// answered outside the expected contract — fail-closed, never a silent allow).
     #[error("{message}")]
     AuthUnavailable { message: String },
-    /// 404 `<code>`: SPACE_NOT_FOUND / SCRIPT_NOT_FOUND / VERSION_NOT_FOUND / NOT_FOUND (fallback route)
+    /// 404 `<code>`: SPACE_NOT_FOUND / SCRIPT_NOT_FOUND / VERSION_NOT_FOUND / MEMBER_NOT_FOUND /
+    /// NOT_FOUND (fallback route)
     #[error("{message}")]
     NotFound { code: &'static str, message: String },
     /// 409 `<code>`: SPACE_KEY_MISMATCH / SCRIPT_EXISTS
     #[error("{message}")]
     Conflict { code: &'static str, message: String },
+    /// 403 SPACE_ACCESS_DENIED (org-bound space: caller is not a member — the same answer for a
+    /// never-member and a removed one, so membership is never probed)
+    #[error("You do not have access to this space")]
+    SpaceAccessDenied,
+    /// 403 SPACE_ROLE_REQUIRED (org-bound space: the action needs the admin tier or ownership;
+    /// message varies by scene — read-only write attempt / member management / transfer)
+    #[error("{message}")]
+    SpaceRoleRequired { message: String },
+    /// 409 SPACE_OWNER_PROTECTED (owner cannot be removed or demoted)
+    #[error("The space owner cannot be removed or demoted; transfer ownership first")]
+    SpaceOwnerProtected,
+    /// 409 SPACE_LAST_ADMIN_PROTECTED (the last admin-tier member cannot leave the tier)
+    #[error(
+        "Keep at least one admin-tier member; grant another admin or transfer ownership first"
+    )]
+    SpaceLastAdminProtected,
+    /// 404 MEMBER_NOT_FOUND (role-change / removal / transfer target is not a member)
+    #[error("Member not found")]
+    MemberNotFound,
+    /// 400 INVITE_INVALID (malformed / unknown / wrong-space code — one stable answer)
+    #[error("The invite code is invalid")]
+    InviteInvalid,
+    /// 400 INVITE_EXPIRED (past the 24 h validity — distinct from invalid)
+    #[error("The invite code has expired")]
+    InviteExpired,
+    /// 409 INVITE_ALREADY_USED (consumed by someone else while the caller is not a member)
+    #[error("The invite code has already been used")]
+    InviteAlreadyUsed,
     /// 500 INTERNAL (never leaks the underlying error; the anyhow source is logged separately)
     #[error("Internal server error")]
     Internal(#[from] anyhow::Error),
@@ -46,6 +75,14 @@ impl ApiError {
             ApiError::AuthUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
             ApiError::NotFound { .. } => StatusCode::NOT_FOUND,
             ApiError::Conflict { .. } => StatusCode::CONFLICT,
+            ApiError::SpaceAccessDenied => StatusCode::FORBIDDEN,
+            ApiError::SpaceRoleRequired { .. } => StatusCode::FORBIDDEN,
+            ApiError::SpaceOwnerProtected => StatusCode::CONFLICT,
+            ApiError::SpaceLastAdminProtected => StatusCode::CONFLICT,
+            ApiError::MemberNotFound => StatusCode::NOT_FOUND,
+            ApiError::InviteInvalid => StatusCode::BAD_REQUEST,
+            ApiError::InviteExpired => StatusCode::BAD_REQUEST,
+            ApiError::InviteAlreadyUsed => StatusCode::CONFLICT,
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -58,6 +95,14 @@ impl ApiError {
             ApiError::AuthUnavailable { .. } => "AUTH_UNAVAILABLE",
             ApiError::NotFound { code, .. } => code,
             ApiError::Conflict { code, .. } => code,
+            ApiError::SpaceAccessDenied => "SPACE_ACCESS_DENIED",
+            ApiError::SpaceRoleRequired { .. } => "SPACE_ROLE_REQUIRED",
+            ApiError::SpaceOwnerProtected => "SPACE_OWNER_PROTECTED",
+            ApiError::SpaceLastAdminProtected => "SPACE_LAST_ADMIN_PROTECTED",
+            ApiError::MemberNotFound => "MEMBER_NOT_FOUND",
+            ApiError::InviteInvalid => "INVITE_INVALID",
+            ApiError::InviteExpired => "INVITE_EXPIRED",
+            ApiError::InviteAlreadyUsed => "INVITE_ALREADY_USED",
             ApiError::Internal(_) => "INTERNAL",
         }
     }

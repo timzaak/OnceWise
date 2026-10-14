@@ -2,9 +2,11 @@
 // allocated as MAX+1 while holding the scripts row lock (`SELECT … FOR UPDATE`, + a UNIQUE
 // backstop); every query filters by space_id so cross-space id probing is impossible; flowContent
 // gets the "JSON object + 256 KiB" backstop check only. Script ids are client-generated (409
-// SCRIPT_EXISTS on collision).
+// SCRIPT_EXISTS on collision). Space entry goes through require_space_access: reads are open to
+// any member of an org-bound space (any key holder unchanged), writes additionally exclude the
+// read-only member tier.
 
-use axum::extract::{Path, State};
+use axum::extract::{Extension, Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 
@@ -15,9 +17,9 @@ use crate::dto::{
 };
 use crate::error::{is_unique_violation, ApiError, ApiJson};
 use crate::spacekey::{
-    is_valid_entity_id, parse_version_param, require_space, validate_flow_content,
-    validate_script_name, validate_script_note, validate_version_note, write_transaction,
-    SpaceKeyHeader,
+    is_valid_entity_id, parse_version_param, require_space_access, require_space_row,
+    validate_flow_content, validate_script_name, validate_script_note, validate_version_note,
+    write_transaction, ResolvedIdentity, SpaceAccess, SpaceKeyHeader,
 };
 use crate::AppState;
 
@@ -67,22 +69,26 @@ fn script_not_found() -> ApiError {
     tag = "scripts",
     request_body = CreateScriptReq,
     params(("spaceId" = String, Path, description = "Space id")),
-    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    // Key-addressed space: bearer AND space key (herald mode) or space key only (none mode);
+    // org-bound space: bearer only (admin tier).
     security(
         ("bearer_auth" = [], "space_key" = []),
         ("space_key" = []),
+        ("bearer_auth" = []),
     ),
     responses(
         (status = 201, body = ScriptDto),
         (status = 400, body = ErrorBodyDto, description = "INVALID_INPUT: id/name/note/version-note shape or flowContent not an object / over the limit"),
         (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
-        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
+        (status = 403, body = ErrorBodyDto, description = "SPACE_ACCESS_DENIED / SPACE_ROLE_REQUIRED (read-only member of an org-bound space)"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in or organization service unreachable — fail-closed)"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND"),
         (status = 409, body = ErrorBodyDto, description = "SCRIPT_EXISTS"),
     )
 )]
 pub async fn create_script(
     key: SpaceKeyHeader,
+    identity: Option<Extension<ResolvedIdentity>>,
     State(state): State<AppState>,
     Path(space_id): Path<String>,
     ApiJson(req): ApiJson<CreateScriptReq>,
@@ -99,11 +105,29 @@ pub async fn create_script(
     validate_version_note(&version_note)?;
     let content = validate_flow_content(&req.flow_content)?;
 
+    let category = require_space_access(
+        &state.pool,
+        state.org.as_ref(),
+        identity.as_deref(),
+        &space_id,
+        key.0.as_deref(),
+        SpaceAccess::Manage,
+    )
+    .await?;
+
     let now = now_utc();
     let mut tx = write_transaction(&state.pool).await?;
-    // Re-verify inside the transaction: the space may be deleted between the outer check and this
-    // commit (FK cascade); re-checking routes that interleave to 404 instead of a 500 FK violation.
-    require_space(&mut *tx, &space_id, &key.0).await?;
+    // Re-verify the space row inside the transaction: the space may be deleted between the
+    // outer check and this commit (FK cascade); re-checking routes that interleave to 404
+    // instead of a 500 FK violation. Membership and addressing are decided by the outer
+    // call — see require_space_row.
+    require_space_row(
+        &mut *tx,
+        &space_id,
+        key.0.as_deref(),
+        category.org_binding(),
+    )
+    .await?;
     let inserted = sqlx::query(
         "INSERT INTO scripts (id, space_id, name, note, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
     )
@@ -158,24 +182,36 @@ pub async fn create_script(
     path = "/api/spaces/{spaceId}/scripts",
     tag = "scripts",
     params(("spaceId" = String, Path, description = "Space id")),
-    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    // Key-addressed space: bearer AND space key (herald mode) or space key only (none mode);
+    // org-bound space: bearer only (any member).
     security(
         ("bearer_auth" = [], "space_key" = []),
         ("space_key" = []),
+        ("bearer_auth" = []),
     ),
     responses(
         (status = 200, body = [ScriptDto]),
         (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
-        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
+        (status = 403, body = ErrorBodyDto, description = "SPACE_ACCESS_DENIED (org-bound space, not a member)"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in or organization service unreachable — fail-closed)"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND"),
     )
 )]
 pub async fn list_scripts(
     key: SpaceKeyHeader,
+    identity: Option<Extension<ResolvedIdentity>>,
     State(state): State<AppState>,
     Path(space_id): Path<String>,
 ) -> Result<Json<Vec<ScriptDto>>, ApiError> {
-    require_space(&state.pool, &space_id, &key.0).await?;
+    require_space_access(
+        &state.pool,
+        state.org.as_ref(),
+        identity.as_deref(),
+        &space_id,
+        key.0.as_deref(),
+        SpaceAccess::Read,
+    )
+    .await?;
     let rows = sqlx::query_as::<_, ScriptRow>(SCRIPT_LIST_SQL)
         .bind(&space_id)
         .fetch_all(&state.pool)
@@ -197,26 +233,38 @@ pub async fn list_scripts(
         ("spaceId" = String, Path, description = "Space id"),
         ("scriptId" = String, Path, description = "Script id"),
     ),
-    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    // Key-addressed space: bearer AND space key (herald mode) or space key only (none mode);
+    // org-bound space: bearer only (admin tier).
     security(
         ("bearer_auth" = [], "space_key" = []),
         ("space_key" = []),
+        ("bearer_auth" = []),
     ),
     responses(
         (status = 200, body = ScriptDto),
         (status = 400, body = ErrorBodyDto, description = "INVALID_INPUT: missing fields or length violations"),
         (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
-        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
+        (status = 403, body = ErrorBodyDto, description = "SPACE_ACCESS_DENIED / SPACE_ROLE_REQUIRED (read-only member of an org-bound space)"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in or organization service unreachable — fail-closed)"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND / SCRIPT_NOT_FOUND"),
     )
 )]
 pub async fn update_script(
     key: SpaceKeyHeader,
+    identity: Option<Extension<ResolvedIdentity>>,
     State(state): State<AppState>,
     Path((space_id, script_id)): Path<(String, String)>,
     ApiJson(req): ApiJson<UpdateScriptReq>,
 ) -> Result<Json<ScriptDto>, ApiError> {
-    require_space(&state.pool, &space_id, &key.0).await?;
+    let category = require_space_access(
+        &state.pool,
+        state.org.as_ref(),
+        identity.as_deref(),
+        &space_id,
+        key.0.as_deref(),
+        SpaceAccess::Manage,
+    )
+    .await?;
 
     let new_name = match &req.name {
         Some(raw) => {
@@ -242,7 +290,13 @@ pub async fn update_script(
     // the outer check and the write; a missed UPDATE routes to 404 instead of letting the re-read
     // RowNotFound surface as a 500.
     let mut tx = write_transaction(&state.pool).await?;
-    require_space(&mut *tx, &space_id, &key.0).await?;
+    require_space_row(
+        &mut *tx,
+        &space_id,
+        key.0.as_deref(),
+        category.org_binding(),
+    )
+    .await?;
     let done = sqlx::query(
         "UPDATE scripts SET name = COALESCE($1, name), note = COALESCE($2, note), updated_at = $3 \
          WHERE id = $4 AND space_id = $5",
@@ -285,31 +339,49 @@ pub async fn update_script(
         ("spaceId" = String, Path, description = "Space id"),
         ("scriptId" = String, Path, description = "Script id"),
     ),
-    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    // Key-addressed space: bearer AND space key (herald mode) or space key only (none mode);
+    // org-bound space: bearer only (admin tier).
     security(
         ("bearer_auth" = [], "space_key" = []),
         ("space_key" = []),
+        ("bearer_auth" = []),
     ),
     responses(
         (status = 201, body = VersionMetaDto),
         (status = 400, body = ErrorBodyDto, description = "INVALID_INPUT"),
         (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
-        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
+        (status = 403, body = ErrorBodyDto, description = "SPACE_ACCESS_DENIED / SPACE_ROLE_REQUIRED (read-only member of an org-bound space)"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in or organization service unreachable — fail-closed)"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND / SCRIPT_NOT_FOUND"),
     )
 )]
 pub async fn create_script_version(
     key: SpaceKeyHeader,
+    identity: Option<Extension<ResolvedIdentity>>,
     State(state): State<AppState>,
     Path((space_id, script_id)): Path<(String, String)>,
     ApiJson(req): ApiJson<CreateScriptVersionReq>,
 ) -> Result<(StatusCode, Json<VersionMetaDto>), ApiError> {
-    require_space(&state.pool, &space_id, &key.0).await?;
+    let category = require_space_access(
+        &state.pool,
+        state.org.as_ref(),
+        identity.as_deref(),
+        &space_id,
+        key.0.as_deref(),
+        SpaceAccess::Manage,
+    )
+    .await?;
 
     let mut tx = write_transaction(&state.pool).await?;
-    // In-transaction re-verification serializes with the version allocation: a concurrent space
-    // deletion cannot slip into this commit after the check.
-    require_space(&mut *tx, &space_id, &key.0).await?;
+    // In-transaction re-verification of the space row serializes with the version allocation:
+    // a concurrent space deletion cannot slip into this commit after the check.
+    require_space_row(
+        &mut *tx,
+        &space_id,
+        key.0.as_deref(),
+        category.org_binding(),
+    )
+    .await?;
     // Take the scripts row lock first: a concurrent version creator for the same script waits
     // here, so the MAX+1 below sees its committed insert (PostgreSQL's replacement for the
     // whole-database BEGIN IMMEDIATE serialization). No row = script missing (or not in this
@@ -380,24 +452,36 @@ pub async fn create_script_version(
         ("spaceId" = String, Path, description = "Space id"),
         ("scriptId" = String, Path, description = "Script id"),
     ),
-    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    // Key-addressed space: bearer AND space key (herald mode) or space key only (none mode);
+    // org-bound space: bearer only (any member).
     security(
         ("bearer_auth" = [], "space_key" = []),
         ("space_key" = []),
+        ("bearer_auth" = []),
     ),
     responses(
         (status = 200, body = [VersionMetaDto]),
         (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
-        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
+        (status = 403, body = ErrorBodyDto, description = "SPACE_ACCESS_DENIED (org-bound space, not a member)"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in or organization service unreachable — fail-closed)"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND / SCRIPT_NOT_FOUND"),
     )
 )]
 pub async fn list_script_versions(
     key: SpaceKeyHeader,
+    identity: Option<Extension<ResolvedIdentity>>,
     State(state): State<AppState>,
     Path((space_id, script_id)): Path<(String, String)>,
 ) -> Result<Json<Vec<VersionMetaDto>>, ApiError> {
-    require_space(&state.pool, &space_id, &key.0).await?;
+    require_space_access(
+        &state.pool,
+        state.org.as_ref(),
+        identity.as_deref(),
+        &space_id,
+        key.0.as_deref(),
+        SpaceAccess::Read,
+    )
+    .await?;
 
     // Filtered by space through the scripts join; an empty result = script missing (every script
     // has v1 and versions are append-only)
@@ -438,26 +522,38 @@ pub async fn list_script_versions(
         ("scriptId" = String, Path, description = "Script id"),
         ("versionNumber" = i64, Path, description = "Version number (positive integer)"),
     ),
-    // Herald mode: bearer AND space key; AUTH_MODE=none: space key only.
+    // Key-addressed space: bearer AND space key (herald mode) or space key only (none mode);
+    // org-bound space: bearer only (any member).
     security(
         ("bearer_auth" = [], "space_key" = []),
         ("space_key" = []),
+        ("bearer_auth" = []),
     ),
     responses(
         (status = 200, body = VersionDto),
         (status = 400, body = ErrorBodyDto, description = "INVALID_INPUT: versionNumber not a positive integer"),
         (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED (herald mode) / BAD_SPACE_KEY"),
-        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in service unreachable — fail-closed)"),
+        (status = 403, body = ErrorBodyDto, description = "SPACE_ACCESS_DENIED (org-bound space, not a member)"),
+        (status = 503, body = ErrorBodyDto, description = "AUTH_UNAVAILABLE (herald mode: sign-in or organization service unreachable — fail-closed)"),
         (status = 404, body = ErrorBodyDto, description = "SPACE_NOT_FOUND / SCRIPT_NOT_FOUND / VERSION_NOT_FOUND"),
     )
 )]
 pub async fn get_script_version(
     key: SpaceKeyHeader,
+    identity: Option<Extension<ResolvedIdentity>>,
     State(state): State<AppState>,
     Path((space_id, script_id, version_raw)): Path<(String, String, String)>,
 ) -> Result<Json<VersionDto>, ApiError> {
     let version_number = parse_version_param(&version_raw, "versionNumber")?;
-    require_space(&state.pool, &space_id, &key.0).await?;
+    require_space_access(
+        &state.pool,
+        state.org.as_ref(),
+        identity.as_deref(),
+        &space_id,
+        key.0.as_deref(),
+        SpaceAccess::Read,
+    )
+    .await?;
 
     // scripts as the driving row (no row = script missing); LEFT JOIN the version row (all NULL =
     // version missing)

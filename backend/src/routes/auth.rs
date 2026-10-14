@@ -26,7 +26,7 @@ use sha2::{Digest, Sha256};
 use crate::config::HeraldConfig;
 use crate::dto::{AuthConfigDto, ErrorBodyDto, RedeemTokenReq, RefreshTokenReq, TokenSetDto};
 use crate::error::{auth_unavailable, endpoint_not_found, ApiError, ApiJson};
-use crate::spacekey::constant_time_eq;
+use crate::spacekey::{constant_time_eq, ResolvedIdentity};
 use crate::AppState;
 
 /// Login-transaction lifetime; the server-side expiry is authoritative (the cookie's Max-Age is
@@ -146,8 +146,9 @@ impl HeraldAuth {
 
     /// The per-request identity check: GET /api/auth/status with the caller's Bearer token. Only
     /// authenticated/userId/realmId participate in the decision; other fields the provider may
-    /// add (permissions, scopes, …) are ignored.
-    async fn check_sign_in(&self, token: &str) -> Result<(), ApiError> {
+    /// add (permissions, scopes, …) are ignored. On success the resolved identity is returned
+    /// for injection into request extensions (the org-bound access layer consumes it).
+    async fn check_sign_in(&self, token: &str) -> Result<ResolvedIdentity, ApiError> {
         let url = format!("{}/api/auth/status", self.config.base_url);
         let response = match self.http.get(&url).bearer_auth(token).send().await {
             Ok(response) => response,
@@ -178,7 +179,10 @@ impl HeraldAuth {
                             .to_string(),
                     });
                 }
-                Ok(())
+                Ok(ResolvedIdentity {
+                    user_id: wire.user_id.unwrap_or_default(),
+                    realm_id: self.config.realm_id.clone(),
+                })
             }
             401 => Err(ApiError::AuthRequired),
             _ => Err(auth_unavailable()),
@@ -231,11 +235,12 @@ struct RefreshWire {
 }
 
 /// Business-endpoint gate: Bearer first (401 without a Herald round trip on bad input), then the
-/// status check; only an explicit success reaches the handler — the original space-key check
+/// status check; only an explicit success reaches the handler, whose extensions then carry the
+/// resolved identity (userId/realmId) for the space access layer — the original space-key check
 /// runs afterwards, unchanged.
 pub async fn require_herald_auth(
     State(state): State<AppState>,
-    req: Request,
+    mut req: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
     // Only mounted in herald mode; the pass-through keeps none-mode semantics if assembly ever
@@ -244,7 +249,8 @@ pub async fn require_herald_auth(
         return Ok(next.run(req).await);
     };
     let token = bearer_token(req.headers())?;
-    auth.check_sign_in(&token).await?;
+    let identity = auth.check_sign_in(&token).await?;
+    req.extensions_mut().insert(identity);
     Ok(next.run(req).await)
 }
 
@@ -276,7 +282,7 @@ fn bearer_token(headers: &HeaderMap) -> Result<String, ApiError> {
     path = "/api/auth/config",
     tag = "auth",
     responses(
-        (status = 200, body = AuthConfigDto, description = "Sign-in mode probe; public in both run modes (loginUrl is null when disabled)"),
+        (status = 200, body = AuthConfigDto, description = "Sign-in mode probe; public in both run modes (loginUrl is null when disabled; workspacePermissions is false on none mode and older servers)"),
     )
 )]
 pub async fn get_auth_config(State(state): State<AppState>) -> Json<AuthConfigDto> {
@@ -284,6 +290,8 @@ pub async fn get_auth_config(State(state): State<AppState>) -> Json<AuthConfigDt
     Json(AuthConfigDto {
         enabled,
         login_url: enabled.then(|| "/api/auth/oauth/start".to_string()),
+        // The org-bound surface exists exactly when the org channel is assembled (herald mode).
+        workspace_permissions: state.org.is_some(),
     })
 }
 

@@ -9,6 +9,14 @@ pub struct SpaceDto {
     pub id: String,
     pub name: String,
     pub created_at: String,
+    /// "owner" | "admin" | "member" — present only for org-bound spaces when the caller is a
+    /// member; key-addressed spaces never emit it (old response bytes stay identical).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub my_role: Option<String>,
+    /// The caller's own account id alongside myRole (self-exit addressing and the member
+    /// view's "you" marker); never persisted or logged server-side.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub my_user_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -56,12 +64,15 @@ pub struct ErrorBodyDto {
     pub error: ErrorDto,
 }
 
-/// Register a locally generated space: the server stores only the SHA-256 hash of `key`.
+/// Register a space. With `key`: the key-addressed space (the server stores only the
+/// SHA-256 hash). Without `key` (herald mode only): an organization-bound space whose
+/// creator becomes the owner.
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSpaceReq {
     pub id: String,
-    pub key: String,
+    /// 16–256 chars without whitespace; omit to create an org-bound space (400 in none mode).
+    pub key: Option<String>,
     pub name: String,
 }
 
@@ -96,6 +107,63 @@ pub struct UpdateScriptReq {
 pub struct AuthConfigDto {
     pub enabled: bool,
     pub login_url: Option<String>,
+    /// Whether org-bound spaces, invites and member management are served (herald mode with
+    /// the organization channel configured; false on older servers and in none mode).
+    pub workspace_permissions: bool,
+}
+
+/// A one-time invite code: the plaintext appears exactly once, in the issuing response.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct InviteDto {
+    pub space_id: String,
+    /// Full wire form "{spaceId}#iv-{32 base62}" — pasteable into the same join field as a
+    /// space code and locally distinguishable from one.
+    pub code: String,
+    pub created_at: String,
+    pub expires_at: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RedeemInviteReq {
+    pub code: String,
+}
+
+/// One member of an org-bound space; display fields (email/nickname/joinedAt) appear only in
+/// list responses — role-change and transfer answers carry the addressing facts only.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberDto {
+    pub user_id: String,
+    pub email: Option<String>,
+    pub nickname: Option<String>,
+    /// "owner" | "admin" | "member" (mapped from the provider's built-in tiers).
+    pub role: String,
+    pub is_owner: bool,
+    pub joined_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberListDto {
+    pub items: Vec<MemberDto>,
+    pub page: u64,
+    pub page_size: u64,
+    pub total: i64,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateMemberRoleReq {
+    /// "admin" | "member" ("owner" is a 400 — ownership moves via the transfer endpoint).
+    pub role: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferOwnershipReq {
+    pub user_id: String,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

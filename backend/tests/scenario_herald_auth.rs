@@ -17,7 +17,6 @@
 
 mod common;
 
-use std::io::{BufRead, BufReader, Read, Write as _};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -25,66 +24,24 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::Router;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
-use oncewise_ai_sync::config::{AuthMode, Config, HeraldConfig};
+use oncewise_ai_sync::config::{AuthMode, Config};
 use oncewise_ai_sync::routes::auth::{Clock, HeraldAuth};
 use oncewise_ai_sync::{routes, AppState};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+use common::herald::{
+    error_code, herald_base_url, herald_config, org_client, EnvRestore, Herald, CALLBACK_URI,
+    CLIENT_ID, ENV_MUTEX, ENV_VARS, PASSWORD, REALM,
+};
 use common::{json_of, send, KEY_A, KEY_B};
 
-const REALM: &str = "oncewise";
 const REALM_OTHER: &str = "oncewise-other";
-const CLIENT_ID: &str = "oncewise-sync";
-// Seeded users reuse the image's bootstrap-admin password hash (admin realm), exactly like
-// the rmqtt-things test tooling — so every test user logs in with "password".
-const PASSWORD: &str = "password";
-// Whitelisted in the seeded client app; nothing serves it (the code comes from the login
-// JSON response, and oncewise-ai-sync only exchanges it server-to-server).
-const CALLBACK_URI: &str = "http://127.0.0.1:8099/api/auth/oauth/callback";
-const HERALD_CONTAINER: &str = "oncewise-test-herald";
 
 /// Serializes the whole suite (a05 stops the shared container mid-run).
 static SUITE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-fn herald_base_url() -> String {
-    std::env::var("TEST_HERALD_URL").unwrap_or_else(|_| "http://127.0.0.1:13001".to_string())
-}
-
-fn herald_db_url() -> String {
-    std::env::var("TEST_HERALD_DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@127.0.0.1:5432/herald_test".to_string())
-}
-
-fn herald_redis_addr() -> String {
-    std::env::var("TEST_HERALD_REDIS").unwrap_or_else(|_| "127.0.0.1:16381".to_string())
-}
-
-struct Herald {
-    base: String,
-    http: reqwest::Client,
-    db: sqlx::PgPool,
-    redis: String,
-}
-
 impl Herald {
-    async fn connect() -> Self {
-        let db = sqlx::postgres::PgPoolOptions::new()
-            .max_connections(2)
-            .connect(&herald_db_url())
-            .await
-            .expect("Herald's database is not reachable; run scripts/test-start.py first");
-        Self {
-            base: herald_base_url(),
-            http: reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .build()
-                .expect("test http client"),
-            db,
-            redis: herald_redis_addr(),
-        }
-    }
-
     /// Idempotent seed: two realms, the BFF client app (both realms — the second backs the
     /// realm-mismatch case), one role, and the per-test users. Re-running resets account
     /// status, so a disabled account from a previous run never leaks in.
@@ -246,116 +203,6 @@ impl Herald {
         assert_eq!(echoed, state, "Herald must echo our state");
         (code, state)
     }
-
-    async fn set_account_status(&self, realm: &str, email: &str, status: i32) {
-        sqlx::query("UPDATE account SET status = $1 WHERE realm_id = $2 AND email = $3")
-            .bind(status)
-            .bind(realm)
-            .bind(email)
-            .execute(&self.db)
-            .await
-            .expect("account status update");
-    }
-
-    /// Deletes Herald's rl:* keys so login/authorize/token bursts (a07 does >100) do not trip
-    /// the per-IP/per-identifier windows. Minimal inline RESP client — no test dependency.
-    fn clear_rate_limits(&self) {
-        let Ok(mut stream) = std::net::TcpStream::connect(&self.redis) else {
-            return; // best-effort: the rate limits then simply apply
-        };
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-        // One BufReader for the whole exchange: a fresh BufReader per line would swallow the
-        // rest of the reply into its buffer and drop those bytes with it.
-        let mut reader = BufReader::new(&mut stream);
-        if reader
-            .get_mut()
-            .write_all(b"*2\r\n$4\r\nKEYS\r\n$4\r\nrl:*\r\n")
-            .is_err()
-        {
-            return;
-        }
-        let keys = read_resp_bulk_strings(&mut reader);
-        if keys.is_empty() {
-            return;
-        }
-        let mut command = format!("*{}\r\n$3\r\nDEL\r\n", keys.len() + 1);
-        for key in &keys {
-            command.push_str(&format!("${}\r\n{key}\r\n", key.len()));
-        }
-        let _ = reader.get_mut().write_all(command.as_bytes());
-        let _ = read_resp_line(&mut reader);
-    }
-
-    async fn stop_container(&self) {
-        docker_output(["stop", HERALD_CONTAINER], "stop the Herald container");
-    }
-
-    async fn start_container_and_wait(&self) {
-        docker_output(["start", HERALD_CONTAINER], "start the Herald container");
-        let deadline = Instant::now() + Duration::from_secs(120);
-        while Instant::now() < deadline {
-            if let Ok(response) = self.http.get(format!("{}/health", self.base)).send().await {
-                if response.status().is_success() {
-                    return;
-                }
-            }
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-        panic!("Herald did not come back healthy within 120s after docker start");
-    }
-}
-
-fn docker_output(args: [&str; 2], what: &str) {
-    let output = std::process::Command::new("docker")
-        .args(args)
-        .output()
-        .unwrap_or_else(|err| panic!("failed to run docker ({what}): {err}"));
-    assert!(
-        output.status.success(),
-        "docker {args:?} failed ({what}): {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-fn read_resp_line(reader: &mut BufReader<&mut std::net::TcpStream>) -> Option<String> {
-    let mut line = String::new();
-    reader.read_line(&mut line).ok()?;
-    Some(line.trim_end().to_string())
-}
-
-/// Parses a RESP array of bulk strings (the reply shape of KEYS).
-fn read_resp_bulk_strings(reader: &mut BufReader<&mut std::net::TcpStream>) -> Vec<String> {
-    let Some(header) = read_resp_line(reader) else {
-        return Vec::new();
-    };
-    let Some(count) = header
-        .strip_prefix('*')
-        .and_then(|n| n.parse::<usize>().ok())
-    else {
-        return Vec::new();
-    };
-    let mut keys = Vec::with_capacity(count);
-    for _ in 0..count {
-        let mut header = String::new();
-        if reader.read_line(&mut header).is_err() {
-            break;
-        }
-        let Some(len) = header
-            .trim_end()
-            .strip_prefix('$')
-            .and_then(|n| n.parse::<usize>().ok())
-        else {
-            break;
-        };
-        let mut bytes = vec![0u8; len];
-        if reader.read_exact(&mut bytes).is_err() {
-            break;
-        }
-        let mut crlf = [0u8; 2];
-        let _ = reader.read_exact(&mut crlf);
-        keys.push(String::from_utf8_lossy(&bytes).to_string());
-    }
-    keys
 }
 
 /// A TCP server that accepts connections and never answers — a real stalled upstream for the
@@ -398,11 +245,6 @@ fn test_clock() -> (Offset, Clock) {
     (offset, clock)
 }
 
-fn herald_config(base_url: &str) -> HeraldConfig {
-    HeraldConfig::new(base_url, REALM, CLIENT_ID, CALLBACK_URI)
-        .expect("test Herald config must be valid (loopback http is allowed)")
-}
-
 struct TestApp {
     app: Router,
     offset: Offset,
@@ -416,6 +258,7 @@ async fn spawn_herald(base_url: &str) -> TestApp {
         app: routes::build_router(AppState {
             pool,
             auth: Some(herald),
+            org: Some(org_client(base_url)),
         }),
         offset,
     }
@@ -426,6 +269,7 @@ async fn spawn_none() -> TestApp {
         app: routes::build_router(AppState {
             pool: common::migrated_pool().await,
             auth: None,
+            org: None,
         }),
         offset: Arc::default(),
     }
@@ -433,13 +277,6 @@ async fn spawn_none() -> TestApp {
 
 fn advance(app: &TestApp, by: Duration) {
     *app.offset.lock().unwrap() += by;
-}
-
-fn error_code(body: &Value) -> String {
-    body["error"]["code"]
-        .as_str()
-        .unwrap_or("<missing code>")
-        .to_string()
 }
 
 fn header_str<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
@@ -1443,48 +1280,6 @@ async fn a08_refresh_proxy_rotation_mapping() {
     assert_eq!(error_code(&json_of(&body)), "AUTH_UNAVAILABLE");
 }
 
-static ENV_MUTEX: Mutex<()> = Mutex::new(());
-
-/// Saves and clears the listed variables; restores the originals on drop. a09 is the only
-/// consumer of Config::from_env; it holds SUITE while the process-global environment is
-/// rewritten, so pool-spawning tests never read a half-swapped DATABASE_URL.
-struct EnvRestore {
-    saved: Vec<(String, Option<String>)>,
-}
-
-impl EnvRestore {
-    fn scoped(vars: &[&str]) -> Self {
-        let saved = vars
-            .iter()
-            .map(|v| ((*v).to_string(), std::env::var(v).ok()))
-            .collect();
-        for v in vars {
-            std::env::remove_var(v);
-        }
-        Self { saved }
-    }
-}
-
-impl Drop for EnvRestore {
-    fn drop(&mut self) {
-        for (key, value) in self.saved.drain(..) {
-            match value {
-                Some(value) => std::env::set_var(&key, value),
-                None => std::env::remove_var(&key),
-            }
-        }
-    }
-}
-
-const ENV_VARS: [&str; 6] = [
-    "AUTH_MODE",
-    "HERALD_BASE_URL",
-    "HERALD_REALM_ID",
-    "HERALD_CLIENT_ID",
-    "HERALD_REDIRECT_URI",
-    "DATABASE_URL",
-];
-
 #[tokio::test]
 async fn a09_config_fail_fast_and_modes() {
     // The env rewrite below is process-global: every other test spawns pools that fall back to
@@ -1494,14 +1289,17 @@ async fn a09_config_fail_fast_and_modes() {
     let _restore = EnvRestore::scoped(&ENV_VARS);
     std::env::set_var("DATABASE_URL", "postgres://user:pass@127.0.0.1:5432/db");
 
-    // Default mode with nothing configured: all four variables listed, both exits offered,
-    // and no configured value is echoed back.
+    // Default mode with nothing configured: all five variables listed (the org channel key
+    // among them), both exits offered, and no configured value is echoed back. The org-key
+    // specifics (console steps) are asserted by w07 in scenario_workspace_permissions.rs.
     std::env::set_var("HERALD_BASE_URL", "https://herald.secret-example.invalid");
     let err = Config::from_env().expect_err("missing Herald config must fail");
     let err = err.to_string();
     assert!(err.contains("AUTH_MODE defaults to 'herald'"), "{err}");
     assert!(
-        err.contains("Missing variables: HERALD_REALM_ID, HERALD_CLIENT_ID, HERALD_REDIRECT_URI"),
+        err.contains(
+            "Missing variables: HERALD_REALM_ID, HERALD_CLIENT_ID, HERALD_REDIRECT_URI, HERALD_ORG_API_KEY"
+        ),
         "{err}"
     );
     assert!(
@@ -1513,7 +1311,8 @@ async fn a09_config_fail_fast_and_modes() {
         "values must never be echoed: {err}"
     );
 
-    // A complete valid set assembles the gate — no API-key-like variable is involved.
+    // A complete valid set assembles the gate: the login gate itself needs no API-key-like
+    // variable; the org channel is the single server-side credential (org_api_key).
     std::env::set_var("HERALD_BASE_URL", "https://herald.example.com");
     std::env::set_var("HERALD_REALM_ID", REALM);
     std::env::set_var("HERALD_CLIENT_ID", CLIENT_ID);
@@ -1521,12 +1320,14 @@ async fn a09_config_fail_fast_and_modes() {
         "HERALD_REDIRECT_URI",
         "https://sync.example.com/api/auth/oauth/callback",
     );
+    std::env::set_var("HERALD_ORG_API_KEY", "org-key-test-value");
     let config = Config::from_env().expect("complete herald config");
     match &config.auth {
         AuthMode::Herald(herald) => {
             assert_eq!(herald.base_url, "https://herald.example.com");
             assert_eq!(herald.realm_id, REALM);
             assert_eq!(herald.client_id, CLIENT_ID);
+            assert_eq!(herald.org_api_key, "org-key-test-value");
         }
         AuthMode::None => panic!("complete configuration must select herald mode"),
     }

@@ -2,11 +2,12 @@
 
 use reqwest::Url;
 
-const HERALD_VARS: [&str; 4] = [
+const HERALD_VARS: [&str; 5] = [
     "HERALD_BASE_URL",
     "HERALD_REALM_ID",
     "HERALD_CLIENT_ID",
     "HERALD_REDIRECT_URI",
+    "HERALD_ORG_API_KEY",
 ];
 
 #[derive(Debug, Clone)]
@@ -29,16 +30,20 @@ pub struct HeraldConfig {
     /// The canonical registered callback (…/api/auth/oauth/callback); never derived from
     /// request Host or forwarding headers.
     pub redirect_uri: String,
+    /// Server-to-server API key bound to the client app (orgs.view + orgs.manage policies);
+    /// drives the organization channel for workspace permissions. Never reaches a client.
+    pub org_api_key: String,
 }
 
 impl HeraldConfig {
-    /// Validates the four Herald settings without echoing any value back (variable names only,
+    /// Validates the five Herald settings without echoing any value back (variable names only,
     /// so startup errors stay safe to paste into an issue tracker).
     pub fn new(
         base_url: &str,
         realm_id: &str,
         client_id: &str,
         redirect_uri: &str,
+        org_api_key: &str,
     ) -> anyhow::Result<Self> {
         let base = Url::parse(base_url.trim())
             .ok()
@@ -83,11 +88,17 @@ impl HeraldConfig {
                 )
             })?;
 
+        let org_key = org_api_key.trim();
+        if org_key.is_empty() || org_key.len() > 4096 {
+            anyhow::bail!("HERALD_ORG_API_KEY must be 1–4096 characters");
+        }
+
         Ok(Self {
             base_url: base,
             realm_id: realm.to_string(),
             client_id: client.to_string(),
             redirect_uri: redirect,
+            org_api_key: org_key.to_string(),
         })
     }
 }
@@ -150,8 +161,12 @@ impl Config {
                 anyhow::bail!(
                     "AUTH_MODE defaults to 'herald', which requires Herald configuration.\n\
                      Missing variables: {}\n\
-                     Either supply the missing variables to enable sign-in,\n\
-                     or set AUTH_MODE=none to retain the previous behavior explicitly.",
+                     Either supply the missing variables to enable sign-in and workspace permissions,\n\
+                     or set AUTH_MODE=none to retain the previous behavior explicitly.\n\
+                     Prepare HERALD_ORG_API_KEY in the Herald console:\n\
+                     1. Reuse (or create) the client app identified by HERALD_CLIENT_ID in your realm.\n\
+                     2. Issue an API key bound to that client app (API Keys - Create, select the client app).\n\
+                     3. Create a role carrying the \"orgs.view\" and \"orgs.manage\" policies and assign it to the API key (Manage API Key Roles).",
                     missing.join(", ")
                 );
             }
@@ -160,6 +175,7 @@ impl Config {
                 vars[1].1.trim(),
                 vars[2].1.trim(),
                 vars[3].1.trim(),
+                vars[4].1.trim(),
             )?;
             return Ok(AuthMode::Herald(config));
         }

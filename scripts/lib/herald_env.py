@@ -26,7 +26,7 @@ HERALD_DATABASE_NAME = "herald_test"
 HERALD_DATABASE_URL = f"postgres://postgres:postgres@127.0.0.1:5432/{HERALD_DATABASE_NAME}"
 HERALD_REDIS_ADDR = f"127.0.0.1:{REDIS_PORT}"
 
-HERALD_IMAGE_DEFAULT = "ghcr.io/timzaak/herald:0.6.1"
+HERALD_IMAGE_DEFAULT = "ghcr.io/timzaak/herald:0.6.4"
 REDIS_IMAGE = "redis:8.4-alpine"
 
 # The BFF redirect URI whitelisted in the seeded Herald client app. Nothing ever serves it:
