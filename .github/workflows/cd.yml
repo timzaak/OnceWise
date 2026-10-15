@@ -263,3 +263,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ github.ref_name }}" "extension/${{ steps.pkg.outputs.zip }}" --clobber
+
+      # Tag push = ship: the draft uploaded above is submitted for review in the
+      # same run, so a v*.*.* tag alone takes a release all the way to the store.
+      # cws-publish.yml stays dispatch-only as the manual re-submit escape hatch.
+      - name: Submit store draft for review
+        working-directory: extension
+        env:
+          CWS_SA_JSON: ${{ secrets.CWS_SA_JSON }}
+          # Public item ID, also pinned in skills/oncewise-message/protocol.mjs.
+          CWS_ITEM_ID: dmmhmcdbkbbgbcidafhlhepdchjboenc
+        run: node scripts/cws-publish.mjs
