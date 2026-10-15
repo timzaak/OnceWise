@@ -51,6 +51,7 @@ async function setupCollab(
   await uploadFlowAsScript(page, { scriptName: SCRIPT, note: 'note', versionNote: 'v1' })
 
   const b = await launchParticipant(demoHeadless, 'us-ds-004 B')
+  autoAcceptDialogs(b.page)
   await ackOnboarding(b.page)
   await openSyncTab(b.page)
   await connectServer(b.page, server.origin)

@@ -3,6 +3,7 @@
 > 角色：**空间参与者**与**部署者**，定义见 [`docs/user-stories/_roles.md`](../_roles.md)。
 > 关联：[正式 PRD](../../prd/auth/herald-support.md)、[正式 PRD data-sync](../../prd/core/data-sync.md)。
 > 术语：登录 = 在启用鉴权的服务器上经 Herald 授权窗口完成认证并持有访问凭证；门禁 = 服务端对业务访问的前置用户身份校验，与空间密钥（空间寻址）正交。
+> 空间权限叠加（2026-10-15 起）：Herald 鉴权服务器上新建的空间为组织绑定空间（角色分级、一次性邀请码、成员管理，见 [`auth/workspace-permissions.md`](../auth/workspace-permissions.md)）；下文故事关注服务级门禁本身，存量密钥空间在门禁之上维持持钥对等语义。
 
 ## 用户故事
 

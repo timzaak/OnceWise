@@ -70,12 +70,15 @@ test('T2 失败原因可见且可重试：停止时操作失败原因展示，�
   try {
     await setupEnabledConsumer(server, host, page, extensionId)
 
-    // 服务停止时尝试创建空间：失败原因可见（地址已保存可重试）
+    // 服务停止时尝试创建空间：失败原因可见（地址已保存可重试）。workspace-permissions 起
+    // 创建先探测模式，停机时探测不可达 → unknown fail-closed 拒绝（unknown 绝不当 none——
+    // 文案为「登录服务暂不可用，可稍后重试」，同为可见+可重试）
     await server.stop()
     await openSyncTab(page)
     await page.locator('#sync-space-name').fill('Second Space')
     await page.getByRole('button', { name: /^(Create space|创建空间)$/ }).click()
-    await expect(page.locator('p.sp-error', { hasText: /Server unreachable.*retry|服务不可达.*重试|服务不可达：/ })).toBeVisible()
+    await expect(page.locator('p.sp-error', { hasText: /temporarily unavailable — try again later|暂不可用，请稍后重试/ }))
+      .toBeVisible({ timeout: 30_000 })
 
     // 恢复后重试：重连（地址未变时连接即重新探测）转 ok，同一操作可重试成功。故事语义即
     // “可重试”——有界重试容忍 SW 侧对旧进程连接的短暂失效。

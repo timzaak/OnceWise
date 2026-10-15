@@ -1,4 +1,5 @@
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
@@ -25,14 +26,20 @@ function databaseUrlFor(database: string): string {
   return query === undefined ? rebuilt : `${rebuilt}?${query}`
 }
 
-async function withAdmin<T>(fn: (client: Client) => Promise<T>): Promise<T> {
-  const client = new Client({ connectionString: SYNC_ADMIN_URL })
+// pg Client 生命周期包装（connect / try-finally end）：管理库（withAdmin）与本实例库
+// （SyncServer.withDb）共用同一形状，加固只落一处。
+async function withClient<T>(connectionString: string, fn: (client: Client) => Promise<T>): Promise<T> {
+  const client = new Client({ connectionString })
   await client.connect()
   try {
     return await fn(client)
   } finally {
     await client.end()
   }
+}
+
+async function withAdmin<T>(fn: (client: Client) => Promise<T>): Promise<T> {
+  return await withClient(SYNC_ADMIN_URL, fn)
 }
 
 const execFileAsync = promisify(execFile)
@@ -121,13 +128,16 @@ export class SyncServer {
     return server
   }
 
-  // Herald 鉴权模式工厂：env 注入四项 HERALD_* 配置，指向 scripts/test-start.py 起的真实
+  // Herald 鉴权模式工厂：env 注入五项 HERALD_* 配置（HERALD_ORG_API_KEY 是 workspace-permissions
+  // 起的必需组织通道凭证，缺它后端 fail-fast 拒绝启动），指向 scripts/test-start.py 起的真实
   // docker Herald；HERALD_REDIRECT_URI 是本实例自己的 callback（loopback HTTP），调用方须先把
-  // 它并入 Herald 播种 client 的 redirect_uris 白名单（herald.ts seedHeraldFixture）。
+  // 它并入 Herald 播种 client 的 redirect_uris 白名单（herald.ts seedHeraldFixture 一并播种该
+  // key 的 client_api_keys/角色）。
   static async startWithHerald(herald: {
     baseUrl: string
     realmId: string
     clientId: string
+    orgApiKey: string
   }): Promise<SyncServer> {
     const port = await freePort()
     const server = new SyncServer(port, await createDemoDatabase(), await resolveOrBuildBinary(), {
@@ -136,6 +146,7 @@ export class SyncServer {
       HERALD_REALM_ID: herald.realmId,
       HERALD_CLIENT_ID: herald.clientId,
       HERALD_REDIRECT_URI: `http://127.0.0.1:${port}/api/auth/oauth/callback`,
+      HERALD_ORG_API_KEY: herald.orgApiKey,
     })
     await server.start()
     return server
@@ -237,16 +248,46 @@ export class SyncServer {
     return this.output.join('').slice(-4000)
   }
 
+  // 本实例自有库上的查询入口（workspace-permissions 故事用）：断言服务端状态或构造时间类
+  // 前置（邀请码过期推移）。库结构由后端迁移建齐，调用方只读/小改，不代替 API 面断言。
+  private async withDb<T>(fn: (client: Client) => Promise<T>): Promise<T> {
+    return await withClient(databaseUrlFor(this.database), fn)
+  }
+
+  // 把一枚已签发邀请码的 expires_at 推移到过去（US-WP-002 场景 3 的时间前置替身）：等待真实
+  // 24h 过期对演示不可行；code_hash 与后端同算法（sha256 hex，输入含 spaceId# 前缀的完整码）。
+  async expireInvite(code: string): Promise<void> {
+    const codeHash = createHash('sha256').update(code).digest('hex')
+    const result = await this.withDb(client =>
+      client.query('UPDATE space_invites SET expires_at = $1 WHERE code_hash = $2', [
+        '1970-01-01T00:00:00.000Z',
+        codeHash,
+      ]))
+    if ((result.rowCount ?? 0) === 0) {
+      throw new Error(`过期推移未命中邀请码行（code_hash=${codeHash.slice(0, 8)}…）`)
+    }
+  }
+
+  // 空间的组织绑定 id（Herald 侧异常态构造等的输入）；未绑定（密钥空间）返回 null。
+  async spaceOrgId(spaceId: string): Promise<string | null> {
+    const result = await this.withDb(client =>
+      client.query<{ org_id: string | null }>('SELECT org_id FROM spaces WHERE id = $1', [spaceId]))
+    if (result.rows.length !== 1) throw new Error(`空间行不存在：${spaceId}`)
+    return result.rows[0]!.org_id
+  }
+
   // Node 直连 API：造前置数据（如校验失败版本）与断言服务端状态。写接口逐请求携带
-  // X-Space-Key（与扩展同一鉴权方式；无账号模型下持密钥即对等读写）。
+  // X-Space-Key（与扩展同一鉴权方式；无账号模型下持密钥即对等读写）；herald 模式的
+  // 服务端调用另需 bearer（登录门禁）。
   async request(
     method: string,
     requestPath: string,
-    options: { key?: string; body?: unknown } = {},
+    options: { key?: string; bearer?: string; body?: unknown } = {},
   ): Promise<Response> {
     return await fetch(`${this.origin}${requestPath}`, {
       method,
       headers: {
+        ...(options.bearer !== undefined ? { Authorization: `Bearer ${options.bearer}` } : {}),
         ...(options.key !== undefined ? { 'X-Space-Key': options.key } : {}),
         ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
@@ -254,8 +295,13 @@ export class SyncServer {
     })
   }
 
-  async createSpace(id: string, key: string, name: string): Promise<Response> {
-    return await this.request('POST', '/api/spaces', { body: { id, key, name } })
+  // API 播种密钥空间（herald 模式须带登录身份；key 随体 = 后端过渡兼容的密钥空间路径）。
+  // us-hs-001 在 wp 服务器上的「创建并分享空间码」前置改走此入口（UI 创建一律组织绑定无码）。
+  async createSpace(id: string, key: string, name: string, opts: { bearer?: string } = {}): Promise<void> {
+    const res = await this.request('POST', '/api/spaces', { bearer: opts.bearer, body: { id, key, name } })
+    if (!res.ok) {
+      throw new Error(`API 播种密钥空间失败（${name}）：HTTP ${res.status} ${await res.text()}`)
+    }
   }
 
   async createScript(

@@ -94,10 +94,16 @@ export async function readSpaceCode(page: Page, spaceName: string): Promise<stri
   return await spaceGroup(page, spaceName).locator('input[readonly]').inputValue()
 }
 
-export async function joinSpaceViaUi(page: Page, code: string): Promise<void> {
+// 凭码提交加入表单（填码 + 点 Join）。提交后的结果文案（成功/已用/过期/登录门禁/服务故障）
+// 因场景而异，由调用方自行断言。
+export async function submitJoinCode(page: Page, code: string): Promise<void> {
   await page.locator('#sync-join-code').fill(code)
   await page.getByRole('button', { name: /^(Join|加入)$/ }).click()
-  await expect(page.locator('p.sp-error', { hasText: /Joined space|已加入空间/ })).toBeVisible({ timeout: 15_000 })
+}
+
+export async function joinSpaceViaUi(page: Page, code: string, opts: { timeout?: number } = {}): Promise<void> {
+  await submitJoinCode(page, code)
+  await expect(page.locator('p.sp-error', { hasText: /Joined space|已加入空间/ })).toBeVisible({ timeout: opts.timeout ?? 15_000 })
 }
 
 export async function openSpaceScripts(page: Page, spaceName: string): Promise<void> {
@@ -184,7 +190,11 @@ export async function seedFlow(page: Page, flowJson: string): Promise<void> {
     provenance: { source: 'import', importedAt: now, createdAt: now, updatedAt: now },
   }
   const res = await page.evaluate(async (message) => {
-    return await (globalThis as any).chrome.runtime.sendMessage(message)
+    // evaluate 内的无界 sendMessage 会把 background 无响应变成整用例挂起——有界失败可定位
+    return await Promise.race([
+      (globalThis as any).chrome.runtime.sendMessage(message) as Promise<unknown>,
+      new Promise(resolve => setTimeout(() => resolve({ ok: false, reason: 'seed-timeout' }), 30_000)),
+    ])
   }, { type: 'sp:saveFlow', flow })
   expect(res, `sp:saveFlow 播种失败：${JSON.stringify(res)}`).toMatchObject({ ok: true })
 }
@@ -234,9 +244,21 @@ export function authCard(page: Page) {
 
 export async function expectSignInPrompt(page: Page): Promise<void> {
   // 换服/冷启动后登录卡取决于一次真实的模式探测（含 SW 冷启动），给足有界收敛窗口
-  await expect(authCard(page)).toBeVisible({ timeout: 30_000 })
-  await expect(authCard(page).locator('p.sp-hint', { hasText: /requires signing in|要求登录后才能同步/ }))
-    .toBeVisible({ timeout: 15_000 })
+  const tryOnce = async () => {
+    await expect(authCard(page)).toBeVisible({ timeout: 15_000 })
+    await expect(authCard(page).locator('p.sp-hint', { hasText: /requires signing in|要求登录后才能同步/ }))
+      .toBeVisible({ timeout: 15_000 })
+  }
+  try {
+    await tryOnce()
+    return
+  } catch {
+    // 偶发（扩展既有姿态）：连接后唯一一次模式探测瞬时失败时登录卡不出现，unknown 无自动
+    // 重试。切换页签重挂载同步面板即产品的重试路径（真实用户同样经此恢复），有界重试一轮
+    // 后仍不出现才判失败——断言强度不变。
+  }
+  await openSyncTab(page)
+  await tryOnce()
 }
 
 export async function expectSignedIn(page: Page): Promise<void> {
@@ -262,7 +284,16 @@ export async function connectAndExpectSignIn(page: Page, origin: string): Promis
 // 落到 chromiumapp.org 终点即自动关闭。自动填表只替代 Herald 侧的用户输入，不改任何协议环节。
 export async function signInViaUi(context: BrowserContext, page: Page, email: string): Promise<void> {
   await clearHeraldRateLimits()
-  await authCard(page).getByRole('button', { name: /^(Sign in|登录)$/ }).click({ timeout: 20_000 })
+  const clickSignIn = () =>
+    authCard(page).getByRole('button', { name: /^(Sign in|登录)$/ }).click({ timeout: 20_000 })
+  try {
+    await clickSignIn()
+  } catch {
+    // 偶发：点击瞬间登录卡被一次迟到的探测结论顶掉（detached）。经 expectSignInPrompt 的
+    // 产品路径（重挂载面板）恢复后重试一轮。
+    await expectSignInPrompt(page)
+    await clickSignIn()
+  }
   const authWindow = await context.waitForEvent('page', { timeout: 20_000 })
   const form = authWindow.locator('[data-testid="login-form"]')
   await expect(form, '授权窗口未呈现 Herald 登录页').toBeVisible({ timeout: 20_000 })
@@ -271,6 +302,18 @@ export async function signInViaUi(context: BrowserContext, page: Page, email: st
   await authWindow.locator('[data-testid="login-submit-button"]').click({ timeout: 20_000 })
   await authWindow.waitForEvent('close', { timeout: 30_000 })
   await expectSignedIn(page)
+}
+
+// 参与者（第二/三设备）标准登录前置：dialog 自动接受 + onboarding 确认 + 连接服务器（登录
+// 引导）+ 真实窗口登录。顺序是既定契约（漏挂 autoAcceptDialogs 会卡 dialog），多故事文件共用
+// 这一顺序，勿在各用例内联手抄。
+export async function prepareParticipant(
+  p: { page: Page; context: BrowserContext }, email: string, origin: string,
+): Promise<void> {
+  autoAcceptDialogs(p.page)
+  await ackOnboarding(p.page)
+  await connectAndExpectSignIn(p.page, origin)
+  await signInViaUi(p.context, p.page, email)
 }
 
 // 经扩展页读 chrome.storage 指定区域（受信任上下文可读）：观察原始记录形状（epoch/tokens
@@ -506,6 +549,168 @@ export async function peekSessionStore(page: Page, key: string): Promise<unknown
 export async function countPendingHandovers(page: Page): Promise<number> {
   const value = await peekSessionStore(page, 'pendingHandovers')
   return Array.isArray(value) ? value.length : 0
+}
+
+// 三档角色徽标文案（空间行与成员行共用一套词表；en/zh 双语 regex）。
+export type WpRole = 'owner' | 'admin' | 'member'
+const rolePatterns: Record<WpRole, RegExp> = {
+  owner: /^(Owner|所有者)$/,
+  admin: /^(Admin|管理员)$/,
+  member: /^(Read-only member|只读成员)$/,
+}
+
+// 空间行角色徽标（org-bound 条目「我的角色」）。
+export async function expectSpaceRoleBadge(page: Page, spaceName: string, role: WpRole): Promise<void> {
+  await expect(spaceGroup(page, spaceName).locator('.sp-badge', { hasText: rolePatterns[role] })).toBeVisible()
+}
+
+// org-bound 空间行无分享码（该类空间无码可分享，邀请入口在成员界面）；密钥空间恰有一个只读输入。
+export async function expectNoShareCodeRow(page: Page, spaceName: string): Promise<void> {
+  await expect(spaceGroup(page, spaceName).locator('input[readonly]')).toHaveCount(0)
+}
+
+// 打开成员视图（入口按钮只在 manager——owner/admin——的空间行渲染）。
+export async function openSpaceMembers(page: Page, spaceName: string): Promise<void> {
+  await spaceGroup(page, spaceName).getByRole('button', { name: /^(Members|成员)$/ }).click()
+  await expect(page.getByRole('button', { name: /← Back to spaces|← 返回空间清单/ })).toBeVisible()
+  await expect(page.locator('p.sp-sub', { hasText: /^(Members|成员) · / })).toBeVisible()
+}
+
+// 成员行卡（aria-label 为行标识：昵称优先，播种昵称取邮箱本地部分）。
+export function memberCard(page: Page, identity: string) {
+  return page.locator(`main.sp-main section.sp-card[aria-label="${identity}"]`)
+}
+
+// 成员行断言：行可见 + 角色徽标；you=true 断言自身行「你」标记。
+export async function expectMemberRow(
+  page: Page, identity: string, role: WpRole, opts: { you?: boolean } = {},
+): Promise<void> {
+  const card = memberCard(page, identity)
+  await expect(card).toBeVisible({ timeout: 15_000 })
+  await expect(card.locator('.sp-badge', { hasText: rolePatterns[role] })).toBeVisible()
+  if (opts.you) {
+    await expect(card.locator('.sp-badge.sync-new', { hasText: /^(You|你)$/ })).toBeVisible()
+  }
+}
+
+// 成员行内不出现指定管理按钮（owner 行无移除/降级；非 owner 视图无转移入口；自身行无任何行内管理）。
+export async function expectMemberRowButtonsAbsent(
+  page: Page, identity: string, names: RegExp[],
+): Promise<void> {
+  for (const name of names) {
+    await expect(memberCard(page, identity).getByRole('button', { name })).toHaveCount(0)
+  }
+}
+
+// 签发邀请码并读取明文（只读输入的 value；headless 剪贴板不可靠，复制按钮不作断言路径——与
+// readSpaceCode 同约束）。同时断言码形状（与空间码同构，粘贴入口可判型）、规则明示（单次
+// 有效/24 小时）与过期时间行。复签（previous 给定）时输入框仍显示旧码，必须等值翻转后再读，
+// 否则会拿到上一枚的明文。
+export async function issueInviteAndReadCode(page: Page, opts: { previous?: string } = {}): Promise<string> {
+  const card = inviteCard(page)
+  await card.getByRole('button', { name: /^(Issue invite code|签发邀请码)$/ }).click()
+  const input = card.locator('input[readonly]')
+  await expect(input).toBeVisible({ timeout: 15_000 })
+  if (opts.previous !== undefined) {
+    await expect.poll(() => input.inputValue(), { timeout: 15_000 }).not.toBe(opts.previous)
+  }
+  await expect(card.locator('p.sp-hint', { hasText: /Single use|单次有效/ })).toBeVisible()
+  await expect(card.locator('p.sp-hint', { hasText: /^(Expires|过期时间)/ })).toBeVisible()
+  const code = await input.inputValue()
+  expect(code).toMatch(/^sp-[0-9A-Za-z]{16}#iv-[0-9A-Za-z]{32}$/)
+  return code
+}
+
+export function inviteCard(page: Page) {
+  return page.locator('section.sp-card[aria-label="Issue invite code"], section.sp-card[aria-label="签发邀请码"]')
+}
+
+// 签发后复签一枚（并存多枚）：等输入框翻转为新码后返回。
+export async function issueAnotherInvite(page: Page, previous: string): Promise<string> {
+  const code = await issueInviteAndReadCode(page, { previous })
+  expect(code, '并存的邀请码必须是不同的码').not.toBe(previous)
+  return code
+}
+
+// 成员操作（成员视图内；移除/降级/转移的 confirm 由 autoAcceptDialogs 接受）。操作成功后界面
+// 自动复拉列表，断言以列表翻转为准（结果物断言，不依赖转瞬即逝的成功文案）。
+export async function promoteToAdmin(page: Page, identity: string): Promise<void> {
+  await memberCard(page, identity).getByRole('button', { name: /^(Promote to admin|提升为管理员)$/ }).click()
+  await expectMemberRow(page, identity, 'admin')
+}
+
+export async function demoteToMember(page: Page, identity: string): Promise<void> {
+  await memberCard(page, identity).getByRole('button', { name: /^(Demote to read-only|降为只读成员)$/ }).click()
+  await expectMemberRow(page, identity, 'member')
+}
+
+export async function removeMemberViaUi(page: Page, identity: string): Promise<void> {
+  await memberCard(page, identity).getByRole('button', { name: /^(Remove|移除)$/ }).click()
+  await expect(memberCard(page, identity)).toHaveCount(0, { timeout: 15_000 })
+}
+
+export async function transferOwnershipViaUi(page: Page, identity: string): Promise<void> {
+  await memberCard(page, identity).getByRole('button', { name: /^(Transfer ownership|转移所有权)$/ }).click()
+  await expectMemberRow(page, identity, 'owner')
+}
+
+// 空间行 Leave 点击原语（自退入口；confirm 由 autoAcceptDialogs 接受）。成功与被拒（409 保护）
+// 文案不同，由调用方按场景断言。
+export async function clickLeaveViaRow(page: Page, spaceName: string): Promise<void> {
+  await spaceGroup(page, spaceName).getByRole('button', { name: /^(Leave space|退出空间)$/ }).click()
+}
+
+// 空间行 Leave（自退）：断言 leaveOk 文案（本机条目保留提示）。
+export async function leaveSpaceViaRow(page: Page, spaceName: string): Promise<void> {
+  await clickLeaveViaRow(page, spaceName)
+  await expect(page.locator('p.sp-error', { hasText: /Left the space|已退出该空间/ })).toBeVisible({ timeout: 15_000 })
+}
+
+// 自退被保护拒绝（空间行 Leave 的 409 兜底文案，SyncSpacesView 已接线本地化键）。
+export async function expectLeaveProtectedRefusal(page: Page, kind: 'owner' | 'last-admin'): Promise<void> {
+  const pattern = kind === 'owner'
+    ? /owner cannot be removed or demoted|所有者不可被移除或降级/
+    : /must keep at least one admin-tier member|空间须保留至少一名管理员档成员/
+  await expect(page.locator('p.sp-error', { hasText: pattern })).toBeVisible({ timeout: 15_000 })
+}
+
+// 只读门控（脚本视图）：只读提示卡出现 + 上传入口隐藏（读语义照常由既有原语覆盖）。
+export async function expectReadOnlyScriptsView(page: Page): Promise<void> {
+  await expect(page.locator('p.sp-hint', { hasText: /read-only member of this space|此空间的只读成员/ }))
+    .toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('button', { name: /^(Save a local flow as a script|把本机流程保存为脚本)$/ }))
+    .toHaveCount(0)
+}
+
+// 只读门控（详情视图）：只读提示 + 改名与发布入口隐藏（浏览/拉取/取消关联不变）。
+export async function expectReadOnlyScriptDetail(page: Page): Promise<void> {
+  await expect(page.locator('p.sp-hint', { hasText: /read-only member of this space|此空间的只读成员/ }))
+    .toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('button', { name: /^(Rename \/ edit note|修改名称 \/ 备注)$/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^(Publish new version|发布新版本)$/ })).toHaveCount(0)
+}
+
+// 被移除后的下一次进入（脚本视图）：「已无该空间访问权」明确文案（该视图对 space-access-denied
+// 以 sp-warn 渲染，两类都收）。
+export async function expectSpaceAccessDenied(page: Page): Promise<void> {
+  await expect(
+    page.locator('main.sp-main p.sp-warn, main.sp-main p.sp-error',
+      { hasText: /no longer have access|已无该空间访问权/ }),
+  ).toBeVisible({ timeout: 20_000 })
+}
+
+// 本机空间条目（peek syncConfig.spaces）：org-bound 断言 myRole/无 key 的直接数据源。
+export interface WpSpaceEntry {
+  id: string
+  key?: string
+  name: string
+  myRole?: string
+  myUserId?: string
+}
+
+export async function peekSyncSpaces(page: Page): Promise<WpSpaceEntry[]> {
+  const value = await peekExtensionLocal(page, 'syncConfig') as { spaces?: WpSpaceEntry[] } | null
+  return value?.spaces ?? []
 }
 
 // 跨页向导流程（crossPageFlowJson）在入口页填写、并经表单字段带到确认页的值

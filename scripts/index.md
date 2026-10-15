@@ -40,5 +40,5 @@
 | 失败用例重测 | 上述命令追加 `--grep "<完整测试标题>"`，使用新的 run ID；通过后重跑整文件 |
 
 - ⚠️ 每次执行前先扩展构建 `cd extension && npm run build`，成功后才启动 runner（`.output/chrome-mv3-dev` 热更新产物不得作为验证输入）。
-- 环境由 fixture/用例自管（扩展加载、临时 profile、同步服务端、宿主静态页均自起自清），runner 不提供任何环境管理；us-hs 故事先起 Herald 鉴权测试环境（见上）。
+- 环境由 fixture/用例自管（扩展加载、临时 profile、同步服务端、宿主静态页均自起自清），runner 不提供任何环境管理；us-hs 与 us-wp 故事先起 Herald 鉴权测试环境（见上，us-wp 同一 0.6.4 钉版口径）。
 - 日志：runner 末行 `Result`（`logs` 相对 `demo/`），常见位置 `demo/test-results/runs/<run-id>/` 与统一日志 `demo/test-results/unified-logs/`。

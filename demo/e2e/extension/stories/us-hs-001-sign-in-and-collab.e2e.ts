@@ -1,12 +1,13 @@
 import { expect, test } from '../fixtures'
 import { startHostSite } from '../host-site'
 import { launchParticipant, type Participant } from '../participant'
-import { rotateAwayRefreshToken, startHeraldServer } from '../herald'
+import { heraldLogin, rotateAwayRefreshToken, startHeraldServer, type HeraldTestEnv } from '../herald'
+import type { SyncServer } from '../sync-server'
 import {
-  ackOnboarding, authCard, autoAcceptDialogs, connectAndExpectSignIn, createSpaceViaUi, demoFlowJson,
+  ackOnboarding, authCard, autoAcceptDialogs, connectAndExpectSignIn, demoFlowJson,
   enableFlowFromFlowsTab, expectFlowStatus, expectSignInPrompt, expectSignedIn, joinSpaceViaUi,
   openFlowsTab, openHostPage, expectHostPhoneFilled, openScriptDetail, openSpaceScripts,
-  openSyncTab, openWorkbench, peekSyncAuth, publishVersion, pullVersion, readSpaceCode, seedFlow,
+  openSyncTab, openWorkbench, peekSyncAuth, publishVersion, pullVersion, seedFlow,
   uploadFlowAsScript, expireStoredAccessToken, signInViaUi, flowCardLocation, scriptCard,
 } from '../workbench'
 
@@ -15,29 +16,44 @@ import {
 // T2 场景 2 登录状态自动延续（过期后首操作静默续期、令牌族轮换且持久化）；
 // T3 场景 3 续期失效引导重新登录（凭证彻底失效被明确拒绝、本机数据保留、重登恢复）。
 // 播种账号不带任何角色：登录门禁只认有效登录，不查权限点（DEC-herald-support-003）。
+// workspace-permissions 适配：wp 服务器上 UI 创建一律组织绑定（无码行），「创建并分享空间码」
+// 前置改为 API 播种密钥空间（key 随体 = 后端过渡兼容路径）+ 参与者粘贴加入；协作/续期/重登
+// 断言全部不变。
 
 const EMAIL_A = 'us-hs-001-a@test.oncewise.local'
 const EMAIL_B = 'us-hs-001-b@test.oncewise.local'
 const FLOW = 'demo flow hs001'
 const VALUE = '13800001111'
 
-test('T1 登录后照常协作：真实授权窗口登录后建空间/发版，另一设备凭码拉取启用', async ({
+// API 播种一枚密钥空间并返回「空间ID#密钥」码（空间 id=sp-+16 base62、密钥=32 base62——与
+// 扩展 parseEntryCode 的本地判型规则同形状，服务端侧 16–256 字符合法区间的中点取值）。
+async function seedKeySpace(server: SyncServer, herald: HeraldTestEnv, email: string, name: string): Promise<string> {
+  const base62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+  const random = (n: number) => Array.from({ length: n }, () => base62[Math.floor(Math.random() * 62)]).join('')
+  const id = `sp-${random(16)}`
+  const key = random(32)
+  await server.createSpace(id, key, name, { bearer: await heraldLogin(herald, email) })
+  return `${id}#${key}`
+}
+
+test('T1 登录后照常协作：真实授权窗口登录后凭码加入协作/发版，另一设备凭码拉取启用', async ({
   page, context, extensionId, demoHeadless,
 }) => {
   test.setTimeout(300_000)
-  const { server } = await startHeraldServer([EMAIL_A, EMAIL_B])
+  const { herald, server } = await startHeraldServer([EMAIL_A, EMAIL_B])
   const host = await startHostSite()
   autoAcceptDialogs(page)
   let b: Participant | null = null
   try {
-    // A（设备一）：登录前引导明确；真实窗口登录后空间协作与无鉴权服务器一致
+    // A（设备一）：登录前引导明确；真实窗口登录后粘贴加入 API 播种的密钥空间，协作与无鉴权
+    // 服务器一致
     await openWorkbench(page, extensionId)
     await ackOnboarding(page)
     await seedFlow(page, demoFlowJson(host.origin, { name: FLOW, value: VALUE }))
     await connectAndExpectSignIn(page, server.origin)
     await signInViaUi(context, page, EMAIL_A)
-    await createSpaceViaUi(page, 'Team Space')
-    const code = await readSpaceCode(page, 'Team Space')
+    const code = await seedKeySpace(server, herald, EMAIL_A, 'Team Space')
+    await joinSpaceViaUi(page, code)
     await openSpaceScripts(page, 'Team Space')
     await uploadFlowAsScript(page, { scriptName: 'Collab Script', note: 'note', versionNote: 'v1' })
     await openScriptDetail(page, 'Collab Script')
@@ -69,7 +85,7 @@ test('T2 登录状态自动延续：访问凭证过期后首个操作静默续�
   page, context, extensionId,
 }) => {
   test.setTimeout(300_000)
-  const { server } = await startHeraldServer([EMAIL_A])
+  const { herald, server } = await startHeraldServer([EMAIL_A])
   const host = await startHostSite()
   autoAcceptDialogs(page)
   try {
@@ -78,7 +94,7 @@ test('T2 登录状态自动延续：访问凭证过期后首个操作静默续�
     await seedFlow(page, demoFlowJson(host.origin, { name: FLOW, value: VALUE }))
     await connectAndExpectSignIn(page, server.origin)
     await signInViaUi(context, page, EMAIL_A)
-    await createSpaceViaUi(page, 'Renew Space')
+    await joinSpaceViaUi(page, await seedKeySpace(server, herald, EMAIL_A, 'Renew Space'))
     await openSpaceScripts(page, 'Renew Space')
     await uploadFlowAsScript(page, { scriptName: 'Renew Script', versionNote: 'v1' })
     await openScriptDetail(page, 'Renew Script')
@@ -109,7 +125,7 @@ test('T3 续期失效引导重新登录：明确提示重登、本机数据保�
   page, context, extensionId,
 }) => {
   test.setTimeout(300_000)
-  const { server } = await startHeraldServer([EMAIL_A])
+  const { herald, server } = await startHeraldServer([EMAIL_A])
   const host = await startHostSite()
   autoAcceptDialogs(page)
   try {
@@ -118,7 +134,7 @@ test('T3 续期失效引导重新登录：明确提示重登、本机数据保�
     await seedFlow(page, demoFlowJson(host.origin, { name: FLOW, value: VALUE }))
     await connectAndExpectSignIn(page, server.origin)
     await signInViaUi(context, page, EMAIL_A)
-    await createSpaceViaUi(page, 'Relogin Space')
+    await joinSpaceViaUi(page, await seedKeySpace(server, herald, EMAIL_A, 'Relogin Space'))
     await openSpaceScripts(page, 'Relogin Space')
     await uploadFlowAsScript(page, { scriptName: 'Relogin Script', versionNote: 'v1' })
     const before = await peekSyncAuth(page)
