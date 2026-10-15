@@ -1,17 +1,21 @@
 // Sync tab S3: script detail — info & rename (no version created), version list, summary preview
 // (validation failure disables pull), pull / switch / rollback (impact made explicit before switching),
-// publish new version (same-content warning) and unlink.
+// publish new version (same-content warning) and unlink. On org-bound spaces a read-only member
+// loses the publish/rename entries (browsing, pulling and unlinking are untouched) — the role is
+// re-decided by the server on every load, the 403 remains the bottom line.
 import { useCallback, useEffect, useState } from 'react';
 import { sendRuntimeMessage, type ScriptRowView, type VersionPreviewView } from '@/lib/messaging';
-import type { VersionMetaDto } from '@/lib/sync-api';
+import type { SpaceRole, VersionMetaDto } from '@/lib/sync-api';
 import { redactText } from '@/lib/redact';
 import { t } from '@/lib/i18n';
+import { commonSyncErrorText } from '@/lib/sync-errors';
 import type { Flow } from '@/lib/flow-schema';
 import type { SyncCall } from '@/lib/use-sync';
 
 interface Props {
   spaceId: string;
   scriptId: string;
+  spaceCode: string | null;
   serverUrl: string;
   call: SyncCall;
   onBack: () => void;
@@ -25,21 +29,19 @@ interface PreviewState {
 
 function errorText(res: { ok: false; reason: string; detail?: string } | undefined, fallback: string): string {
   if (res === undefined) return fallback;
-  if (res.reason === 'unreachable') return t('sync.error.unreachable');
   if (res.reason === 'bad-space-key') return t('sync.error.badKey');
   if (res.reason === 'space-not-found' || res.reason === 'script-not-found') return t('sync.error.notFound');
-  if (res.reason === 'invalid-input') return res.detail ?? t('sync.error.invalidInput');
-  if (res.reason === 'sign-in-required') return t('sync.auth.required');
-  if (res.reason === 'auth-unavailable') return t('sync.auth.unavailable');
-  if (res.reason === 'operation-uncertain') return t('sync.auth.operationUncertain');
-  if (res.reason === 'auth-changed') return t('sync.auth.relogin');
+  if (res.reason === 'space-role-required') return t('sync.error.spaceRoleRequired');
+  const common = commonSyncErrorText(res);
+  if (common !== null) return common;
   return res.detail ?? fallback;
 }
 
-export default function SyncScriptDetail({ spaceId, scriptId, serverUrl, call, onBack }: Props) {
+export default function SyncScriptDetail({ spaceId, scriptId, spaceCode, serverUrl, call, onBack }: Props) {
   const [row, setRow] = useState<ScriptRowView | null>(null);
   const [versions, setVersions] = useState<VersionMetaDto[] | null>(null);
   const [localFlow, setLocalFlow] = useState<Flow | null | undefined>(undefined);
+  const [myRole, setMyRole] = useState<SpaceRole | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeIsHint, setNoticeIsHint] = useState(false);
@@ -64,6 +66,7 @@ export default function SyncScriptDetail({ spaceId, scriptId, serverUrl, call, o
           next?.local ? (flowsRes?.ok && flowsRes.flows ? flowsRes.flows.find((r) => r.id === next.local!.flowId) ?? null : undefined)
           : null,
         );
+        if (listRes.myRole !== undefined) setMyRole(listRes.myRole);
       }
       if (versionRes?.ok && versionRes.versionMetas) setVersions(versionRes.versionMetas);
       if (!listRes?.ok || !versionRes?.ok) {
@@ -83,6 +86,7 @@ export default function SyncScriptDetail({ spaceId, scriptId, serverUrl, call, o
 
   const linked = row?.local !== undefined;
   const flowExists = row?.local?.localFlowExists === true;
+  const readOnly = spaceCode === null && myRole === 'member';
 
   const showPreview = async (versionNumber: number) => {
     setBusy(true);
@@ -280,12 +284,15 @@ export default function SyncScriptDetail({ spaceId, scriptId, serverUrl, call, o
             )}
           </div>
         )}
+        {readOnly && <p className="sp-hint">{t('sync.readonly.hint')}</p>}
         {linked ? (
           !renameOpen ? (
             <div className="sp-row">
-              <button type="button" className="sp-btn" onClick={() => { setRenameOpen(true); setRenameName(row.name); setRenameNote(''); }}>
-                {t('sync.detail.rename')}
-              </button>
+              {!readOnly && (
+                <button type="button" className="sp-btn" onClick={() => { setRenameOpen(true); setRenameName(row.name); setRenameNote(''); }}>
+                  {t('sync.detail.rename')}
+                </button>
+              )}
               <button type="button" className="sp-btn danger" onClick={() => void unlink()}>
                 {t('sync.detail.unlink')}
               </button>
@@ -316,7 +323,7 @@ export default function SyncScriptDetail({ spaceId, scriptId, serverUrl, call, o
         )}
       </section>
 
-      {linked && flowExists && (
+      {linked && flowExists && !readOnly && (
         <section className="sp-card" aria-label={t('sync.detail.publish.title')}>
           <h2 className="sp-title" style={{ fontSize: 14 }}>{t('sync.detail.publish.title')}</h2>
           <p className="sp-sub">{t('sync.detail.publish.hint', { name: localFlow?.name ?? '' })}</p>

@@ -13,7 +13,7 @@ import { isPlainObject, parseOrigin } from './flow-schema';
 import type { InputIssue, InputSnapshot } from './flow-inputs';
 import type { FlowOutcome } from './flow-compiler';
 import type { PendingHandover, HandoverDescriptor } from './flow-handover';
-import type { ScriptDto, VersionMetaDto } from './sync-api';
+import type { ScriptDto, SpaceRole, VersionMetaDto } from './sync-api';
 import type { SyncSpaceEntry } from './sync-storage';
 import type { FlowHistoryMeta } from './storage';
 
@@ -57,6 +57,16 @@ export type ExtensionMessage =
   | { type: 'sp:syncPublishVersion'; flowId: string; versionNote: string }
   | { type: 'sp:syncUpdateScript'; flowId: string; name?: string; note?: string }
   | { type: 'sp:syncUnlink'; flowId: string }
+  // Workspace permissions (org-bound spaces): the invite/member management surface. The invite
+  // plaintext travels exactly once in the issue response; member identity fields exist only in
+  // the list response. removeMember with userId '' means "leave this space" (self-exit) — the
+  // background re-resolves the caller's own id from the server on every self-exit (a stored id
+  // may belong to a previous account on this device).
+  | { type: 'sp:syncIssueInvite'; spaceId: string }
+  | { type: 'sp:syncListMembers'; spaceId: string }
+  | { type: 'sp:syncUpdateMemberRole'; spaceId: string; userId: string; role: 'admin' | 'member' }
+  | { type: 'sp:syncRemoveMember'; spaceId: string; userId: string }
+  | { type: 'sp:syncTransferOwnership'; spaceId: string; userId: string }
   // Herald-gated servers: the sign-in lifecycle lives in lib/sync-auth.ts in the background. The
   // messages carry no URL, token or proof — the SW builds the safe navigation itself; the auth
   // state that comes back is non-secret facts only (mode + signedIn).
@@ -132,12 +142,16 @@ export interface ContentStateView {
 }
 
 // What the sync tab renders from: local config + current selection. `code` is the shareable
-// `spaceId#key` pair — the extension's own pages may display it, nothing else ever receives it.
+// `spaceId#key` pair — null on org-bound spaces, which have no share code (joining rides
+// one-time invites instead). myRole/myUserId are the org-bound facts from the local entry,
+// re-decided by the server on every scripts-view refresh.
 export interface SyncSpaceView {
   id: string;
   name: string;
   createdAt: string;
-  code: string;
+  code: string | null;
+  myRole?: SpaceRole;
+  myUserId?: string;
 }
 
 export interface SyncStateView {
@@ -176,6 +190,23 @@ export interface VersionPreviewView {
   hasSubmit: boolean;
 }
 
+// One member row of the members view — display fields fall back to userId; the list lives only
+// in component state, never in storage
+export interface SpaceMemberView {
+  userId: string;
+  email: string | null;
+  nickname: string | null;
+  role: SpaceRole;
+  isOwner: boolean;
+  joinedAt: string | null;
+}
+
+// The freshly issued invite shown once in the members view (plaintext never persisted)
+export interface InviteView {
+  code: string;
+  expiresAt: string;
+}
+
 export type ExtensionResponse =
   | {
       ok: true;
@@ -212,6 +243,19 @@ export type ExtensionResponse =
       expiresInMs?: number;
       // sp:getFlowHistory — metadata only, snapshots never leave storage through this view
       versions?: FlowHistoryMeta[];
+      // sp:syncListScripts — server-fresh role for org-bound spaces (the scripts/detail views
+      // gate the write UI on it)
+      myRole?: SpaceRole;
+      // sp:syncListMembers — the caller's server-fresh member id: the members view marks its
+      // own row and gates owner actions on it (stored values can belong to a previous account
+      // on this device)
+      myUserId?: string;
+      // sp:syncIssueInvite — the one-time code, shown exactly once
+      invite?: InviteView;
+      // sp:syncListMembers — the live member list (component state only)
+      members?: SpaceMemberView[];
+      // sp:syncListMembers — the page size is capped at 100; true means more members exist
+      membersTruncated?: boolean;
       // Fresh provenance stamp returned by sp:saveFlow so an editor holding a CAS token can save again
       updatedAt?: number;
       scriptId?: string;
@@ -240,6 +284,7 @@ const MESSAGE_TYPES = new Set([
   'sp:syncListScripts', 'sp:syncListVersions', 'sp:syncPreviewVersion', 'sp:syncPullVersion',
   'sp:syncUploadScript', 'sp:syncPublishVersion', 'sp:syncUpdateScript', 'sp:syncUnlink',
   'sp:syncGetAuthState', 'sp:syncSignIn', 'sp:syncSignOut',
+  'sp:syncIssueInvite', 'sp:syncListMembers', 'sp:syncUpdateMemberRole', 'sp:syncRemoveMember', 'sp:syncTransferOwnership',
   'bg:startDryRun', 'bg:abortDryRun', 'bg:getContentState', 'bg:reloadFlows', 'bg:handoverStaged',
   'ct:getEnabledFlows', 'ct:getInputSnapshot', 'ct:claimBusiness', 'ct:releaseBusiness', 'ct:flowRunStatus', 'ct:dryRunProgress', 'ct:dryRunFinished',
   'ct:stageHandover', 'ct:probeHandover', 'ct:takeHandover', 'ct:dropHandover',
@@ -291,7 +336,23 @@ export function isExtensionMessage(v: unknown): v is ExtensionMessage {
     case 'sp:syncForgetSpace':
     case 'sp:syncDeleteSpace':
     case 'sp:syncListScripts':
+    case 'sp:syncIssueInvite':
+    case 'sp:syncListMembers':
       return typeof v.spaceId === 'string';
+    case 'sp:syncUpdateMemberRole':
+      // "owner" is not a settable role (ownership moves via transfer only) — same 400-class
+      // answer as the server, caught before any traffic
+      return (
+        typeof v.spaceId === 'string' &&
+        typeof v.userId === 'string' &&
+        (v.role === 'admin' || v.role === 'member')
+      );
+    case 'sp:syncRemoveMember':
+      // userId '' means self-exit on removeMember (leave)
+      return typeof v.spaceId === 'string' && typeof v.userId === 'string';
+    case 'sp:syncTransferOwnership':
+      // transfer always targets a concrete id — '' is caught here, before any traffic
+      return typeof v.spaceId === 'string' && typeof v.userId === 'string' && v.userId !== '';
     case 'sp:syncJoinSpace':
       return typeof v.code === 'string';
     // ListVersions carries no versionNumber — grouping it with the preview/pull guard silently

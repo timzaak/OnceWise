@@ -5,7 +5,7 @@
 // point: no test here may rely on "sign in first, sign out later" happy sequencing alone.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { authedOperation, getAuthState, initAuthReady, signIn, signOut } from '@/lib/sync-auth';
+import { authedOperation, getAuthState, initAuthReady, probeAuthMode, signIn, signOut } from '@/lib/sync-auth';
 import {
   resetSyncForServer,
   syncAuthItem,
@@ -449,6 +449,48 @@ describe('late results and epoch guards (deferred ordering)', () => {
 });
 
 describe('mode probing and wire shape', () => {
+  it('workspacePermissions rides the herald probe: true, false, absent (older server = false), malformed = unknown', async () => {
+    await writeSyncConfig({ serverUrl: SERVER, spaces: [] });
+    const probeWith = async (config: unknown) => {
+      stubFetch((url) => (url === CONFIG_URL ? jsonResponse(200, config) : jsonResponse(200, [])));
+      return probeAuthMode(SERVER, Date.now() + 1_000);
+    };
+    expect(await probeWith({ enabled: true, loginUrl: '/l', workspacePermissions: true })).toEqual({
+      mode: 'herald',
+      loginUrl: '/l',
+      workspacePermissions: true,
+    });
+    expect(await probeWith({ enabled: true, loginUrl: '/l', workspacePermissions: false })).toEqual({
+      mode: 'herald',
+      loginUrl: '/l',
+      workspacePermissions: false,
+    });
+    // An older server's answer carries no field at all — read as false so key-space behavior
+    // stays the default everywhere
+    expect(await probeWith({ enabled: true, loginUrl: '/l' })).toEqual({
+      mode: 'herald',
+      loginUrl: '/l',
+      workspacePermissions: false,
+    });
+    // A non-boolean is a contract break — the whole config is refused, never silently applied
+    expect(await probeWith({ enabled: true, loginUrl: '/l', workspacePermissions: 'yes' })).toEqual({
+      mode: 'unknown',
+      loginUrl: null,
+    });
+  });
+
+  it('preProbe is reused — a message that already probed never hits /api/auth/config again', async () => {
+    await seedAuth();
+    const run = vi.fn(async (bearer: string | null) => ({ ok: true as const, data: bearer }));
+    const outcome = await authedOperation(SERVER, run, false, {
+      mode: 'herald',
+      loginUrl: '/l',
+      workspacePermissions: true,
+    });
+    expect(outcome).toEqual({ ok: true, data: 'at-1' });
+    expect(callsTo(CONFIG_URL)).toHaveLength(0);
+  });
+
   it('a 404 config probe means none: business runs credential-free (pre-auth server compat)', async () => {
     await seedAuth();
     stubFetch((url) => (url === CONFIG_URL ? jsonResponse(404, { error: { code: 'NOT_FOUND', message: 'x' } }) : jsonResponse(200, [])));

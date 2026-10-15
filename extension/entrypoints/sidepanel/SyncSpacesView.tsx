@@ -1,11 +1,13 @@
 // Sync tab S0/S1: server configuration (plain-HTTP warning) and the locally-known spaces list —
-// create (id+key generated on this device), join by shared code, select, copy the share code, forget
-// (local) or delete (server).
+// create (id generated on this device; key-less org-bound creation on workspace-permissions
+// servers, otherwise the original key path), join by a pasted space code or invite code, select,
+// copy the share code, forget (local), delete (server) or leave (org-bound self-exit).
 import { useState } from 'react';
 import { parseOrigin } from '@/lib/flow-schema';
 import type { SyncCall, SyncHealth } from '@/lib/use-sync';
 import type { ExtensionResponse, SyncStateView } from '@/lib/messaging';
 import { t } from '@/lib/i18n';
+import { commonSyncErrorText } from '@/lib/sync-errors';
 
 // Self-host pointer shown as the ⓘ tooltip beside the server title — the repo behind the
 // server-side image users may deploy themselves (same URL as the store listing)
@@ -16,29 +18,47 @@ interface Props {
   health: SyncHealth;
   call: SyncCall;
   probeHealth: () => Promise<SyncHealth>;
-  onChanged: () => void;
+  onChanged: () => void | Promise<void>;
   onOpenScripts: () => void;
+  onOpenMembers: () => void;
 }
 
 function spaceErrorText(res: ExtensionResponse | undefined, fallback: string): string {
   if (res === undefined || res.ok) return fallback;
-  if (res.reason === 'unreachable') return t('sync.error.unreachable');
   if (res.reason === 'bad-space-key') return t('sync.error.badKey');
   if (res.reason === 'bad-space-code') return t('sync.spaces.badCode');
   if (res.reason === 'space-key-mismatch') return t('sync.spaces.keyMismatch');
   if (res.reason === 'space-not-found') return t('sync.spaces.notFound');
-  if (res.reason === 'invalid-input') return res.detail ?? t('sync.error.invalidInput');
-  // Auth-gate outcomes: sign-in guidance (never a permission/role notice — any valid sign-in is
-  // enough), a retryable dependency failure, an unknown-outcome write, and a session replaced
-  // mid-operation
-  if (res.reason === 'sign-in-required') return t('sync.auth.required');
-  if (res.reason === 'auth-unavailable') return t('sync.auth.unavailable');
-  if (res.reason === 'operation-uncertain') return t('sync.auth.operationUncertain');
-  if (res.reason === 'auth-changed') return t('sync.auth.relogin');
+  // Workspace-permission refusals reach this view through leave (org-bound self-exit) and
+  // delete — the same keys the members view maps
+  if (res.reason === 'space-role-required') return t('sync.error.spaceRoleRequired');
+  if (res.reason === 'space-owner-protected') return t('sync.error.spaceOwnerProtected');
+  if (res.reason === 'space-last-admin-protected') return t('sync.error.spaceLastAdminProtected');
+  if (res.reason === 'member-not-found') return t('sync.error.memberNotFound');
+  if (res.reason === 'invite-invalid') return t('sync.error.inviteInvalid');
+  if (res.reason === 'invite-expired') return t('sync.error.inviteExpired');
+  if (res.reason === 'invite-already-used') return t('sync.error.inviteAlreadyUsed');
+  if (res.reason === 'invite-unsupported') return t('sync.error.inviteUnsupported');
+  const common = commonSyncErrorText(res);
+  if (common !== null) return common;
   return res.detail ?? fallback;
 }
 
-export default function SyncSpacesView({ status, health, call, probeHealth, onChanged, onOpenScripts }: Props) {
+function roleLabel(role: 'owner' | 'admin' | 'member'): string {
+  if (role === 'owner') return t('sync.roles.owner');
+  if (role === 'admin') return t('sync.roles.admin');
+  return t('sync.roles.readOnly');
+}
+
+export default function SyncSpacesView({
+  status,
+  health,
+  call,
+  probeHealth,
+  onChanged,
+  onOpenScripts,
+  onOpenMembers,
+}: Props) {
   const [serverInput, setServerInput] = useState(status.serverUrl);
   const [serverBusy, setServerBusy] = useState(false);
   const [serverMsg, setServerMsg] = useState<{ kind: 'error' | 'ok'; text: string } | null>(null);
@@ -91,7 +111,9 @@ export default function SyncSpacesView({ status, health, call, probeHealth, onCh
 
   const select = async (spaceId: string) => {
     await call({ type: 'sp:syncSelectSpace', spaceId });
-    onChanged();
+    // Awaited: the view switch chained after select (.then(onOpenScripts/onOpenMembers)) must
+    // mount against the reloaded status, not the pre-selection one
+    await onChanged();
   };
 
   const create = async () => {
@@ -151,8 +173,13 @@ export default function SyncSpacesView({ status, health, call, probeHealth, onCh
     }
   };
 
-  const remove = async (spaceId: string, name: string) => {
-    if (!window.confirm(t('sync.spaces.confirmDelete', { name }))) return;
+  // Org-bound delete cascades the organization and outstanding invites — a different
+  // confirmation than the key-space one
+  const remove = async (spaceId: string, name: string, orgBound: boolean) => {
+    const confirmText = orgBound
+      ? t('sync.spaces.confirmDeleteProtected', { name })
+      : t('sync.spaces.confirmDelete', { name });
+    if (!window.confirm(confirmText)) return;
     setBusy(true);
     try {
       const res = await call({ type: 'sp:syncDeleteSpace', spaceId });
@@ -161,6 +188,26 @@ export default function SyncSpacesView({ status, health, call, probeHealth, onCh
         return;
       }
       setNotice(t('sync.spaces.deleted', { name }));
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Leave (org-bound self-exit): the server removes the membership; the local entry and
+  // already-pulled content stay (forgetting them is a separate, explicit step)
+  const leave = async (spaceId: string, name: string) => {
+    if (!window.confirm(t('sync.spaces.confirmLeave', { name }))) return;
+    setBusy(true);
+    try {
+      const res = await call({ type: 'sp:syncRemoveMember', spaceId, userId: '' });
+      if (!res?.ok) {
+        setNotice(spaceErrorText(res, t('sync.error.generic')));
+        return;
+      }
+      setNotice(t('sync.spaces.leaveOk'));
+      // The background dropped the entry's role facts on success — re-read so the row (and its
+      // manager-gated buttons) disappears instead of lingering with a stale badge
       onChanged();
     } finally {
       setBusy(false);
@@ -232,39 +279,76 @@ export default function SyncSpacesView({ status, health, call, probeHealth, onCh
         {status.spaces.length === 0 ? (
           <p className="sp-hint">{t('sync.spaces.empty')}</p>
         ) : (
-          status.spaces.map((space) => (
-            <div key={space.id} className="sp-group" aria-label={space.name}>
-              <div className="sp-row" style={{ justifyContent: 'space-between' }}>
-                <h3 className="sp-title" style={{ fontSize: 14 }}>{space.name}</h3>
-                {status.currentSpaceId === space.id && <span className="sp-badge enabled">{t('sync.spaces.current')}</span>}
-              </div>
-              <div className="sp-field">
-                <span className="sp-label">{t('sync.spaces.shareLabel')}</span>
+          status.spaces.map((space) => {
+            const orgBound = space.code === null;
+            // Rows are never hidden — a hidden row would strand its Forget button, and after a
+            // leave the entry must stay forgettable (the leave notice says so). An org-bound
+            // entry without a valid role is a former member (or a torn/foreign shape): no
+            // badge, no role-gated buttons; Scripts stays (the server re-decides membership),
+            // Forget stays (the only cleanup entry)
+            const member =
+              orgBound && (space.myRole === 'owner' || space.myRole === 'admin' || space.myRole === 'member');
+            const manager = space.myRole === 'owner' || space.myRole === 'admin';
+            return (
+              <div key={space.id} className="sp-group" aria-label={space.name}>
+                <div className="sp-row" style={{ justifyContent: 'space-between' }}>
+                  <h3 className="sp-title" style={{ fontSize: 14 }}>{space.name}</h3>
+                  <div className="sp-row">
+                    {orgBound && member && (
+                      <span className="sp-badge">{roleLabel(space.myRole!)}</span>
+                    )}
+                    {status.currentSpaceId === space.id && <span className="sp-badge enabled">{t('sync.spaces.current')}</span>}
+                  </div>
+                </div>
+                {space.code !== null && (
+                  <div className="sp-field">
+                    <span className="sp-label">{t('sync.spaces.shareLabel')}</span>
+                    <div className="sp-row">
+                      <input className="sp-input" style={{ flex: 1 }} readOnly value={space.code} aria-label={t('sync.spaces.shareLabel')} />
+                      <button type="button" className="sp-btn" onClick={() => void copyCode(space.id, space.code!)}>
+                        {copiedId === space.id ? t('sync.spaces.copied') : t('sync.spaces.copy')}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="sp-row">
-                  <input className="sp-input" style={{ flex: 1 }} readOnly value={space.code} aria-label={t('sync.spaces.shareLabel')} />
-                  <button type="button" className="sp-btn" onClick={() => void copyCode(space.id, space.code)}>
-                    {copiedId === space.id ? t('sync.spaces.copied') : t('sync.spaces.copy')}
+                  <button
+                    type="button"
+                    className="sp-btn primary"
+                    disabled={busy}
+                    onClick={() => void select(space.id).then(onOpenScripts)}
+                  >
+                    {t('sync.spaces.scripts')}
                   </button>
+                  {orgBound && manager && (
+                    <button
+                      type="button"
+                      className="sp-btn"
+                      disabled={busy}
+                      onClick={() => void select(space.id).then(onOpenMembers)}
+                    >
+                      {t('sync.spaces.members')}
+                    </button>
+                  )}
+                  {(!orgBound || manager) && (
+                    <button type="button" className="sp-btn danger" disabled={busy} onClick={() => void remove(space.id, space.name, orgBound)}>
+                      {t('sync.spaces.delete')}
+                    </button>
+                  )}
+                  <button type="button" className="sp-btn" disabled={busy} onClick={() => void forget(space.id, space.name)}>
+                    {t('sync.spaces.forget')}
+                  </button>
+                  {/* Leave is a member action — a former member's leftover row offers no way
+                      back in except a fresh invite */}
+                  {orgBound && member && (
+                    <button type="button" className="sp-btn" disabled={busy} onClick={() => void leave(space.id, space.name)}>
+                      {t('sync.spaces.leave')}
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="sp-row">
-                <button
-                  type="button"
-                  className="sp-btn primary"
-                  disabled={busy}
-                  onClick={() => void select(space.id).then(onOpenScripts)}
-                >
-                  {t('sync.spaces.scripts')}
-                </button>
-                <button type="button" className="sp-btn danger" disabled={busy} onClick={() => void remove(space.id, space.name)}>
-                  {t('sync.spaces.delete')}
-                </button>
-                <button type="button" className="sp-btn" disabled={busy} onClick={() => void forget(space.id, space.name)}>
-                  {t('sync.spaces.forget')}
-                </button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </section>
 

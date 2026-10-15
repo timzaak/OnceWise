@@ -8,20 +8,14 @@ use axum::Json;
 
 use crate::db::now_utc;
 use crate::dto::{CreateSpaceReq, ErrorBodyDto, SpaceDto};
-use crate::error::{auth_unavailable, is_unique_violation, ApiError, ApiJson};
+use crate::error::{auth_unavailable, is_unique_violation, space_not_found, ApiError, ApiJson};
 use crate::orgs::{map_org_error, tier_to_role, OrgApiError};
 use crate::spacekey::{
-    is_valid_entity_id, require_space_access, require_space_row, sha256_hex, validate_space_name,
-    write_transaction, ResolvedIdentity, SpaceAccess, SpaceCategory, SpaceKeyHeader,
+    is_valid_entity_id, require_space_access, require_space_row, sha256_hex, space_org_binding,
+    validate_space_name, write_transaction, ResolvedIdentity, SpaceAccess, SpaceCategory,
+    SpaceKeyHeader,
 };
 use crate::AppState;
-
-fn space_not_found() -> ApiError {
-    ApiError::NotFound {
-        code: "SPACE_NOT_FOUND",
-        message: "Space not found".to_string(),
-    }
-}
 
 fn key_mismatch() -> ApiError {
     ApiError::Conflict {
@@ -398,7 +392,9 @@ pub async fn get_space(
 /// Key-addressed: holders of the code keep whatever they already pulled to their devices.
 /// Org-bound: admin-tier capability; the Herald organization is deleted first (a repeat 404
 /// counts as done) and any failure leaves the space fully intact for a retry; the local row
-/// delete then cascades scripts, versions and outstanding invites.
+/// delete then cascades scripts, versions and outstanding invites. A retry of a delete whose
+/// organization half already succeeded (organization gone, local row left) converges the
+/// same way — the org 404 counts as done and the local half completes.
 #[utoipa::path(
     delete,
     path = "/api/spaces/{spaceId}",
@@ -425,7 +421,7 @@ pub async fn delete_space(
     State(state): State<AppState>,
     Path(space_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let category = require_space_access(
+    let category = match require_space_access(
         &state.pool,
         state.org.as_ref(),
         identity.as_deref(),
@@ -433,7 +429,55 @@ pub async fn delete_space(
         key.0.as_deref(),
         SpaceAccess::Manage,
     )
-    .await?;
+    .await
+    {
+        Ok(category) => category,
+        // The one SPACE_NOT_FOUND that is not a missing row: the organization is gone while
+        // the row lives on — a previous delete removed the organization upstream but failed
+        // its local commit. No membership gate can apply to a nonexistent organization, and
+        // the row is already unreachable for everyone; route it through the normal org-bound
+        // arm, where delete_org's 404-as-done completes the local half (the synthesized tier
+        // facts are nothing the delete path reads).
+        Err(
+            err @ ApiError::NotFound {
+                code: "SPACE_NOT_FOUND",
+                ..
+            },
+        ) => match space_org_binding(&state.pool, &space_id).await {
+            Ok(Some(org_id)) => {
+                // Convergence may only finish deleting an organization that is verifiably
+                // gone: a same-id recreate racing this retry re-binds the row to a NEW
+                // organization, and finishing the old deletion against it would destroy the
+                // recreated space without any access check. One more membership read settles
+                // liveness — member facts (or member-not-found) prove the org alive and keep
+                // the original 404; org_not_found confirms the convergence; anything else
+                // fails closed.
+                let Some(org) = state.org.as_ref() else {
+                    return Err(auth_unavailable());
+                };
+                let Some(identity) = identity.as_deref() else {
+                    return Err(err);
+                };
+                match org.get_member(&org_id, &identity.user_id).await {
+                    Err(OrgApiError::Upstream { status: 404, code }) if code == "org_not_found" => {
+                    }
+                    Ok(_) | Err(OrgApiError::Upstream { status: 404, .. }) => return Err(err),
+                    Err(_) => return Err(auth_unavailable()),
+                }
+                SpaceCategory::OrgBound {
+                    org_id,
+                    role: "member",
+                    is_owner: false,
+                }
+            }
+            // Key-addressed row: the original SPACE_NOT_FOUND stands. A read failure is its
+            // own error — masked as the convergence 404 it would claim a cleanup that never
+            // happened (a missing row resurfaces here as the same 404, which stays correct).
+            Ok(None) => return Err(err),
+            Err(read_err) => return Err(read_err),
+        },
+        Err(err) => return Err(err),
+    };
     match category {
         SpaceCategory::Key => {
             let mut tx = write_transaction(&state.pool).await?;

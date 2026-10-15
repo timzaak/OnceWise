@@ -1,11 +1,12 @@
 // Background sync orchestration (data-sync): every sp:sync* handler, space bookkeeping (create with a
-// locally generated id+key, join-by-code verification, forget/delete, server-switch reset), the
-// pull/switch data flow (validate → flow write → link update → registration sync + reload push, zero
-// writes on validation failure) and the script-list join with the local pinning links. background.ts
-// stays a thin router; only this module talks to lib/sync-api.ts. Every business API call goes
-// through authedOperation (lib/sync-auth.ts): bearer + lazy renewal on Herald-gated servers, the
-// original credential-free wire shape on none/unknown ones; the sign-in lifecycle handlers live in
-// lib/sync-auth.ts.
+// locally generated id — key-less org-bound creation on workspace-permissions servers, otherwise the
+// original key path — join-by-code with local space-code/invite typing, forget/delete, server-switch
+// reset), the pull/switch data flow (validate → flow write → link update → registration sync + reload
+// push, zero writes on validation failure), the script-list join with the local pinning links, and the
+// org-bound invite/member surface. background.ts stays a thin router; only this module talks to
+// lib/sync-api.ts. Every business API call goes through authedOperation (lib/sync-auth.ts): bearer +
+// lazy renewal on Herald-gated servers, the original credential-free wire shape on none/unknown ones;
+// the sign-in lifecycle handlers live in lib/sync-auth.ts.
 import { importFlowContent } from './import-pipeline';
 import { afterFlowsWrite } from './site-scripts';
 import {
@@ -20,8 +21,10 @@ import { stepsHaveSubmitAction } from './step-schema';
 import { redactText } from './redact';
 import { loadFlows, saveFlowRecord } from './storage';
 import * as api from './sync-api';
-import { authedOperation, authReady, getAuthState, signIn, signOut } from './sync-auth';
+import type { SpaceRole } from './sync-api';
+import { authedOperation, authReady, getAuthState, NONE_OP_BUDGET_MS, probeAuthMode, signIn, signOut } from './sync-auth';
 import {
+  clearSyncSpaceRole,
   findLinkByFlow,
   findLinkByScript,
   forgetSpace,
@@ -32,17 +35,26 @@ import {
   removeSyncLink,
   resetSyncForServer,
   setSyncCurrentSpace,
+  spaceCategory,
+  updateSyncSpaceRole,
   upsertSyncLink,
   upsertSyncSpace,
   type SyncSpaceEntry,
 } from './sync-storage';
-import type { ExtensionMessage, ExtensionResponse, ScriptRowView, SyncSpaceView } from './messaging';
+import type {
+  ExtensionMessage,
+  ExtensionResponse,
+  ScriptRowView,
+  SpaceMemberView,
+  SyncSpaceView,
+} from './messaging';
 
 export type SyncMessage = Extract<ExtensionMessage, { type: `sp:sync${string}` }>;
 
 // A space-scoped operation needs a configured server plus a locally known space; unknown/badly
-// shaped space ids fail as not-configured so the UI routes back to the spaces view
-type SpaceContext = { serverUrl: string; space: SyncSpaceEntry };
+// shaped space ids fail as not-configured so the UI routes back to the spaces view. `key` is the
+// entry key normalized to null for org-bound spaces — the form the api layer accepts.
+type SpaceContext = { serverUrl: string; space: SyncSpaceEntry; key: string | null };
 
 async function requireServer(): Promise<string | { resp: ExtensionResponse }> {
   const config = await loadSyncConfig();
@@ -55,7 +67,7 @@ async function requireSpace(spaceId: string): Promise<SpaceContext | { resp: Ext
   if (config.serverUrl === '') return { resp: { ok: false, reason: 'not-configured' } };
   const space = findSpace(config, spaceId);
   if (space === undefined) return { resp: { ok: false, reason: 'space-not-known' } };
-  return { serverUrl: config.serverUrl, space };
+  return { serverUrl: config.serverUrl, space, key: space.key ?? null };
 }
 
 function spaceView(space: SyncSpaceEntry): SyncSpaceView {
@@ -63,8 +75,25 @@ function spaceView(space: SyncSpaceEntry): SyncSpaceView {
     id: space.id,
     name: space.name,
     createdAt: space.createdAt,
-    code: api.spaceCodeOf(space.id, space.key),
+    // Org-bound entries have no key — no share code row exists for them
+    code: space.key === undefined ? null : api.spaceCodeOf(space.id, space.key),
+    ...(space.myRole === undefined ? {} : { myRole: space.myRole }),
+    ...(space.myUserId === undefined ? {} : { myUserId: space.myUserId }),
   };
+}
+
+// The invite/member surface is org-bound only; a key-space entry is refused before any traffic
+// (spaceCategory is the fixed read-side rule; its 'invalid' torn shapes deliberately pass as
+// org-bound here — the server re-decides membership). The view layer localizes the reason.
+function orgBoundOnly(space: SyncSpaceEntry): ExtensionResponse | null {
+  return spaceCategory(space) === 'key' ? { ok: false, reason: 'space-key-unsupported' } : null;
+}
+
+async function requireOrgBound(spaceId: string): Promise<SpaceContext | { resp: ExtensionResponse }> {
+  const ctx = await requireSpace(spaceId);
+  if ('resp' in ctx) return ctx;
+  const refused = orgBoundOnly(ctx.space);
+  return refused !== null ? { resp: refused } : ctx;
 }
 
 // Takes the full ExtensionMessage union so the background router needs no cast; non-sync messages
@@ -114,17 +143,47 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       return { ok: true, health: 'ok' };
     }
 
-    // Create generates the id and the key locally (the server never assigns identity); the entry is
-    // stored only after the server accepted the registration
+    // Create generates the id locally (the server never assigns identity); the entry is stored
+    // only after the server accepted the registration. On workspace-permissions servers the
+    // creation goes key-less (org-bound, creator = owner); none and older servers keep the
+    // original key path byte-for-byte. An unknown probe refuses outright (fail-closed): no
+    // request, no local entry — a probe failure is never treated as none.
     case 'sp:syncCreateSpace': {
       const serverUrl = await requireServer();
       if (typeof serverUrl !== 'string') return serverUrl.resp;
+      // The probe start anchors the whole message budget (probe + request must answer within one
+      // UI hop); authedOperation re-uses it instead of re-anchoring after the probe
+      const probeStartedAt = Date.now();
+      const probe = await probeAuthMode(serverUrl, probeStartedAt + NONE_OP_BUDGET_MS);
+      if (probe.mode === 'unknown') return { ok: false, reason: 'auth-unavailable' };
+      if (probe.mode === 'herald' && probe.workspacePermissions) {
+        const id = api.generateSpaceId();
+        const outcome = await authedOperation(
+          serverUrl,
+          (bearer, deadlineAt) => api.createSpace(serverUrl, { id, name: msg.name }, { bearer, deadlineAt }),
+          true,
+          probe,
+          probeStartedAt,
+        );
+        if (!outcome.ok) return outcome.resp;
+        await upsertSyncSpace({
+          id,
+          name: outcome.data.name,
+          createdAt: outcome.data.createdAt,
+          myRole: outcome.data.myRole ?? 'owner',
+          ...(outcome.data.myUserId === undefined ? {} : { myUserId: outcome.data.myUserId }),
+        });
+        await setSyncCurrentSpace(id);
+        return { ok: true, space: { id, name: outcome.data.name } };
+      }
       const id = api.generateSpaceId();
       const key = api.generateSpaceKey();
       const outcome = await authedOperation(
         serverUrl,
         (bearer, deadlineAt) => api.createSpace(serverUrl, { id, key, name: msg.name }, { bearer, deadlineAt }),
         true,
+        probe,
+        probeStartedAt,
       );
       if (!outcome.ok) return outcome.resp;
       await upsertSyncSpace({ id, key, name: outcome.data.name, createdAt: outcome.data.createdAt });
@@ -132,24 +191,54 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       return { ok: true, space: { id, name: outcome.data.name } };
     }
 
-    // Join parses the share code locally, then verifies it against the server before storing —
-    // a mistyped code never lands in local state
+    // Join parses the pasted code locally first, then verifies against the server before storing
+    // — a mistyped code never lands in local state. Space codes take the original key path;
+    // invite codes ("…#iv-…") redeem into read-only membership on workspace-permissions servers
+    // (none/older servers are refused locally with zero traffic; an unknown probe fail-closes).
     case 'sp:syncJoinSpace': {
       const serverUrl = await requireServer();
       if (typeof serverUrl !== 'string') return serverUrl.resp;
-      const parsed = api.parseSpaceCode(msg.code.trim());
+      const raw = msg.code.trim();
+      const parsed = api.parseEntryCode(raw);
       if (parsed === null) return { ok: false, reason: 'bad-space-code' };
+      if (parsed.kind === 'space') {
+        const outcome = await authedOperation(
+          serverUrl,
+          (bearer, deadlineAt) => api.getSpace(serverUrl, parsed.id, parsed.key, { bearer, deadlineAt }),
+          false,
+        );
+        if (!outcome.ok) return outcome.resp;
+        await upsertSyncSpace({
+          id: outcome.data.id,
+          key: parsed.key,
+          name: outcome.data.name,
+          createdAt: outcome.data.createdAt,
+        });
+        return { ok: true, space: { id: outcome.data.id, name: outcome.data.name } };
+      }
+      const probeStartedAt = Date.now();
+      const probe = await probeAuthMode(serverUrl, probeStartedAt + NONE_OP_BUDGET_MS);
+      if (probe.mode === 'unknown') return { ok: false, reason: 'auth-unavailable' };
+      if (probe.mode !== 'herald' || !probe.workspacePermissions) {
+        return { ok: false, reason: 'invite-unsupported' };
+      }
+      // The wire form is the pasted string itself; a sent-timeout surfaces as
+      // operation-uncertain, and retrying is safe (redemption is idempotent per caller)
       const outcome = await authedOperation(
         serverUrl,
-        (bearer, deadlineAt) => api.getSpace(serverUrl, parsed.id, parsed.key, { bearer, deadlineAt }),
-        false,
+        (bearer, deadlineAt) => api.redeemInvite(serverUrl, raw, { bearer, deadlineAt }),
+        true,
+        probe,
+        probeStartedAt,
       );
       if (!outcome.ok) return outcome.resp;
       await upsertSyncSpace({
         id: outcome.data.id,
-        key: parsed.key,
         name: outcome.data.name,
         createdAt: outcome.data.createdAt,
+        // A replayed code returns the caller's actual role — never a demotion
+        myRole: outcome.data.myRole ?? 'member',
+        ...(outcome.data.myUserId === undefined ? {} : { myUserId: outcome.data.myUserId }),
       });
       return { ok: true, space: { id: outcome.data.id, name: outcome.data.name } };
     }
@@ -170,7 +259,8 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       if ('resp' in ctx) return ctx.resp;
       const outcome = await authedOperation(
         ctx.serverUrl,
-        (bearer, deadlineAt) => api.deleteSpace(ctx.serverUrl, ctx.space.id, ctx.space.key, { bearer, deadlineAt }),
+        (bearer, deadlineAt) =>
+          api.deleteSpace(ctx.serverUrl, ctx.space.id, ctx.key, { bearer, deadlineAt }),
         true,
       );
       if (!outcome.ok) return outcome.resp;
@@ -181,12 +271,33 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
     case 'sp:syncListScripts': {
       const ctx = await requireSpace(msg.spaceId);
       if ('resp' in ctx) return ctx.resp;
+      // Org-bound entries refresh the role first, inside one authedOperation run (single probe,
+      // single deadline): getSpace decides membership/role, then listScripts runs as the same
+      // member. A failed getSpace short-circuits (removed → space-access-denied, gone →
+      // space-not-found, outage → 503 — all passed through verbatim). Key spaces keep the exact
+      // original single request.
+      let freshRole: SpaceRole | undefined;
+      let freshUserId: string | undefined;
       const outcome = await authedOperation(
         ctx.serverUrl,
-        (bearer, deadlineAt) => api.listScripts(ctx.serverUrl, ctx.space.key, msg.spaceId, { bearer, deadlineAt }),
+        async (bearer, deadlineAt) => {
+          if (ctx.space.key !== undefined) {
+            return api.listScripts(ctx.serverUrl, ctx.space.key, msg.spaceId, { bearer, deadlineAt });
+          }
+          const spaceRes = await api.getSpace(ctx.serverUrl, msg.spaceId, null, { bearer, deadlineAt });
+          if (!spaceRes.ok) return spaceRes;
+          if (spaceRes.data.myRole !== undefined) {
+            freshRole = spaceRes.data.myRole;
+            freshUserId = spaceRes.data.myUserId;
+          }
+          return api.listScripts(ctx.serverUrl, null, msg.spaceId, { bearer, deadlineAt });
+        },
         false,
       );
       if (!outcome.ok) return outcome.resp;
+      if (freshRole !== undefined && (ctx.space.myRole !== freshRole || ctx.space.myUserId !== freshUserId)) {
+        await updateSyncSpaceRole(msg.spaceId, freshRole, freshUserId);
+      }
       const [links, flows] = await Promise.all([loadSyncLinks(), loadFlows()]);
       const scriptRows: ScriptRowView[] = outcome.data.map((script) => {
         const link = findLinkByScript(links, msg.spaceId, script.id);
@@ -203,7 +314,7 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
           },
         };
       });
-      return { ok: true, scriptRows };
+      return { ok: true, scriptRows, ...(freshRole !== undefined ? { myRole: freshRole } : {}) };
     }
 
     case 'sp:syncListVersions': {
@@ -212,7 +323,7 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       const outcome = await authedOperation(
         ctx.serverUrl,
         (bearer, deadlineAt) =>
-          api.listScriptVersions(ctx.serverUrl, ctx.space.key, msg.spaceId, msg.scriptId, { bearer, deadlineAt }),
+          api.listScriptVersions(ctx.serverUrl, ctx.key, msg.spaceId, msg.scriptId, { bearer, deadlineAt }),
         false,
       );
       if (!outcome.ok) return outcome.resp;
@@ -225,7 +336,7 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       const outcome = await authedOperation(
         ctx.serverUrl,
         (bearer, deadlineAt) =>
-          api.getScriptVersion(ctx.serverUrl, ctx.space.key, msg.spaceId, msg.scriptId, msg.versionNumber, {
+          api.getScriptVersion(ctx.serverUrl, ctx.key, msg.spaceId, msg.scriptId, msg.versionNumber, {
             bearer,
             deadlineAt,
           }),
@@ -261,7 +372,7 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       const outcome = await authedOperation(
         ctx.serverUrl,
         (bearer, deadlineAt) =>
-          api.getScriptVersion(ctx.serverUrl, ctx.space.key, msg.spaceId, msg.scriptId, msg.versionNumber, {
+          api.getScriptVersion(ctx.serverUrl, ctx.key, msg.spaceId, msg.scriptId, msg.versionNumber, {
             bearer,
             deadlineAt,
           }),
@@ -323,7 +434,7 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
         (bearer, deadlineAt) =>
           api.createScript(
             ctx.serverUrl,
-            ctx.space.key,
+            ctx.key,
             ctx.space.id,
             {
               id: api.generateScriptId(),
@@ -364,7 +475,7 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
         (bearer, deadlineAt) =>
           api.createScriptVersion(
             ctx.serverUrl,
-            ctx.space.key,
+            ctx.key,
             link.spaceId,
             link.scriptId,
             { versionNote: msg.versionNote, flowContent: publishable },
@@ -391,7 +502,7 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
         (bearer, deadlineAt) =>
           api.updateScript(
             ctx.serverUrl,
-            ctx.space.key,
+            ctx.key,
             link.spaceId,
             link.scriptId,
             { name: msg.name, note: msg.note },
@@ -406,6 +517,130 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
 
     case 'sp:syncUnlink': {
       await removeSyncLink(msg.flowId);
+      return { ok: true };
+    }
+
+    // --- workspace permissions: invites and member management (org-bound spaces only) ---
+
+    // The plaintext code exists exactly once, in this response — never stored, never logged
+    case 'sp:syncIssueInvite': {
+      const ctx = await requireOrgBound(msg.spaceId);
+      if ('resp' in ctx) return ctx.resp;
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        (bearer, deadlineAt) => api.issueSpaceInvite(ctx.serverUrl, msg.spaceId, { bearer, deadlineAt }),
+        true,
+      );
+      if (!outcome.ok) return outcome.resp;
+      return { ok: true, invite: { code: outcome.data.code, expiresAt: outcome.data.expiresAt } };
+    }
+
+    // Live list, one full page of 100; nothing member-shaped is ever persisted locally. The
+    // caller's own facts are re-decided first, inside one authedOperation run (same shape as
+    // sp:syncListScripts): the stored myUserId/myRole can belong to a previous account on this
+    // device, and the view's "You" marking and owner gating must follow the identity the
+    // server actually sees.
+    case 'sp:syncListMembers': {
+      const ctx = await requireOrgBound(msg.spaceId);
+      if ('resp' in ctx) return ctx.resp;
+      let freshRole: SpaceRole | undefined;
+      let freshUserId: string | undefined;
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        async (bearer, deadlineAt) => {
+          const spaceRes = await api.getSpace(ctx.serverUrl, msg.spaceId, null, { bearer, deadlineAt });
+          if (!spaceRes.ok) return spaceRes;
+          if (spaceRes.data.myRole !== undefined) {
+            freshRole = spaceRes.data.myRole;
+            freshUserId = spaceRes.data.myUserId;
+          }
+          return api.listSpaceMembers(ctx.serverUrl, msg.spaceId, 1, 100, { bearer, deadlineAt });
+        },
+        false,
+      );
+      if (!outcome.ok) return outcome.resp;
+      if (freshRole !== undefined && (ctx.space.myRole !== freshRole || ctx.space.myUserId !== freshUserId)) {
+        await updateSyncSpaceRole(msg.spaceId, freshRole, freshUserId);
+      }
+      const members: SpaceMemberView[] = outcome.data.items.map((m) => ({
+        userId: m.userId,
+        email: m.email ?? null,
+        nickname: m.nickname ?? null,
+        role: m.role,
+        isOwner: m.isOwner,
+        joinedAt: m.joinedAt ?? null,
+      }));
+      return {
+        ok: true,
+        members,
+        membersTruncated: outcome.data.total > members.length,
+        ...(freshRole === undefined ? {} : { myRole: freshRole, myUserId: freshUserId }),
+      };
+    }
+
+    case 'sp:syncUpdateMemberRole': {
+      const ctx = await requireOrgBound(msg.spaceId);
+      if ('resp' in ctx) return ctx.resp;
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        (bearer, deadlineAt) =>
+          api.updateSpaceMemberRole(ctx.serverUrl, msg.spaceId, msg.userId, msg.role, { bearer, deadlineAt }),
+        true,
+      );
+      if (!outcome.ok) return outcome.resp;
+      return { ok: true };
+    }
+
+    // userId '' = leave this space (self-exit): the target always re-resolves from a fresh
+    // getSpace inside the same authedOperation run — a stored myUserId can belong to a previous
+    // account on this device and is never trusted to pick the removal target. Success never
+    // removes the local entry (local-first: pulled content stays, forgetting is separate), but
+    // it drops the stale role facts so the list stops rendering manager-gated buttons.
+    case 'sp:syncRemoveMember': {
+      const ctx = await requireOrgBound(msg.spaceId);
+      if ('resp' in ctx) return ctx.resp;
+      let target = msg.userId;
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        async (bearer, deadlineAt) => {
+          if (target === '') {
+            const spaceRes = await api.getSpace(ctx.serverUrl, msg.spaceId, null, { bearer, deadlineAt });
+            if (!spaceRes.ok) return spaceRes;
+            // An org-bound member answer without myUserId is out of contract — fail closed
+            if (spaceRes.data.myUserId === undefined || spaceRes.data.myUserId === '') {
+              return {
+                ok: false as const,
+                error: {
+                  kind: 'http' as const,
+                  status: 503,
+                  code: 'AUTH_UNAVAILABLE',
+                  message: 'The server did not report a member id for this caller',
+                },
+              };
+            }
+            target = spaceRes.data.myUserId;
+          }
+          return api.removeSpaceMember(ctx.serverUrl, msg.spaceId, target, { bearer, deadlineAt });
+        },
+        true,
+      );
+      if (!outcome.ok) return outcome.resp;
+      if (msg.userId === '') await clearSyncSpaceRole(msg.spaceId);
+      return { ok: true };
+    }
+
+    case 'sp:syncTransferOwnership': {
+      const ctx = await requireOrgBound(msg.spaceId);
+      if ('resp' in ctx) return ctx.resp;
+      const outcome = await authedOperation(
+        ctx.serverUrl,
+        (bearer, deadlineAt) => api.transferSpaceOwnership(ctx.serverUrl, msg.spaceId, msg.userId, { bearer, deadlineAt }),
+        true,
+      );
+      if (!outcome.ok) return outcome.resp;
+      // A successful transfer demotes the caller to admin — write it back so the panel status
+      // stops rendering owner-gated UI before the next scripts-view role refresh
+      await updateSyncSpaceRole(msg.spaceId, 'admin');
       return { ok: true };
     }
 

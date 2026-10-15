@@ -3,18 +3,38 @@
 // serializeStorageWrite.
 //
 // No-account model: the server keeps no identity, so the set of spaces a device knows is itself local
-// state — {id, key, name} triples, where the key is the device's only copy of the space credential
-// (the server stores a hash). Space membership lives nowhere else; losing this profile loses access.
+// state — key spaces as {id, key, name} (the key is the device's only copy of the space credential;
+// the server stores a hash), org-bound spaces as {id, name, myRole} with no key (access rides the
+// sign-in identity plus server-side membership). Space membership lives nowhere else; losing this
+// profile loses access.
 import { storage } from 'wxt/utils/storage';
 import { isPlainObject } from './flow-schema';
 import { serializeStorageWrite } from './storage';
+import type { SpaceRole } from './sync-api';
 
 export interface SyncSpaceEntry {
   id: string;
-  // The space access key — the only recoverable copy lives here (server stores a SHA-256 hash)
-  key: string;
+  // The space access key — the only recoverable copy lives here (server stores a SHA-256
+  // hash). Absent on org-bound spaces: they have no share code, access rides the sign-in
+  // identity plus server-side membership.
+  key?: string;
   name: string;
   createdAt: string;
+  // Org-bound facts, recorded from server responses and always re-decided by the server:
+  // myRole gates the write UI, myUserId addresses the self-exit and marks the member
+  // view's own row.
+  myRole?: SpaceRole;
+  myUserId?: string;
+}
+
+// Fixed read-side category rule: an entry with a key is a key space (legacy semantics win
+// even if a foreign write also attached role fields); without a key a valid myRole makes it
+// org-bound; anything else is a former member (self-exit cleared the role) or a torn/foreign
+// shape — never deleted here, and the spaces list renders it without role-gated UI.
+export function spaceCategory(entry: SyncSpaceEntry): 'key' | 'org-bound' | 'invalid' {
+  if (entry.key !== undefined) return 'key';
+  if (entry.myRole === 'owner' || entry.myRole === 'admin' || entry.myRole === 'member') return 'org-bound';
+  return 'invalid';
 }
 
 export interface SyncConfigData {
@@ -163,6 +183,44 @@ export function upsertSyncSpace(entry: SyncSpaceEntry): Promise<void> {
     const config = await syncConfigItem.getValue();
     const spaces = config.spaces.filter((s) => s.id !== entry.id);
     await syncConfigItem.setValue({ ...config, spaces: [...spaces, entry] });
+  });
+}
+
+// Write back the server-fresh role facts for an org-bound entry (the role refresh on
+// entering the scripts view); a missing entry is a no-op — the caller re-reads from the
+// server on the next message anyway.
+export function updateSyncSpaceRole(spaceId: string, myRole: SpaceRole, myUserId?: string): Promise<void> {
+  return serializeStorageWrite(async () => {
+    const config = await syncConfigItem.getValue();
+    if (!config.spaces.some((s) => s.id === spaceId)) return;
+    await syncConfigItem.setValue({
+      ...config,
+      spaces: config.spaces.map((s) =>
+        s.id === spaceId ? { ...s, myRole, ...(myUserId === undefined ? {} : { myUserId }) } : s,
+      ),
+    });
+  });
+}
+
+// Drop the org-bound role facts after a successful self-exit: the entry itself stays (pulled
+// content and links keep working; forgetting is a separate step the spaces row keeps
+// offering), and with no valid role the row renders without member/manager UI. The selection
+// is cleared when it pointed at this space — a non-member's current space would only ever
+// answer 403 on the write paths.
+export function clearSyncSpaceRole(spaceId: string): Promise<void> {
+  return serializeStorageWrite(async () => {
+    const config = await syncConfigItem.getValue();
+    if (!config.spaces.some((s) => s.id === spaceId)) return;
+    await syncConfigItem.setValue({
+      ...config,
+      spaces: config.spaces.map((s) =>
+        s.id === spaceId
+          ? { id: s.id, ...(s.key === undefined ? {} : { key: s.key }), name: s.name, createdAt: s.createdAt }
+          : s,
+      ),
+    });
+    const ui = await syncUiItem.getValue();
+    if (ui.currentSpaceId === spaceId) await syncUiItem.setValue({ currentSpaceId: null });
   });
 }
 

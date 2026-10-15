@@ -218,12 +218,16 @@ describe('server configuration', () => {
 });
 
 describe('space lifecycle (no accounts: ids and keys are generated locally)', () => {
-  it('createSpace generates the id+key locally, registers, stores the entry and selects it', async () => {
+  // The creation branch needs the server's mode first: none (404 config) keeps the original
+  // key path byte-for-byte — the probe must answer none explicitly for the legacy assertions
+  it('createSpace on a none server generates the id+key locally, registers, stores the entry and selects it', async () => {
     await writeSyncConfig({ serverUrl: SERVER, spaces: [] });
     const fetchMock = mockFetch((url, init) =>
-      url === `${SERVER}/api/spaces`
-        ? ok({ id: (JSON.parse(String(init.body)) as { id: string }).id, name: 'Fresh', createdAt: 't' }, 201)
-        : noContent(),
+      url === `${SERVER}/api/auth/config`
+        ? apiError(404, 'NOT_FOUND')
+        : url === `${SERVER}/api/spaces`
+          ? ok({ id: (JSON.parse(String(init.body)) as { id: string }).id, name: 'Fresh', createdAt: 't' }, 201)
+          : noContent(),
     );
     const res = await handleSyncMessage({ type: 'sp:syncCreateSpace', name: 'Fresh' });
     expect(res?.ok).toBe(true);
@@ -603,7 +607,7 @@ describe('error pass-through and list joins', () => {
 // Message-shape guard for the sync channel: handleSyncMessage unit tests bypass isExtensionMessage
 // (the background routes through it), so a guard that demands fields a message never carries — e.g.
 // versionNumber on listVersions — silently breaks the flow at runtime while staying green here.
-import { isExtensionMessage } from '@/lib/messaging';
+import { isExtensionMessage, type ExtensionMessage } from '@/lib/messaging';
 
 describe('sp:sync* payload guard (isExtensionMessage)', () => {
   it('accepts sp:syncListVersions without versionNumber (the version list request carries none)', () => {
@@ -783,5 +787,406 @@ describe('sign-in gate wiring (herald mode)', () => {
     // authReadyPromise carrying the failure
     (fakeBrowser.storage.local as unknown as Record<string, unknown>).setAccessLevel = async () => undefined;
     void initAuthReady();
+  });
+});
+
+// Workspace permissions: creation branches by the probed server capability, join routes invite
+// codes, the scripts view refreshes the server-fresh role, and the five member handlers stay
+// org-bound-only with the local-first guarantees (removed/self-exited keeps local data).
+describe('workspace permissions (org-bound spaces)', () => {
+  const CONFIG_URL = `${SERVER}/api/auth/config`;
+  const MY_USER = '11111111-1111-1111-1111-111111111111';
+  const OTHER_USER = '22222222-2222-2222-2222-222222222222';
+  const INVITE_SECRET = 'i'.repeat(32);
+
+  function noneProbe(handler: (url: string, init: RequestInit) => Response = () => noContent()) {
+    return mockFetch((url, init) => (url === CONFIG_URL ? apiError(404, 'NOT_FOUND') : handler(url, init)));
+  }
+
+  function wpProbe(handler: (url: string, init: RequestInit) => Response = () => noContent()) {
+    return mockFetch((url, init) =>
+      url === CONFIG_URL
+        ? ok({ enabled: true, loginUrl: '/api/auth/oauth/start', workspacePermissions: true })
+        : handler(url, init),
+    );
+  }
+
+  async function seedSession() {
+    await syncAuthItem.setValue({
+      serverUrl: SERVER,
+      accessToken: 'at-1',
+      refreshToken: 'rt-1',
+      accessTokenExpiresAt: Date.now() + 3_600_000,
+      epoch: 1,
+    });
+  }
+
+  // The org-bound twin of configured(): an entry with no key, only role facts
+  async function orgConfigured(myRole: 'owner' | 'admin' | 'member' = 'member', withUserId = true) {
+    await writeSyncConfig({
+      serverUrl: SERVER,
+      spaces: [
+        {
+          id: SPACE_ID,
+          name: 'Team Space',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          myRole,
+          ...(withUserId ? { myUserId: MY_USER } : {}),
+        },
+      ],
+    });
+    await syncUiItem.setValue({ currentSpaceId: SPACE_ID });
+  }
+
+  it('creation on a workspace server is key-less and stores the owner role facts from the response', async () => {
+    await writeSyncConfig({ serverUrl: SERVER, spaces: [] });
+    await seedSession();
+    const fetchMock = wpProbe((url, init) =>
+      url === `${SERVER}/api/spaces`
+        ? ok(
+            {
+              id: (JSON.parse(String(init.body)) as { id: string }).id,
+              name: 'Fresh',
+              createdAt: 't',
+              myRole: 'owner',
+              myUserId: MY_USER,
+            },
+            201,
+          )
+        : noContent(),
+    );
+    const res = await handleSyncMessage({ type: 'sp:syncCreateSpace', name: 'Fresh' });
+    expect(res?.ok).toBe(true);
+    const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.body !== undefined)!;
+    const body = JSON.parse(String((post[1] as RequestInit).body)) as Record<string, unknown>;
+    // The org-bound request carries no key — a key here would create a key space instead
+    expect(Object.keys(body).sort()).toEqual(['id', 'name']);
+    const config = await syncConfigItem.getValue();
+    expect(config.spaces[0]).toEqual({
+      id: body.id,
+      name: 'Fresh',
+      createdAt: 't',
+      myRole: 'owner',
+      myUserId: MY_USER,
+    });
+    expect(await syncUiItem.getValue()).toEqual({ currentSpaceId: body.id });
+  });
+
+  it('a herald server without workspacePermissions keeps the original key path byte-for-byte', async () => {
+    await writeSyncConfig({ serverUrl: SERVER, spaces: [] });
+    await seedSession();
+    const fetchMock = mockFetch((url, init) =>
+      url === CONFIG_URL
+        ? ok({ enabled: true, loginUrl: '/api/auth/oauth/start', workspacePermissions: false })
+        : url === `${SERVER}/api/spaces`
+          ? ok({ id: (JSON.parse(String(init.body)) as { id: string }).id, name: 'Old', createdAt: 't' }, 201)
+          : noContent(),
+    );
+    const res = await handleSyncMessage({ type: 'sp:syncCreateSpace', name: 'Old' });
+    expect(res?.ok).toBe(true);
+    const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.body !== undefined)!;
+    const body = JSON.parse(String((post[1] as RequestInit).body)) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(['id', 'key', 'name']);
+    expect((await syncConfigItem.getValue()).spaces[0]).toMatchObject({ key: expect.any(String) });
+  });
+
+  it('an unknown probe refuses creation fail-closed: zero space requests, zero local writes', async () => {
+    await writeSyncConfig({ serverUrl: SERVER, spaces: [] });
+    await seedSession();
+    const fetchMock = mockFetch(() => apiError(500, 'BOOM'));
+    expect(await handleSyncMessage({ type: 'sp:syncCreateSpace', name: 'X' })).toEqual({
+      ok: false,
+      reason: 'auth-unavailable',
+    });
+    expect(fetchMock.mock.calls.filter(([u]) => String(u) === `${SERVER}/api/spaces`)).toHaveLength(0);
+    expect((await syncConfigItem.getValue()).spaces).toEqual([]);
+    expect(await syncUiItem.getValue()).toEqual({ currentSpaceId: null });
+  });
+
+  it('invite join redeems into a role entry; a replayed code stores the server-actual role (no demotion)', async () => {
+    await writeSyncConfig({ serverUrl: SERVER, spaces: [] });
+    await seedSession();
+    const redeemUrl = `${SERVER}/api/invites/redeem`;
+    const fetchMock = wpProbe((url) =>
+      url === redeemUrl ? ok({ id: SPACE_ID, name: 'Team Space', createdAt: 't', myRole: 'member', myUserId: MY_USER }) : noContent(),
+    );
+    const joined = await handleSyncMessage({ type: 'sp:syncJoinSpace', code: `${SPACE_ID}#iv-${INVITE_SECRET}` });
+    expect(joined).toEqual({ ok: true, space: { id: SPACE_ID, name: 'Team Space' } });
+    expect(JSON.parse(String((fetchMock.mock.calls.find(([u]) => u === redeemUrl)![1] as RequestInit).body))).toEqual({
+      code: `${SPACE_ID}#iv-${INVITE_SECRET}`,
+    });
+    expect((await syncConfigItem.getValue()).spaces[0]).toEqual({
+      id: SPACE_ID,
+      name: 'Team Space',
+      createdAt: 't',
+      myRole: 'member',
+      myUserId: MY_USER,
+    });
+
+    // Idempotent replay of an already-used code returns the caller's ACTUAL role
+    mockFetch((url) =>
+      url === CONFIG_URL
+        ? ok({ enabled: true, loginUrl: '/api/auth/oauth/start', workspacePermissions: true })
+        : url === redeemUrl
+          ? ok({ id: SPACE_ID, name: 'Team Space', createdAt: 't', myRole: 'admin', myUserId: MY_USER })
+          : noContent(),
+    );
+    await handleSyncMessage({ type: 'sp:syncJoinSpace', code: `${SPACE_ID}#iv-${INVITE_SECRET}` });
+    expect((await syncConfigItem.getValue()).spaces[0]).toMatchObject({ myRole: 'admin' });
+  });
+
+  it('invite join without a session asks for sign-in before any redeem — the code is not consumed', async () => {
+    await writeSyncConfig({ serverUrl: SERVER, spaces: [] });
+    const fetchMock = wpProbe();
+    expect(
+      await handleSyncMessage({ type: 'sp:syncJoinSpace', code: `${SPACE_ID}#iv-${INVITE_SECRET}` }),
+    ).toEqual({ ok: false, reason: 'sign-in-required' });
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/invites/redeem'))).toHaveLength(0);
+    expect((await syncConfigItem.getValue()).spaces).toEqual([]);
+  });
+
+  it('none servers and malformed invite shapes refuse locally with zero network', async () => {
+    await writeSyncConfig({ serverUrl: SERVER, spaces: [] });
+    const noneMock = noneProbe();
+    expect(
+      await handleSyncMessage({ type: 'sp:syncJoinSpace', code: `${SPACE_ID}#iv-${INVITE_SECRET}` }),
+    ).toEqual({ ok: false, reason: 'invite-unsupported' });
+    expect(noneMock.mock.calls.filter(([u]) => String(u).includes('/api/invites'))).toHaveLength(0);
+
+    const shapeMock = mockFetch(() => {
+      throw new Error('must not fetch for malformed codes');
+    });
+    for (const bad of [`${SPACE_ID}#iv-short`, `${SPACE_ID}#iv-${'i'.repeat(33)}`, `${SPACE_ID}#iv--${'i'.repeat(31)}`]) {
+      const res = await handleSyncMessage({ type: 'sp:syncJoinSpace', code: bad });
+      expect(res?.reason ?? `unexpected success for ${bad}`).toBe('bad-space-code');
+    }
+    expect(shapeMock).not.toHaveBeenCalled();
+  });
+
+  it('org-bound listScripts refreshes the role first in one probe: changes write back and ride the response', async () => {
+    await orgConfigured('member');
+    await seedSession();
+    const scriptsUrl = `${SERVER}/api/spaces/${SPACE_ID}/scripts`;
+    const spaceUrl = `${SERVER}/api/spaces/${SPACE_ID}`;
+    const fetchMock = wpProbe((url) =>
+      url === spaceUrl
+        ? ok({ id: SPACE_ID, name: 'Team Space', createdAt: 't', myRole: 'admin', myUserId: MY_USER })
+        : url === scriptsUrl
+          ? ok([])
+          : noContent(),
+    );
+    const res = await handleSyncMessage({ type: 'sp:syncListScripts', spaceId: SPACE_ID });
+    expect(res?.ok).toBe(true);
+    if (res?.ok) expect(res.myRole).toBe('admin');
+    // Single probe, single run: config answered once, the role refresh answered once
+    expect(fetchMock.mock.calls.filter(([u]) => u === CONFIG_URL)).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([u]) => u === spaceUrl)).toHaveLength(1);
+    // The fresh role + identity landed in the entry
+    expect((await syncConfigItem.getValue()).spaces[0]).toMatchObject({ myRole: 'admin', myUserId: MY_USER });
+  });
+
+  it('a removed member sees their next listScripts refused with space-access-denied and local data intact', async () => {
+    await orgConfigured('member');
+    await seedSession();
+    const scriptsUrl = `${SERVER}/api/spaces/${SPACE_ID}/scripts`;
+    const fetchMock = wpProbe((url) =>
+      url === `${SERVER}/api/spaces/${SPACE_ID}` ? apiError(403, 'SPACE_ACCESS_DENIED', 'no access') : noContent(),
+    );
+    expect(await handleSyncMessage({ type: 'sp:syncListScripts', spaceId: SPACE_ID })).toEqual({
+      ok: false,
+      reason: 'space-access-denied',
+      detail: 'no access',
+    });
+    // Short-circuited: the scripts request never left, the entry stays (local-first)
+    expect(fetchMock.mock.calls.filter(([u]) => u === scriptsUrl)).toHaveLength(0);
+    expect((await syncConfigItem.getValue()).spaces).toHaveLength(1);
+  });
+
+  it('key spaces make no extra get_space round trip on listScripts (byte-identical legacy path)', async () => {
+    await configured();
+    const spaceUrl = `${SERVER}/api/spaces/${SPACE_ID}`;
+    const fetchMock = noneProbe((url) => (url === `${spaceUrl}/scripts` ? ok([]) : noContent()));
+    expect((await handleSyncMessage({ type: 'sp:syncListScripts', spaceId: SPACE_ID }))?.ok).toBe(true);
+    expect(fetchMock.mock.calls.filter(([u]) => u === spaceUrl)).toHaveLength(0);
+  });
+
+  it('org-bound space operations omit the X-Space-Key header (membership is the credential)', async () => {
+    await orgConfigured('admin');
+    await seedSession();
+    const fetchMock = wpProbe((url) => (url === `${SERVER}/api/spaces/${SPACE_ID}` ? noContent() : noContent()));
+    expect((await handleSyncMessage({ type: 'sp:syncDeleteSpace', spaceId: SPACE_ID }))?.ok).toBe(true);
+    const del = fetchMock.mock.calls.find(([u]) => String(u) === `${SERVER}/api/spaces/${SPACE_ID}`)!;
+    const delHeaders = (del[1] as RequestInit).headers as Record<string, string>;
+    expect(delHeaders['X-Space-Key']).toBeUndefined();
+    expect(delHeaders['Authorization']).toBe('Bearer at-1');
+  });
+
+  it('member surface guards: key spaces refuse locally, unknown spaces stay space-not-known', async () => {
+    await configured();
+    const messages: ExtensionMessage[] = [
+      { type: 'sp:syncIssueInvite', spaceId: SPACE_ID },
+      { type: 'sp:syncListMembers', spaceId: SPACE_ID },
+      { type: 'sp:syncUpdateMemberRole', spaceId: SPACE_ID, userId: OTHER_USER, role: 'admin' },
+      { type: 'sp:syncRemoveMember', spaceId: SPACE_ID, userId: OTHER_USER },
+      { type: 'sp:syncTransferOwnership', spaceId: SPACE_ID, userId: OTHER_USER },
+    ];
+    const fetchMock = mockFetch(() => {
+      throw new Error('key spaces must not reach the member endpoints');
+    });
+    for (const msg of messages) {
+      const res = await handleSyncMessage(msg);
+      expect(res?.ok).toBe(false);
+      // A dedicated reason (not invalid-input + a server-style English detail) — the view
+      // layer localizes it instead of bypassing i18n
+      expect(res?.reason).toBe('space-key-unsupported');
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await handleSyncMessage({ type: 'sp:syncListMembers', spaceId: 'sp-unknown000000001' }))?.reason).toBe(
+      'space-not-known',
+    );
+  });
+
+  it('the member guard rejects owner as a settable role before any traffic', () => {
+    const bad = { type: 'sp:syncUpdateMemberRole', spaceId: SPACE_ID, userId: OTHER_USER, role: 'owner' };
+    expect(isExtensionMessage(bad)).toBe(false);
+  });
+
+  it('the member guard rejects transfer to an empty id but keeps removeMember self-exit', () => {
+    // userId '' means self-exit on removeMember only; transfer always targets a concrete id
+    expect(isExtensionMessage({ type: 'sp:syncTransferOwnership', spaceId: SPACE_ID, userId: '' })).toBe(false);
+    expect(isExtensionMessage({ type: 'sp:syncRemoveMember', spaceId: SPACE_ID, userId: '' })).toBe(true);
+  });
+
+  it('issueInvite surfaces the one-time code exactly once and never persists it', async () => {
+    await orgConfigured('admin');
+    await seedSession();
+    const wire = { spaceId: SPACE_ID, code: `${SPACE_ID}#iv-${INVITE_SECRET}`, createdAt: 't', expiresAt: 't2' };
+    wpProbe((url) => (url === `${SERVER}/api/spaces/${SPACE_ID}/invites` ? ok(wire, 201) : noContent()));
+    const res = await handleSyncMessage({ type: 'sp:syncIssueInvite', spaceId: SPACE_ID });
+    expect(res).toEqual({ ok: true, invite: { code: wire.code, expiresAt: 't2' } });
+    // Nothing invite-shaped may land anywhere local
+    expect(JSON.stringify(await syncConfigItem.getValue())).not.toContain(INVITE_SECRET);
+  });
+
+  it('listMembers re-decides the caller identity first, maps rows, flags truncation and rides the bearer', async () => {
+    // The entry's stored role is 'admin' but the server says 'owner' — the response (and the
+    // stored entry) must follow the server, since the view marks its own row on these facts
+    await orgConfigured('admin');
+    await seedSession();
+    const membersUrl = `${SERVER}/api/spaces/${SPACE_ID}/members`;
+    const spaceUrl = `${SERVER}/api/spaces/${SPACE_ID}`;
+    const fetchMock = wpProbe((url) =>
+      String(url).startsWith(membersUrl)
+        ? ok({
+            items: [
+              { userId: MY_USER, nickname: 'Me', role: 'owner', isOwner: true, joinedAt: 'j1' },
+              { userId: OTHER_USER, role: 'member', isOwner: false },
+            ],
+            page: 1,
+            pageSize: 100,
+            total: 101,
+          })
+        : url === spaceUrl
+          ? ok({ id: SPACE_ID, name: 'Team Space', createdAt: 't', myRole: 'owner', myUserId: MY_USER })
+          : noContent(),
+    );
+    const res = await handleSyncMessage({ type: 'sp:syncListMembers', spaceId: SPACE_ID });
+    expect(res?.ok).toBe(true);
+    if (res?.ok) {
+      expect(res.members).toEqual([
+        { userId: MY_USER, email: null, nickname: 'Me', role: 'owner', isOwner: true, joinedAt: 'j1' },
+        { userId: OTHER_USER, email: null, nickname: null, role: 'member', isOwner: false, joinedAt: null },
+      ]);
+      expect(res.membersTruncated).toBe(true);
+      expect(res.myRole).toBe('owner');
+      expect(res.myUserId).toBe(MY_USER);
+    }
+    expect((await syncConfigItem.getValue()).spaces[0]?.myRole).toBe('owner');
+    const call = fetchMock.mock.calls.find(([u]) => String(u) === `${membersUrl}?page=1&pageSize=100`)!;
+    expect((call[1]!.headers as Record<string, string>)['Authorization']).toBe('Bearer at-1');
+  });
+
+  it('role changes / removal / transfer return ok and leave member facts to the refreshed list', async () => {
+    await orgConfigured('owner');
+    await seedSession();
+    const membersUrl = `${SERVER}/api/spaces/${SPACE_ID}/members`;
+    const fetchMock = wpProbe((url, init) =>
+      url === `${membersUrl}/${OTHER_USER}` && init.method === 'PATCH'
+        ? ok({ userId: OTHER_USER, role: 'admin', isOwner: false })
+        : url === `${membersUrl}/${OTHER_USER}`
+          ? noContent()
+          : url === `${SERVER}/api/spaces/${SPACE_ID}/ownership`
+            ? ok({ userId: OTHER_USER, role: 'owner', isOwner: true })
+            : noContent(),
+    );
+    expect(
+      (await handleSyncMessage({ type: 'sp:syncUpdateMemberRole', spaceId: SPACE_ID, userId: OTHER_USER, role: 'admin' }))?.ok,
+    ).toBe(true);
+    expect(
+      JSON.parse(
+        String(fetchMock.mock.calls.find(([u]) => String(u) === `${membersUrl}/${OTHER_USER}`)![1]!.body),
+      ),
+    ).toEqual({
+      role: 'admin',
+    });
+    expect((await handleSyncMessage({ type: 'sp:syncRemoveMember', spaceId: SPACE_ID, userId: OTHER_USER }))?.ok).toBe(true);
+    expect((await handleSyncMessage({ type: 'sp:syncTransferOwnership', spaceId: SPACE_ID, userId: OTHER_USER }))?.ok).toBe(true);
+    expect(JSON.parse(String(fetchMock.mock.calls.find(([u]) => String(u).endsWith('/ownership'))![1]!.body))).toEqual({
+      userId: OTHER_USER,
+    });
+    // No member facts were cached locally — the list is always a fresh fetch
+    expect(JSON.stringify(await syncConfigItem.getValue())).not.toContain(OTHER_USER);
+  });
+
+  it('a successful ownership transfer demotes the stored role from owner to admin', async () => {
+    // The panel status reads the STORED role; without the write-back the ex-owner keeps
+    // owner-gated UI until the next scripts-view refresh and every click answers 403
+    await orgConfigured('owner');
+    await seedSession();
+    wpProbe((url) => (url === `${SERVER}/api/spaces/${SPACE_ID}/ownership` ? noContent() : noContent()));
+    expect((await handleSyncMessage({ type: 'sp:syncTransferOwnership', spaceId: SPACE_ID, userId: OTHER_USER }))?.ok).toBe(true);
+    expect((await syncConfigItem.getValue()).spaces[0]?.myRole).toBe('admin');
+  });
+
+  it('leave (userId "") always re-resolves the caller id from the server and clears the stale role facts', async () => {
+    // The entry's myUserId can belong to a previous account on this device — trusting it
+    // would remove THAT user's membership instead of the caller's
+    await orgConfigured('member', true);
+    await seedSession();
+    const spaceUrl = `${SERVER}/api/spaces/${SPACE_ID}`;
+    const removeUrl = `${SERVER}/api/spaces/${SPACE_ID}/members/${MY_USER}`;
+    const fetchMock = wpProbe((url) =>
+      url === spaceUrl ? ok({ id: SPACE_ID, name: 'Team Space', createdAt: 't', myRole: 'member', myUserId: MY_USER }) : noContent(),
+    );
+    expect((await handleSyncMessage({ type: 'sp:syncRemoveMember', spaceId: SPACE_ID, userId: '' }))?.ok).toBe(true);
+    expect(fetchMock.mock.calls.filter(([u]) => String(u) === spaceUrl)).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([u]) => String(u) === removeUrl)).toHaveLength(1);
+    // Local-first: leaving never deletes the local entry, but the role facts are dropped so
+    // the spaces list stops rendering member/manager UI for a membership that no longer exists
+    const spaces = (await syncConfigItem.getValue()).spaces;
+    expect(spaces).toHaveLength(1);
+    expect(spaces[0]?.myRole).toBeUndefined();
+    expect(spaces[0]?.myUserId).toBeUndefined();
+
+    // A pre-refresh entry without myUserId: the id is fetched inside the same run, then removed
+    await orgConfigured('member', false);
+    const fetchMock2 = wpProbe((url) =>
+      url === spaceUrl ? ok({ id: SPACE_ID, name: 'Team Space', createdAt: 't', myRole: 'member', myUserId: MY_USER }) : noContent(),
+    );
+    expect((await handleSyncMessage({ type: 'sp:syncRemoveMember', spaceId: SPACE_ID, userId: '' }))?.ok).toBe(true);
+    expect(fetchMock2.mock.calls.filter(([u]) => String(u) === removeUrl)).toHaveLength(1);
+  });
+
+  it('a member mutation that times out after dispatch surfaces operation-uncertain (check, never auto-replay)', async () => {
+    await orgConfigured('admin');
+    await seedSession();
+    mockFetch((url) => {
+      if (url === CONFIG_URL) return ok({ enabled: true, loginUrl: '/api/auth/oauth/start', workspacePermissions: true });
+      throw new DOMException('aborted', 'TimeoutError');
+    });
+    expect(await handleSyncMessage({ type: 'sp:syncRemoveMember', spaceId: SPACE_ID, userId: OTHER_USER })).toEqual({
+      ok: false,
+      reason: 'operation-uncertain',
+    });
   });
 });

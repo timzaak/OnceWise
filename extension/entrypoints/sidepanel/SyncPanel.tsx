@@ -1,6 +1,6 @@
-// Sync tab root: view routing (spaces / scripts / script detail) and the top status line (server
-// health + current space). Local-first: with no server configured the tab still renders the spaces
-// view — nothing here gates any local feature.
+// Sync tab root: view routing (spaces / scripts / script detail / members) and the top status
+// line (server health + current space). Local-first: with no server configured the tab still
+// renders the spaces view — nothing here gates any local feature.
 import { useState } from 'react';
 import { useSync } from '@/lib/use-sync';
 import { t } from '@/lib/i18n';
@@ -8,11 +8,13 @@ import SyncAuthCard from './SyncAuthCard';
 import SyncSpacesView from './SyncSpacesView';
 import SyncScriptsView from './SyncScriptsView';
 import SyncScriptDetail from './SyncScriptDetail';
+import SyncMembersView from './SyncMembersView';
 
 type SyncView =
   | { kind: 'spaces' }
   | { kind: 'scripts' }
-  | { kind: 'script-detail'; scriptId: string };
+  | { kind: 'script-detail'; scriptId: string }
+  | { kind: 'members' };
 
 // Only the sync-tab-specific styles; layout and shared components reuse the sp-* tokens
 // injected by App
@@ -27,9 +29,11 @@ export default function SyncPanel() {
   const [view, setView] = useState<SyncView>({ kind: 'spaces' });
 
   // Space/server mutations also refresh the auth state — e.g. a server switch must immediately
-  // re-probe the mode and drop the old server's signed-in card
-  const onChanged = () => {
-    void load();
+  // re-probe the mode and drop the old server's signed-in card. The status reload is awaited so
+  // callers that switch views right after (select → scripts/members) mount against the fresh
+  // currentSpace, not the previous one.
+  const onChanged = async () => {
+    await load();
     void refreshAuth();
   };
 
@@ -77,6 +81,7 @@ export default function SyncPanel() {
           probeHealth={probeHealth}
           onChanged={onChanged}
           onOpenScripts={() => setView({ kind: 'scripts' })}
+          onOpenMembers={() => setView({ kind: 'members' })}
         />
       )}
 
@@ -92,6 +97,8 @@ export default function SyncPanel() {
           <SyncScriptsView
             spaceId={currentSpace.id}
             spaceName={currentSpace.name}
+            spaceCode={currentSpace.code}
+            initialRole={currentSpace.myRole}
             serverUrl={status.serverUrl}
             call={call}
             onOpenDetail={(scriptId) => setView({ kind: 'script-detail', scriptId })}
@@ -99,10 +106,32 @@ export default function SyncPanel() {
           />
         ))}
 
+      {view.kind === 'members' &&
+        (status.currentSpaceId === null || currentSpace === null ? (
+          <section className="sp-card">
+            <p className="sp-hint">{t('sync.spaces.empty')}</p>
+            <button type="button" className="sp-btn" onClick={() => setView({ kind: 'spaces' })}>
+              {t('sync.scripts.back')}
+            </button>
+          </section>
+        ) : (
+          <SyncMembersView
+            key={currentSpace.id}
+            spaceId={currentSpace.id}
+            spaceName={currentSpace.name}
+            myRole={currentSpace.myRole ?? 'member'}
+            myUserId={currentSpace.myUserId}
+            call={call}
+            onBack={() => setView({ kind: 'spaces' })}
+            onChanged={() => void onChanged()}
+          />
+        ))}
+
       {view.kind === 'script-detail' && status.currentSpaceId !== null && currentSpace !== null && (
         <SyncScriptDetail
           spaceId={currentSpace.id}
           scriptId={view.scriptId}
+          spaceCode={currentSpace.code}
           serverUrl={status.serverUrl}
           call={call}
           onBack={() => setView({ kind: 'scripts' })}

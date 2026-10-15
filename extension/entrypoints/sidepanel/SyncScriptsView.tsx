@@ -1,16 +1,24 @@
 // Sync tab S2: the space's script list (pinned / new-version / local-edits badges, masked display) and
-// saving a local flow as a script (with the explicit data-leaves-your-device confirmation).
+// saving a local flow as a script (with the explicit data-leaves-your-device confirmation). On
+// org-bound spaces the server-fresh role rides every list response: a read-only member gets no
+// upload card (plus the read-only hint) — the server's 403 remains the bottom line.
 import { useCallback, useEffect, useState } from 'react';
 import { sendRuntimeMessage } from '@/lib/messaging';
 import type { ScriptRowView } from '@/lib/messaging';
+import type { SpaceRole } from '@/lib/sync-api';
 import type { Flow } from '@/lib/flow-schema';
 import { redactText } from '@/lib/redact';
 import { t } from '@/lib/i18n';
+import { commonSyncErrorText } from '@/lib/sync-errors';
 import type { SyncCall } from '@/lib/use-sync';
 
 interface Props {
   spaceId: string;
   spaceName: string;
+  spaceCode: string | null;
+  // The stored org-bound role, seeding readOnly before the first (server-fresh) list response
+  // lands — a read-only member never sees the upload card flash
+  initialRole?: SpaceRole;
   serverUrl: string;
   call: SyncCall;
   onOpenDetail: (scriptId: string) => void;
@@ -19,20 +27,17 @@ interface Props {
 
 function errorText(res: { ok: false; reason: string; detail?: string } | undefined, fallback: string): string {
   if (res === undefined) return fallback;
-  if (res.reason === 'unreachable') return t('sync.error.unreachable');
   if (res.reason === 'bad-space-key') return t('sync.error.badKey');
   if (res.reason === 'space-not-found') return t('sync.scripts.spaceGone');
-  if (res.reason === 'invalid-input') return res.detail ?? t('sync.error.invalidInput');
-  if (res.reason === 'sign-in-required') return t('sync.auth.required');
-  if (res.reason === 'auth-unavailable') return t('sync.auth.unavailable');
-  if (res.reason === 'operation-uncertain') return t('sync.auth.operationUncertain');
-  if (res.reason === 'auth-changed') return t('sync.auth.relogin');
+  const common = commonSyncErrorText(res);
+  if (common !== null) return common;
   return res.detail ?? fallback;
 }
 
-export default function SyncScriptsView({ spaceId, spaceName, serverUrl, call, onOpenDetail, onBack }: Props) {
+export default function SyncScriptsView({ spaceId, spaceName, spaceCode, initialRole, serverUrl, call, onOpenDetail, onBack }: Props) {
   const [rows, setRows] = useState<ScriptRowView[] | null>(null);
   const [flows, setFlows] = useState<Flow[] | null>(null);
+  const [myRole, setMyRole] = useState<SpaceRole | undefined>(initialRole);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeWarn, setNoticeWarn] = useState(false);
@@ -51,9 +56,12 @@ export default function SyncScriptsView({ spaceId, spaceName, serverUrl, call, o
       ]);
       if (listRes?.ok && listRes.scriptRows) {
         setRows(listRes.scriptRows);
+        if (listRes.myRole !== undefined) setMyRole(listRes.myRole);
         setNotice(null);
       } else if (listRes !== undefined && listRes.ok === false) {
-        setNoticeWarn(listRes.reason === 'space-not-found' || listRes.reason === 'bad-space-key');
+        setNoticeWarn(
+          listRes.reason === 'space-not-found' || listRes.reason === 'bad-space-key' || listRes.reason === 'space-access-denied',
+        );
         setNotice(errorText(listRes, t('sync.scripts.loadFail')));
       }
       if (flowsRes?.ok && flowsRes.flows) setFlows(flowsRes.flows);
@@ -65,6 +73,8 @@ export default function SyncScriptsView({ spaceId, spaceName, serverUrl, call, o
   useEffect(() => {
     void load();
   }, [load]);
+
+  const readOnly = spaceCode === null && myRole === 'member';
 
   const linkedFlowIds = new Set((rows ?? []).map((r) => r.local?.flowId).filter((id): id is string => id !== undefined));
   const unlinkedFlows = (flows ?? []).filter((r) => !linkedFlowIds.has(r.id));
@@ -160,7 +170,14 @@ export default function SyncScriptsView({ spaceId, spaceName, serverUrl, call, o
         </div>
       )}
 
-      <section className="sp-card" aria-label={t('sync.scripts.save.title')}>
+      {readOnly && (
+        <section className="sp-card">
+          <p className="sp-hint">{t('sync.readonly.hint')}</p>
+        </section>
+      )}
+
+      {!readOnly && (
+        <section className="sp-card" aria-label={t('sync.scripts.save.title')}>
         {!uploadOpen ? (
           <button type="button" className="sp-btn primary" disabled={(flows ?? []).length === 0} onClick={() => setUploadOpen(true)}>
             {t('sync.scripts.save.title')}
@@ -205,6 +222,7 @@ export default function SyncScriptsView({ spaceId, spaceName, serverUrl, call, o
           </>
         )}
       </section>
+      )}
     </>
   );
 }

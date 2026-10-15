@@ -7,10 +7,12 @@ import { AUTHED_OP_BUDGET_MS, NONE_OP_BUDGET_MS, SIGN_IN_BUDGET_MS } from '@/lib
 import {
   isValidSyncAuthData,
   resetSyncForServer,
+  spaceCategory,
   syncAuthItem,
   syncConfigItem,
   syncLinksItem,
   syncUiItem,
+  type SyncSpaceEntry,
 } from '@/lib/sync-storage';
 
 describe('test pipeline smoke', () => {
@@ -52,6 +54,30 @@ describe('test pipeline smoke', () => {
     });
     expect(await syncLinksItem.getValue()).toEqual([]);
     expect(await syncUiItem.getValue()).toEqual({ currentSpaceId: null });
+  });
+
+  // The additive evolution of SyncSpaceEntry: legacy key entries keep their exact shape while
+  // org-bound entries carry role facts instead of a key — the read-side category rule is fixed
+  // (key wins; neither field means a torn entry that callers skip but never delete)
+  it('syncConfig holds both space categories side by side with a fixed typing rule', async () => {
+    const keyEntry: SyncSpaceEntry = { id: 'sp-key000000000001', key: 'k'.repeat(32), name: 'Key', createdAt: 't' };
+    const orgEntry: SyncSpaceEntry = {
+      id: 'sp-org0000000000001',
+      name: 'Org',
+      createdAt: 't',
+      myRole: 'owner',
+      myUserId: '11111111-1111-1111-1111-111111111111',
+    };
+    await syncConfigItem.setValue({ serverUrl: 'https://a.example.com', spaces: [keyEntry, orgEntry] });
+    const stored = await syncConfigItem.getValue();
+    expect(stored.spaces[0]).toEqual(keyEntry);
+    expect(stored.spaces[1]).toEqual(orgEntry);
+    expect(spaceCategory(keyEntry)).toBe('key');
+    expect(spaceCategory(orgEntry)).toBe('org-bound');
+    // Defense against torn/foreign shapes: both fields → key semantics win; neither → skipped
+    expect(spaceCategory({ ...orgEntry, key: 'k'.repeat(32) })).toBe('key');
+    expect(spaceCategory({ id: 'sp-x00000000000001', name: 'x', createdAt: 't' })).toBe('invalid');
+    expect(spaceCategory({ id: 'sp-x00000000000001', name: 'x', createdAt: 't', myRole: 'boss' as never })).toBe('invalid');
   });
 
   it('the sign-in credentials live in local:syncAuth with a signed-out fallback at epoch 0', async () => {

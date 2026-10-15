@@ -5,7 +5,12 @@
 // across Herald round trips: org-bound creation (the tx holds the freshly inserted space
 // row — no other tx can contend for it) and invite redemption (the tx holds the invite row's
 // lock — only same-code requests queue behind it). Both trade a bounded hold for "commit
-// implies a complete state; failure leaves zero residue and never burns a code".
+// implies a complete state; failure leaves zero residue and never burns a code". The
+// redemption hold spans up to two Herald calls (10 s timeout each) on one pool connection
+// (pool max 8), so concurrent stalled redemptions — Herald black-holed while enough
+// different codes redeem — can occupy the whole pool and stall unrelated key-space traffic
+// for the timeout window. Accepted: moving the Herald calls outside the tx would reorder
+// the used/expired/member decisions and their error priorities.
 
 use std::collections::HashMap;
 
@@ -18,8 +23,10 @@ use crate::dto::{
     ErrorBodyDto, InviteDto, MemberDto, MemberListDto, RedeemInviteReq, SpaceDto,
     TransferOwnershipReq, UpdateMemberRoleReq,
 };
-use crate::error::{auth_unavailable, ApiError, ApiJson};
-use crate::orgs::{map_org_error, role_to_tier, tier_to_role, OrgClient, TIER_MEMBER, TIER_OWNER};
+use crate::error::{auth_unavailable, is_fk_violation, space_not_found, ApiError, ApiJson};
+use crate::orgs::{
+    map_org_error, role_to_tier, tier_to_role, OrgApiError, OrgClient, TIER_MEMBER, TIER_OWNER,
+};
 use crate::spacekey::{
     is_valid_entity_id, org_space_access, require_space_row, sha256_hex, space_org_binding,
     write_transaction, ResolvedIdentity, SpaceAccess,
@@ -187,7 +194,7 @@ pub async fn issue_space_invite(
     // insert routes to 404 (space_invites references spaces; the FK cascade would otherwise
     // surface as a 500).
     require_space_row(&mut *tx, &space_id, None, Some(&entry.org_id)).await?;
-    sqlx::query(
+    let inserted = sqlx::query(
         "INSERT INTO space_invites (code_hash, space_id, created_at, expires_at) VALUES ($1, $2, $3, $4)",
     )
     .bind(sha256_hex(code.as_bytes()))
@@ -195,8 +202,16 @@ pub async fn issue_space_invite(
     .bind(&created_at)
     .bind(&expires_at)
     .execute(&mut *tx)
-    .await
-    .map_err(ApiError::internal)?;
+    .await;
+    if let Err(err) = inserted {
+        // A space deleted between the re-verification above and this INSERT surfaces as an FK
+        // violation (space_invites references spaces) — the same interleave require_space_row
+        // routes to 404; its residual sub-statement window included.
+        if is_fk_violation(&err) {
+            return Err(space_not_found());
+        }
+        return Err(ApiError::internal(err));
+    }
     tx.commit().await.map_err(ApiError::internal)?;
     tracing::info!(action = "issue_invite", space = %space_id, "workspace invite issued");
     Ok((
@@ -240,6 +255,23 @@ pub async fn redeem_invite(
         return Err(ApiError::AuthRequired);
     };
     let org = org_client_of(&state)?;
+    // The invite row pins an org-bound space, so its organization must exist — org_not_found
+    // is out-of-contract and fails closed like the creation path: a 404 would render as "bad
+    // code" (the client cannot distinguish it) and invite a pointless retype, while 503 keeps
+    // the documented "retry is safe, the code is not consumed" answer. A deleted caller
+    // (user_not_found) is a stable answer, not an outage — the documented 401 (code not
+    // consumed) instead of an endless retryable 503 loop.
+    let map_redeem_error = |err: OrgApiError| -> ApiError {
+        match err {
+            OrgApiError::Upstream { status: 404, code } if code == "org_not_found" => {
+                auth_unavailable()
+            }
+            OrgApiError::Upstream { status: 404, code } if code == "user_not_found" => {
+                ApiError::AuthRequired
+            }
+            err => map_org_error(err),
+        }
+    };
     let (prefix_space_id, _body) = parse_invite_code(&req.code)?;
     let code_hash = sha256_hex(req.code.as_bytes());
 
@@ -299,7 +331,7 @@ pub async fn redeem_invite(
                 Ok(space_dto(role))
             }
             Ok(None) => Err(ApiError::InviteAlreadyUsed),
-            Err(err) => Err(map_org_error(err)),
+            Err(err) => Err(map_redeem_error(err)),
         };
     }
     // Fixed-width RFC 3339 text: lexicographic comparison is chronological comparison.
@@ -320,7 +352,7 @@ pub async fn redeem_invite(
             // authority and grants the fixed read-only tier.
             org.add_member(&org_id, &identity.user_id, TIER_MEMBER, None)
                 .await
-                .map_err(map_org_error)?;
+                .map_err(map_redeem_error)?;
             let burned = async {
                 sqlx::query("UPDATE space_invites SET used_at = $1 WHERE code_hash = $2")
                     .bind(now_utc())
@@ -353,7 +385,7 @@ pub async fn redeem_invite(
             tracing::info!(action = "redeem_invite", space = %row_space_id, "workspace invite redeemed");
             Ok(space_dto("member"))
         }
-        Err(err) => Err(map_org_error(err)),
+        Err(err) => Err(map_redeem_error(err)),
     }
 }
 

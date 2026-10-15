@@ -15,7 +15,7 @@ use crate::dto::{
     CreateScriptReq, CreateScriptVersionReq, ErrorBodyDto, ScriptDto, UpdateScriptReq, VersionDto,
     VersionMetaDto,
 };
-use crate::error::{is_unique_violation, ApiError, ApiJson};
+use crate::error::{is_fk_violation, is_unique_violation, space_not_found, ApiError, ApiJson};
 use crate::spacekey::{
     is_valid_entity_id, parse_version_param, require_space_access, require_space_row,
     validate_flow_content, validate_script_name, validate_script_note, validate_version_note,
@@ -145,6 +145,12 @@ pub async fn create_script(
                 code: "SCRIPT_EXISTS",
                 message: "A script with this id already exists".to_string(),
             });
+        }
+        // A space deleted between the re-verification above and this INSERT surfaces as an
+        // FK violation — the same interleave the re-check routes to 404 (its residual
+        // sub-statement window included).
+        if is_fk_violation(&err) {
+            return Err(space_not_found());
         }
         return Err(ApiError::internal(err));
     }

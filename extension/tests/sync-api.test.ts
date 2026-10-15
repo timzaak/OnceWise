@@ -144,16 +144,39 @@ describe('request construction', () => {
   });
 });
 
-describe('space code format (single source for `<id>#<key>`)', () => {
-  it('round-trips codes produced by the generators', () => {
+describe('entry code format (single source for `<id>#<key>` and `<id>#iv-<secret>`)', () => {
+  it('round-trips space codes produced by the generators', () => {
     for (let i = 0; i < 20; i++) {
       const id = api.generateSpaceId();
       const key = api.generateSpaceKey();
       expect(id).toMatch(/^sp-[A-Za-z0-9]{16}$/);
       expect(key).toMatch(/^[A-Za-z0-9]{32}$/);
       const code = api.spaceCodeOf(id, key);
-      expect(api.parseSpaceCode(code)).toEqual({ id, key });
+      expect(api.parseEntryCode(code)).toEqual({ kind: 'space', id, key });
     }
+  });
+
+  it('types invite codes by the iv- prefix (the join form must route them without any traffic)', () => {
+    const id = 'sp-abcdefghijklmnop';
+    const secret = 'i'.repeat(32);
+    expect(api.parseEntryCode(`${id}#iv-${secret}`)).toEqual({ kind: 'invite', id, code: `iv-${secret}` });
+    // base62 body only: other alphabets or shapes are not invites
+    expect(api.parseEntryCode(`${id}#iv-${'-'.repeat(32)}`)).toBeNull();
+    expect(api.parseEntryCode(`${id}#iv-${'i'.repeat(31)}`)).toBeNull();
+    expect(api.parseEntryCode(`${id}#iv-${'i'.repeat(33)}`)).toBeNull();
+  });
+
+  it('accepts invite codes for any server-valid space id (the backend accepts 4-64 entity ids)', () => {
+    // Spaces created by other clients may carry ids the extension generator never produces —
+    // narrowing to the sp-16 shape would reject their invites before any traffic
+    const secret = 'i'.repeat(32);
+    for (const id of ['team-notes-2026', 'a'.repeat(4), 'b'.repeat(64), 'Space_01']) {
+      expect(api.parseEntryCode(`${id}#iv-${secret}`)).toEqual({ kind: 'invite', id, code: `iv-${secret}` });
+    }
+    // Outside the server's entity-id rule the code still never leaves the device
+    expect(api.parseEntryCode(`ab#iv-${secret}`)).toBeNull();
+    expect(api.parseEntryCode(`${'c'.repeat(65)}#iv-${secret}`)).toBeNull();
+    expect(api.parseEntryCode(`bad id!#iv-${secret}`)).toBeNull();
   });
 
   it('rejects malformed codes instead of guessing', () => {
@@ -166,8 +189,72 @@ describe('space code format (single source for `<id>#<key>`)', () => {
       `${good}#extra`,
       `sp-abcdefghijklmnop#${KEY}#tail`,
     ]) {
-      expect(api.parseSpaceCode(bad)).toBeNull();
+      expect(api.parseEntryCode(bad)).toBeNull();
     }
+  });
+});
+
+describe('workspace-permissions endpoint construction', () => {
+  it('issueSpaceInvite is a bodyless POST — no Content-Type, no payload, no space key', async () => {
+    mockFetch(() =>
+      jsonResponse(201, { spaceId: 'sp-abcdefghijklmnop', code: 'sp-abcdefghijklmnop#iv-x', createdAt: 't', expiresAt: 't2' }),
+    );
+    const res = await api.issueSpaceInvite(SERVER, 'sp-abcdefghijklmnop');
+    expect(res.ok).toBe(true);
+    expect(calls[0]!.method).toBe('POST');
+    expect(calls[0]!.url).toBe(`${SERVER}/api/spaces/sp-abcdefghijklmnop/invites`);
+    expect(calls[0]!.body).toBeUndefined();
+    expect(calls[0]!.headers['Content-Type']).toBeUndefined();
+    expect(calls[0]!.headers['X-Space-Key']).toBeUndefined();
+  });
+
+  it('redeemInvite POSTs the full wire code in the body — never in the URL', async () => {
+    mockFetch(() => jsonResponse(200, { id: 'sp-abcdefghijklmnop', name: 'Team', createdAt: 't', myRole: 'member', myUserId: 'u1' }));
+    const code = 'sp-abcdefghijklmnop#iv-' + 'i'.repeat(32);
+    const res = await api.redeemInvite(SERVER, code);
+    expect(res.ok).toBe(true);
+    expect(calls[0]!.url).toBe(`${SERVER}/api/invites/redeem`);
+    expect(JSON.parse(calls[0]!.body!)).toEqual({ code });
+    expect(calls[0]!.url).not.toContain('iv-');
+  });
+
+  it('listSpaceMembers carries the pagination in the query string', async () => {
+    mockFetch(() => jsonResponse(200, { items: [], page: 1, pageSize: 100, total: 0 }));
+    await api.listSpaceMembers(SERVER, 'sp-abcdefghijklmnop', 1, 100);
+    expect(calls[0]!.url).toBe(`${SERVER}/api/spaces/sp-abcdefghijklmnop/members?page=1&pageSize=100`);
+  });
+
+  it('updateSpaceMemberRole PATCHes {role}; removeMember is a bodyless DELETE; transfer POSTs {userId}', async () => {
+    mockFetch(() => jsonResponse(200, { userId: 'u1', role: 'admin', isOwner: false }));
+    await api.updateSpaceMemberRole(SERVER, 'sp-abcdefghijklmnop', 'u1', 'admin');
+    expect(calls[0]!.method).toBe('PATCH');
+    expect(calls[0]!.url).toBe(`${SERVER}/api/spaces/sp-abcdefghijklmnop/members/u1`);
+    expect(JSON.parse(calls[0]!.body!)).toEqual({ role: 'admin' });
+
+    mockFetch(() => new Response(null, { status: 204 }));
+    await api.removeSpaceMember(SERVER, 'sp-abcdefghijklmnop', 'u1');
+    expect(calls[1]!.method).toBe('DELETE');
+    expect(calls[1]!.url).toBe(`${SERVER}/api/spaces/sp-abcdefghijklmnop/members/u1`);
+    expect(calls[1]!.body).toBeUndefined();
+
+    mockFetch(() => jsonResponse(200, { userId: 'u2', role: 'owner', isOwner: true }));
+    await api.transferSpaceOwnership(SERVER, 'sp-abcdefghijklmnop', 'u2');
+    expect(calls[2]!.method).toBe('POST');
+    expect(calls[2]!.url).toBe(`${SERVER}/api/spaces/sp-abcdefghijklmnop/ownership`);
+    expect(JSON.parse(calls[2]!.body!)).toEqual({ userId: 'u2' });
+  });
+
+  it('createSpace without a key sends a body without any key field (the org-bound path)', async () => {
+    mockFetch(() => jsonResponse(201, { id: 'sp-abcdefghijklmnop', name: 'T', createdAt: 't', myRole: 'owner', myUserId: 'u1' }));
+    const res = await api.createSpace(SERVER, { id: 'sp-abcdefghijklmnop', name: 'T' });
+    expect(res.ok).toBe(true);
+    expect(JSON.parse(calls[0]!.body!)).toEqual({ id: 'sp-abcdefghijklmnop', name: 'T' });
+  });
+
+  it('a null key omits the X-Space-Key header entirely — org-bound spaces ride membership alone', async () => {
+    mockFetch(() => jsonResponse(200, []));
+    await api.listScripts(SERVER, null, 'sp-abcdefghijklmnop');
+    expect(calls[0]!.headers['X-Space-Key']).toBeUndefined();
   });
 });
 
@@ -198,6 +285,22 @@ describe('machine-code → reason mapping', () => {
     expect(api.syncErrorToReason({ kind: 'auth-required' })).toEqual({ reason: 'sign-in-required' });
     // unknown future codes stay readable via the generic transform
     expect(api.syncErrorToReason({ kind: 'http', status: 418, code: 'SOME_NEW_CODE', message: 'x' }).reason).toBe('some-new-code');
+  });
+
+  it('the eight workspace-permissions codes map through the same generic transform — zero new mapping code', () => {
+    expect(api.syncErrorToReason({ kind: 'http', status: 403, code: 'SPACE_ACCESS_DENIED', message: 'x' }).reason).toBe('space-access-denied');
+    expect(api.syncErrorToReason({ kind: 'http', status: 403, code: 'SPACE_ROLE_REQUIRED', message: 'x' }).reason).toBe('space-role-required');
+    expect(api.syncErrorToReason({ kind: 'http', status: 409, code: 'SPACE_OWNER_PROTECTED', message: 'x' }).reason).toBe('space-owner-protected');
+    expect(api.syncErrorToReason({ kind: 'http', status: 409, code: 'SPACE_LAST_ADMIN_PROTECTED', message: 'x' }).reason).toBe('space-last-admin-protected');
+    expect(api.syncErrorToReason({ kind: 'http', status: 404, code: 'MEMBER_NOT_FOUND', message: 'x' }).reason).toBe('member-not-found');
+    expect(api.syncErrorToReason({ kind: 'http', status: 400, code: 'INVITE_INVALID', message: 'x' }).reason).toBe('invite-invalid');
+    expect(api.syncErrorToReason({ kind: 'http', status: 400, code: 'INVITE_EXPIRED', message: 'x' }).reason).toBe('invite-expired');
+    expect(api.syncErrorToReason({ kind: 'http', status: 409, code: 'INVITE_ALREADY_USED', message: 'x' }).reason).toBe('invite-already-used');
+    // the failure detail rides along for the per-view copy
+    expect(api.syncErrorToReason({ kind: 'http', status: 403, code: 'SPACE_ROLE_REQUIRED', message: 'Admin rights required' })).toEqual({
+      reason: 'space-role-required',
+      detail: 'Admin rights required',
+    });
   });
 });
 

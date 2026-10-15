@@ -14,7 +14,7 @@ use anyhow::Context as _;
 use serde::Deserialize;
 use std::time::Duration;
 
-use crate::error::{auth_unavailable, ApiError};
+use crate::error::{auth_unavailable, space_not_found, ApiError};
 
 pub const TIER_OWNER: &str = "org-owner";
 pub const TIER_ADMIN: &str = "org-admin";
@@ -157,6 +157,11 @@ pub(crate) fn map_org_error(err: OrgApiError) -> ApiError {
             (409, "org_owner_protected") => ApiError::SpaceOwnerProtected,
             (409, "org_last_admin_protected") => ApiError::SpaceLastAdminProtected,
             (404, "org_member_not_found") | (404, "user_not_found") => ApiError::MemberNotFound,
+            // The organization is gone — a space deletion already removed it upstream (its
+            // local half failed) or Herald lost data: the space is gone with it. Reads and
+            // member operations answer 404; a space delete retry completes the local half
+            // (routes/spaces.rs — delete_org already treats the 404 as done).
+            (404, "org_not_found") => space_not_found(),
             (403, "org_actor_not_manager")
             | (403, "org_actor_self_hold_required")
             | (403, "org_ownership_transfer_denied") => ApiError::SpaceRoleRequired {
@@ -165,9 +170,8 @@ pub(crate) fn map_org_error(err: OrgApiError) -> ApiError {
             (400, "org_account_scope_mismatch") => ApiError::InvalidInput {
                 message: "The account does not belong to this deployment's realm".to_string(),
             },
-            // Everything else — 401/403 policy gates, org_not_found on access paths (the
-            // space row and the organization fact disagree: an operations problem, not a
-            // client one), missing built-in tiers, upstream validation bodies — fails closed.
+            // Everything else — 401/403 policy gates, missing built-in tiers, upstream
+            // validation bodies — fails closed.
             _ => auth_unavailable(),
         },
     }
@@ -414,7 +418,7 @@ mod tests {
 
     #[test]
     fn upstream_errors_map_to_the_contract_codes() {
-        let cases: [(OrgApiError, &str, u16); 6] = [
+        let cases: [(OrgApiError, &str, u16); 7] = [
             (OrgApiError::Unavailable, "AUTH_UNAVAILABLE", 503),
             (
                 OrgApiError::Upstream {
@@ -446,6 +450,15 @@ mod tests {
                     code: "user_not_found".to_string(),
                 },
                 "MEMBER_NOT_FOUND",
+                404,
+            ),
+            // A gone organization reads as a gone space — not an outage.
+            (
+                OrgApiError::Upstream {
+                    status: 404,
+                    code: "org_not_found".to_string(),
+                },
+                "SPACE_NOT_FOUND",
                 404,
             ),
             // A deployment/policy 403 is an out-of-contract answer: fail closed, not a

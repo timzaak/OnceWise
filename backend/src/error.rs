@@ -128,6 +128,16 @@ pub(crate) fn endpoint_not_found() -> ApiError {
     }
 }
 
+/// 404 SPACE_NOT_FOUND "Space not found" — every route answering a missing space (space reads and
+/// deletes, the script paths, the org-half lookups) shares one payload so code and message can
+/// never drift.
+pub(crate) fn space_not_found() -> ApiError {
+    ApiError::NotFound {
+        code: "SPACE_NOT_FOUND",
+        message: "Space not found".to_string(),
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.status();
@@ -147,6 +157,13 @@ impl IntoResponse for ApiError {
 pub(crate) fn is_unique_violation(err: &sqlx::Error) -> bool {
     err.as_database_error()
         .is_some_and(|db| db.is_unique_violation())
+}
+
+/// The single sqlx foreign-key-violation detector: a space deleted between a write path's
+/// in-transaction re-verification and its INSERT surfaces as 23503, not a unique violation.
+pub(crate) fn is_fk_violation(err: &sqlx::Error) -> bool {
+    err.as_database_error()
+        .is_some_and(|db| db.is_foreign_key_violation())
 }
 
 /// Request-body JSON extraction: parse failures (including size overflows) map uniformly to a 400
