@@ -31,7 +31,7 @@ The full walkthrough — source-code build, MCP setup, native-host troubleshooti
 ## Repository layout
 
 - `extension/` — Chrome MV3 extension (WXT + React): flow workbench sidepanel, pre-run input forms, same-site cross-page continuation, dry-run, sync tab
-- `backend/` — oncewise-ai-sync data-sync service (axum + PostgreSQL; spaces addressed by a client-generated ID + key, no account system)
+- `backend/` — oncewise-ai-sync data-sync service (axum + PostgreSQL; key spaces with no account system, plus org-bound spaces with roles and invites on Herald-gated deployments)
 - `skills/` — the three Agent Skills (`oncewise-setup` / `oncewise-flow` / `oncewise-message`) and the native-messaging host they hand over through (declared as one plugin in `.claude-plugin/marketplace.json`)
 - `demo/` — Playwright extension integration tests
 - `docs/` — PRDs and user stories ([index](docs/prd/00-index.md)); `docs/store-listing/` holds the Chrome Web Store materials

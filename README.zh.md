@@ -31,7 +31,7 @@ OnceWise Flow 自动化重复的网页操作——反复填写的表单、多步
 ## 目录结构
 
 - `extension/` — Chrome MV3 扩展（WXT + React）：流程工作台 sidepanel、运行前输入表单、同站跨页续跑、dry-run、「同步」页签
-- `backend/` — oncewise-ai-sync 数据同步服务（axum + PostgreSQL；空间由客户端生成的 ID+密钥寻址，无账号体系）
+- `backend/` — oncewise-ai-sync 数据同步服务（axum + PostgreSQL；密钥空间无账号体系，Herald 门禁部署下另有按角色与邀请码管理的组织绑定空间）
 - `skills/` — 三个 Agent Skills（`oncewise-setup` / `oncewise-flow` / `oncewise-message`）及其交接所用的本机消息宿主（根目录 `.claude-plugin/marketplace.json` 将三者声明为同一插件）
 - `demo/` — Playwright 扩展集成测试
 - `docs/` — PRD 与用户故事（[索引](docs/prd/00-index.md)）；`docs/store-listing/` 为 Chrome Web Store 上架材料

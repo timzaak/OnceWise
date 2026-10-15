@@ -3,7 +3,7 @@ title: 自托管同步服务
 description: 运行 oncewise-ai-sync——从一条命令的开发形态，到已发布的容器镜像、环境变量与 Herald 登录门禁。
 ---
 
-同步后端（`oncewise-ai-sync`）是跑在 PostgreSQL 上的 Rust/Axum 服务。它为[空间](./sync)存储和分发结构化脚本数据，从不生成或执行流程；空间模型没有账号、归属或成员概念——但部署可以加一道登录门禁（见下）。
+同步后端（`oncewise-ai-sync`）是跑在 PostgreSQL 上的 Rust/Axum 服务。它为[空间](./sync)存储和分发结构化脚本数据，从不生成或执行流程。服务端自己不建账号、成员表或用户资料：密钥空间没有归属概念，而门禁部署（见下）上组织绑定空间的成员与角色事实放在 Herald 组织层，服务端只保存空间与组织的关联。
 
 ## 从源码快速运行
 
@@ -51,17 +51,20 @@ docker run -d --name oncewise-sync \
 | `HERALD_REALM_ID` | — | `herald` 时 | 部署级 realm，须与状态响应一致 |
 | `HERALD_CLIENT_ID` | — | `herald` 时 | Herald 控制台注册的 OAuth client id |
 | `HERALD_REDIRECT_URI` | — | `herald` 时 | 路径恰为 `/api/auth/oauth/callback` 的 HTTPS URL |
+| `HERALD_ORG_API_KEY` | — | `herald` 时 | 组织通道的服务器间密钥：绑定 `HERALD_CLIENT_ID` 客户端应用的 API key，授予带 `orgs.view` 与 `orgs.manage` 策略的角色（1–4096 字符） |
 
-启动时缺什么、格式错什么都会立刻报错，且只输出变量名不回显值，可以放心贴进 issue。
+启动时缺什么、格式错什么都会立刻报错，且只输出变量名不回显值，可以放心贴进 issue。`HERALD_ORG_API_KEY` 在 Herald 控制台准备：复用（或创建）`HERALD_CLIENT_ID` 指向的客户端应用，给它签发一枚绑定的 API key，再给这枚 key 授予带 `orgs.view` 和 `orgs.manage` 的角色。变量缺失时启动报错会印出这几步。
 
 ## Herald 登录门禁
 
-默认（`AUTH_MODE=herald`）把业务端点放在登录之后：客户端经服务器对某个 [Herald](https://github.com/timzaak/herald) 部署（同样开源，镜像 `ghcr.io/timzaak/herald`）的 OAuth 流程取得 bearer token。健康检查、OpenAPI 文档与 auth 端点保持公开。门禁只在服务级——不给空间加账号、归属或审计，也不改变[同步与空间](./sync)里的任何语义。
+默认（`AUTH_MODE=herald`）把业务端点放在登录之后：客户端经服务器对某个 [Herald](https://github.com/timzaak/herald) 部署（同样开源，镜像 `ghcr.io/timzaak/herald`）的 OAuth 流程取得 bearer token。健康检查、OpenAPI 文档与 auth 端点保持公开。
+
+登录身份同时驱动工作区层：门禁部署上新建的空间都是组织绑定空间——创建者即所有者，加入凭一次性邀请码，成员资格与角色在每次请求时从 Herald 实时判定，所以移除或降级在该成员下一次访问即生效。升级前已存在的空间保持空间码模型、语义不变，不做迁移。
 
 扩展一侧对应同步页签里的登录卡片：开一次授权窗口，之后静默续期。
 
-`AUTH_MODE=none` 显式回到仅凭空间密钥的形态。任何人拿到空间码就能用你服务器的空间端点，所以把 `none` 当作环回/开发便利，而不是部署姿态。`AUTH_MODE=none` 时设置了 Herald 变量，日志会说明它们被忽略。
+`AUTH_MODE=none` 显式回到仅凭空间密钥的形态：所有空间都凭密钥寻址，工作区端点（邀请、成员、所有权）一律 404。任何人拿到空间码就能用你服务器的空间端点，所以把 `none` 当作环回/开发便利，而不是部署姿态。`AUTH_MODE=none` 时设置了 Herald 变量，日志会说明它们被忽略。
 
 ## HTTP 接口
 
-端点按 `auth`（登录模式探测、OAuth 发起/回调、token 刷新）、`spaces`、`scripts`、`ops`（健康、OpenAPI）分组。空间请求用 `X-Space-Key` 头认证；开门禁的部署还要在其前叠加 bearer token。完整的请求/响应 schema 由后端 utoipa 注解生成，渲染在 [OpenAPI 参考](./openapi)，线上亦实时提供于 `/api/openapi.json`。
+端点按 `auth`（登录模式探测、OAuth 发起/回调、token 刷新）、`spaces`、一个工作区组（邀请签发与核销、成员列表、角色变更、移除与自主退出、所有权转移——仅门禁部署提供）、`scripts`、`ops`（健康、OpenAPI）分组。密钥空间请求用 `X-Space-Key` 头认证；开门禁的部署还要在其前叠加 bearer token。组织绑定空间根本不发空间密钥——准入是 bearer token 加成员资格与角色，每次从 Herald 实时判定。完整的请求/响应 schema 由后端 utoipa 注解生成，渲染在 [OpenAPI 参考](./openapi)，线上亦实时提供于 `/api/openapi.json`。

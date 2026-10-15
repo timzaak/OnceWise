@@ -1,17 +1,22 @@
 ---
 title: Sync and spaces
-description: Share selected flows as versioned scripts with teammates via space codes, through an optional self-hosted sync server.
+description: Share selected flows as versioned scripts with teammates via space codes or one-time invites, through an optional self-hosted sync server.
 ---
 
 Sync is optional. The extension is local-first: your browser storage is the data master, and everything in [Flows](./flows) works with no server at all. What sync adds is one thing — a place to hand a flow to a teammate as a versioned script, without either of you creating an account.
 
 ## Model
 
-- A **space** is a script shelf addressed by a pair generated on your device: a space ID and a key. The server stores and distributes structured script data; it never generates or executes flows.
-- A **space code** is the pair in text form, `SpaceID#Key`. You pass it to a teammate over whatever channel you already use (IM, email). There is no invitation system, no roles, and no in-product messaging.
+- A **space** is a script shelf. The server stores and distributes structured script data; it never generates or executes flows. Spaces come in two categories, decided by the server rather than chosen in the UI:
+  - A **key space** is addressed by a pair generated on your device: a space ID and a key. Every space on an `AUTH_MODE=none` server is a key space.
+  - An **org-bound space** exists on servers with the Herald sign-in gate. It has no key at all: access is your sign-in plus membership, and it carries roles.
+- A **space code** is the key-space pair in text form, `SpaceID#Key`. You pass it to a teammate over whatever channel you already use (IM, email); there is no in-product messaging.
+- An **invite** is the joining credential of an org-bound space: a one-time code an admin issues, single-use, valid for 24 hours, granting the read-only member role. Several can be outstanding at the same time.
 - A **script** is a flow that has entered a space. Saving a local flow as a script records its name and note; every content change is stored as a new **immutable version**. Renaming or re-noting does not create a version.
 
-Anyone holding the code has equal rights in the space: read, write, rename, publish, delete. That fits small mutually-trusting teams; it is not a permission system. If you lose the code, you lose the space — the server keeps no recovery channel, by design.
+Key spaces treat every code holder as an equal: read, write, rename, publish, delete. That fits small mutually-trusting teams; it is not a permission system. If you lose the code, you lose the space — the server keeps no recovery channel, by design.
+
+Org-bound spaces replace the shared secret with roles. The creator is the **owner**; **admins** write, publish and manage members; plain **members** are read-only — they browse and pull exactly like anyone else, and the write and management entries do not appear on their side. Membership is judged live on every request: removing someone takes effect on their next access, and their old invites cannot get them back in. The owner cannot be removed or demoted, a change that would leave the space without any admin is refused, and ownership transfers in one step with the previous owner dropping to admin.
 
 ## Turning sync on
 
@@ -22,18 +27,27 @@ Open the side panel's **Sync** tab and enter the server URL (an [oncewise-ai-syn
 
 ## Sharing a flow
 
+With a key space:
+
 1. **Create a space** in the Sync tab. The ID and key are generated on your device; the space is registered with the server and selected locally.
 2. **Copy the space code** (visible in the space list) and send it to your teammate.
 3. Your teammate **pastes the code** in their Sync tab. The server verifies it before anything is recorded on their device; a wrong or nonexistent code is rejected with the reason.
 4. **Save the flow as a script** in the space from your side.
 5. Your teammate browses the space's scripts, previews a version's summary, and **pulls the version they want** to their device.
 
+With an org-bound space (a server with the Herald gate), the same tab works through invites:
+
+1. **Create a space** in the Sync tab. On a gated server it is org-bound and you become its owner; there is no space code to copy.
+2. Open **Members** from the space's row and **issue an invite**. The invite code is shown exactly once — copy it right there; it is single-use and expires after 24 hours.
+3. Your teammate signs in to the same server and **pastes the invite** in the same join field. They join as a read-only member; an invalid, used or expired code is rejected with the reason and nothing is recorded on their device.
+4. **Save the flow as a script** from your side. Read-only members browse and pull exactly as above; saving, publishing and renaming are admin-side, so promote them from the member list first if they should write.
+
 A pulled script arrives as a local flow, disabled, after passing the same validation as any other import. Your teammate enables it themselves and it runs at that version. When you publish a new version later, their side gets a notice — nothing on their device changes until they choose to pull it. Local revisions you have not published are marked as unpublished on your side; switching and rolling back are manual.
 
 ## Forgetting and deleting
 
-- **Forget** removes the space from your device only — your pulled flows and local data stay.
-- **Delete** removes the space on the server, cascading to its scripts. Everyone's already-pulled local content is untouched.
+- **Forget** removes the space from your device only — your pulled flows and local data stay. It works the same for both categories, including after a removal or a self-exit: the entry and pulled content stay local until you forget them.
+- **Delete** removes the space on the server, cascading to its scripts. On an org-bound space this is an admin action, and the organization, memberships and unused invites go with it. Everyone's already-pulled local content is untouched.
 
 ## Running your own server
 
