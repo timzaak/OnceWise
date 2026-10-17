@@ -6,12 +6,12 @@ import {
   peekSyncSpaces, signInViaUi, spaceGroup,
 } from '../workbench'
 
-// US-WP-001 创建受保护空间并成为所有者（docs/user-stories/auth/workspace-permissions.md 故事 1）。
+// US-WP-001 创建受保护空间并成为所有者（docs/user-stories/auth/space-permissions.md 故事 1）。
 // T1 场景 1 创建即保护：herald+wp 服务器上 UI 创建一律组织绑定——角色徽标 Owner、无分享码行、
 // 本机条目无 key 而记 myRole/myUserId、成员入口在位且自身行「你」标记。
 // T2 场景 2 + US-WP-009 创建 fail-closed：Herald 容器停 → 创建失败文案明确可重试、本机零条目；
 // 容器恢复 → 同名创建成功（不产生「已建但不受保护」或「创建者不在成员中」的半成品）。
-// 「容器停时探测/登录等门禁层可见性」由 us-hs-004 承载，本文件只断言 workspace 创建语义。
+// 「容器停时探测/登录等门禁层可见性」由 us-hs-004 承载，本文件只断言组织绑定创建语义。
 
 const EMAIL_A = 'us-wp-001-a@test.oncewise.local'
 

@@ -1,5 +1,5 @@
 // Sync tab S0/S1: server configuration (plain-HTTP warning) and the locally-known spaces list —
-// create (id generated on this device; key-less org-bound creation on workspace-permissions
+// create (id generated on this device; key-less org-bound creation on space-permissions
 // servers, otherwise the original key path), join by a pasted space code or invite code, select,
 // copy the share code, forget (local), delete (server) or leave (org-bound self-exit).
 import { useState } from 'react';
@@ -29,7 +29,7 @@ function spaceErrorText(res: ExtensionResponse | undefined, fallback: string): s
   if (res.reason === 'bad-space-code') return t('sync.spaces.badCode');
   if (res.reason === 'space-key-mismatch') return t('sync.spaces.keyMismatch');
   if (res.reason === 'space-not-found') return t('sync.spaces.notFound');
-  // Workspace-permission refusals reach this view through leave (org-bound self-exit) and
+  // Space-permission refusals reach this view through leave (org-bound self-exit) and
   // delete — the same keys the members view maps
   if (res.reason === 'space-role-required') return t('sync.error.spaceRoleRequired');
   if (res.reason === 'space-owner-protected') return t('sync.error.spaceOwnerProtected');

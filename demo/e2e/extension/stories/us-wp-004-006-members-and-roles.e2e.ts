@@ -14,7 +14,7 @@ import {
 } from '../workbench'
 
 // US-WP-004 只读成员使用同步 + US-WP-005 管理员读写与成员管理 + US-WP-006 所有权转移
-// （docs/user-stories/auth/workspace-permissions.md 故事 4/5/6）。三参与者用例按 T 分组、
+// （docs/user-stories/auth/space-permissions.md 故事 4/5/6）。三参与者用例按 T 分组、
 // setTimeout 放宽；改名/改备注与保存走同一写门（require_space_access Manage 档），本文件以
 // 「保存新脚本 + 发布新版本」代表写路径，改名归 us-ds-003 既有回归。
 // T1 US-WP-004 场景 1/2：只读成员浏览/拉取照常（读语义逐字一致）；写与管理入口按角色隐藏

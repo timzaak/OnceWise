@@ -8,7 +8,7 @@ import {
   peekSyncSpaces, prepareParticipant, signInViaUi, submitJoinCode,
 } from '../workbench'
 
-// US-WP-002 签发一次性邀请码 + US-WP-003 凭码加入（docs/user-stories/auth/workspace-permissions.md
+// US-WP-002 签发一次性邀请码 + US-WP-003 凭码加入（docs/user-stories/auth/space-permissions.md
 // 故事 2/3），并入 US-WP-009 的故障核销不烧码（与 us-hs-004 同一容器停起手段）。
 // T1 场景 1 签发与分享：成员界面签发——明文只读展示、单次/24h 规则明示、过期时间在位、并存多枚。
 // T2 场景 2 已用码拒绝 + 加入为只读成员（US-WP-003 场景 1）：B 凭码加入记 myRole=member；

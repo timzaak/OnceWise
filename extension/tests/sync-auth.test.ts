@@ -449,31 +449,31 @@ describe('late results and epoch guards (deferred ordering)', () => {
 });
 
 describe('mode probing and wire shape', () => {
-  it('workspacePermissions rides the herald probe: true, false, absent (older server = false), malformed = unknown', async () => {
+  it('spacePermissions rides the herald probe: true, false, absent (older server = false), malformed = unknown', async () => {
     await writeSyncConfig({ serverUrl: SERVER, spaces: [] });
     const probeWith = async (config: unknown) => {
       stubFetch((url) => (url === CONFIG_URL ? jsonResponse(200, config) : jsonResponse(200, [])));
       return probeAuthMode(SERVER, Date.now() + 1_000);
     };
-    expect(await probeWith({ enabled: true, loginUrl: '/l', workspacePermissions: true })).toEqual({
+    expect(await probeWith({ enabled: true, loginUrl: '/l', spacePermissions: true })).toEqual({
       mode: 'herald',
       loginUrl: '/l',
-      workspacePermissions: true,
+      spacePermissions: true,
     });
-    expect(await probeWith({ enabled: true, loginUrl: '/l', workspacePermissions: false })).toEqual({
+    expect(await probeWith({ enabled: true, loginUrl: '/l', spacePermissions: false })).toEqual({
       mode: 'herald',
       loginUrl: '/l',
-      workspacePermissions: false,
+      spacePermissions: false,
     });
     // An older server's answer carries no field at all — read as false so key-space behavior
     // stays the default everywhere
     expect(await probeWith({ enabled: true, loginUrl: '/l' })).toEqual({
       mode: 'herald',
       loginUrl: '/l',
-      workspacePermissions: false,
+      spacePermissions: false,
     });
     // A non-boolean is a contract break — the whole config is refused, never silently applied
-    expect(await probeWith({ enabled: true, loginUrl: '/l', workspacePermissions: 'yes' })).toEqual({
+    expect(await probeWith({ enabled: true, loginUrl: '/l', spacePermissions: 'yes' })).toEqual({
       mode: 'unknown',
       loginUrl: null,
     });
@@ -485,7 +485,7 @@ describe('mode probing and wire shape', () => {
     const outcome = await authedOperation(SERVER, run, false, {
       mode: 'herald',
       loginUrl: '/l',
-      workspacePermissions: true,
+      spacePermissions: true,
     });
     expect(outcome).toEqual({ ok: true, data: 'at-1' });
     expect(callsTo(CONFIG_URL)).toHaveLength(0);

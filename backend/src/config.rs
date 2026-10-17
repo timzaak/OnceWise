@@ -31,7 +31,7 @@ pub struct HeraldConfig {
     /// request Host or forwarding headers.
     pub redirect_uri: String,
     /// Server-to-server API key bound to the client app (orgs.view + orgs.manage policies);
-    /// drives the organization channel for workspace permissions. Never reaches a client.
+    /// drives the organization channel for space permissions. Never reaches a client.
     pub org_api_key: String,
 }
 
@@ -161,7 +161,7 @@ impl Config {
                 anyhow::bail!(
                     "AUTH_MODE defaults to 'herald', which requires Herald configuration.\n\
                      Missing variables: {}\n\
-                     Either supply the missing variables to enable sign-in and workspace permissions,\n\
+                     Either supply the missing variables to enable sign-in and space permissions,\n\
                      or set AUTH_MODE=none to retain the previous behavior explicitly.\n\
                      Prepare HERALD_ORG_API_KEY in the Herald console:\n\
                      1. Reuse (or create) the client app identified by HERALD_CLIENT_ID in your realm.\n\

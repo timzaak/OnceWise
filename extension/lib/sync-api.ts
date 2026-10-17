@@ -11,7 +11,7 @@
 // formats).
 import { isPlainObject, parseOrigin } from './flow-schema';
 
-// The three workspace roles the server reports for org-bound spaces
+// The three space-permission roles the server reports for org-bound spaces
 export type SpaceRole = 'owner' | 'admin' | 'member';
 
 export interface SpaceDto {
@@ -162,7 +162,7 @@ async function errorBodyCode(resp: Response): Promise<string> {
 
 // Create is idempotent per key: the same (id, key) pair re-registers cleanly (device reinstall);
 // an existing id under a different key is a 409 the caller surfaces as key-mismatch. Omitting the
-// key takes the org-bound path (creator becomes owner; only served by workspace-permissions
+// key takes the org-bound path (creator becomes owner; only served by space-permissions
 // servers — the body then carries no key field at all).
 export async function createSpace(
   serverUrl: string,
@@ -313,7 +313,7 @@ export async function getScriptVersion(
   ) as Promise<SyncApiResult<VersionDto>>;
 }
 
-// --- workspace-permissions endpoints (org-bound spaces; none-mode servers answer 404) ---
+// --- space-permissions endpoints (org-bound spaces; none-mode servers answer 404) ---
 
 // A one-time invite code: the plaintext appears exactly once, in this issuing response — it is
 // never persisted and never listed back.
@@ -450,7 +450,7 @@ export interface AuthConfigDto {
   loginUrl: string | null;
   // Whether org-bound spaces, invites and member management are served; absent on older
   // servers (read as false)
-  workspacePermissions?: boolean;
+  spacePermissions?: boolean;
 }
 
 export async function getAuthConfig(serverUrl: string, opts?: RequestOptions): Promise<SyncApiResult<AuthConfigDto>> {

@@ -123,7 +123,7 @@ describe('import validation chain', () => {
   });
 });
 
-describe('importFlowContent (workspace pull channel: same validation)', () => {
+describe('importFlowContent (space pull channel: same validation)', () => {
   it('a valid cloud flow object lands as a fresh draft', () => {
     const res = importFlowContent(importFile());
     expect(res.ok, (res.ok ? [] : res.errors).join('；')).toBe(true);

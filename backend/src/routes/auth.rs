@@ -282,7 +282,7 @@ fn bearer_token(headers: &HeaderMap) -> Result<String, ApiError> {
     path = "/api/auth/config",
     tag = "auth",
     responses(
-        (status = 200, body = AuthConfigDto, description = "Sign-in mode probe; public in both run modes (loginUrl is null when disabled; workspacePermissions is false on none mode and older servers)"),
+        (status = 200, body = AuthConfigDto, description = "Sign-in mode probe; public in both run modes (loginUrl is null when disabled; spacePermissions is false on none mode and older servers)"),
     )
 )]
 pub async fn get_auth_config(State(state): State<AppState>) -> Json<AuthConfigDto> {
@@ -291,7 +291,7 @@ pub async fn get_auth_config(State(state): State<AppState>) -> Json<AuthConfigDt
         enabled,
         login_url: enabled.then(|| "/api/auth/oauth/start".to_string()),
         // The org-bound surface exists exactly when the org channel is assembled (herald mode).
-        workspace_permissions: state.org.is_some(),
+        space_permissions: state.org.is_some(),
     })
 }
 

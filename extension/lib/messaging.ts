@@ -57,7 +57,7 @@ export type ExtensionMessage =
   | { type: 'sp:syncPublishVersion'; flowId: string; versionNote: string }
   | { type: 'sp:syncUpdateScript'; flowId: string; name?: string; note?: string }
   | { type: 'sp:syncUnlink'; flowId: string }
-  // Workspace permissions (org-bound spaces): the invite/member management surface. The invite
+  // Space permissions (org-bound spaces): the invite/member management surface. The invite
   // plaintext travels exactly once in the issue response; member identity fields exist only in
   // the list response. removeMember with userId '' means "leave this space" (self-exit) — the
   // background re-resolves the caller's own id from the server on every self-exit (a stored id

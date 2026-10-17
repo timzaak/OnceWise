@@ -1,5 +1,5 @@
 // Background sync orchestration (data-sync): every sp:sync* handler, space bookkeeping (create with a
-// locally generated id — key-less org-bound creation on workspace-permissions servers, otherwise the
+// locally generated id — key-less org-bound creation on space-permissions servers, otherwise the
 // original key path — join-by-code with local space-code/invite typing, forget/delete, server-switch
 // reset), the pull/switch data flow (validate → flow write → link update → registration sync + reload
 // push, zero writes on validation failure), the script-list join with the local pinning links, and the
@@ -144,7 +144,7 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
     }
 
     // Create generates the id locally (the server never assigns identity); the entry is stored
-    // only after the server accepted the registration. On workspace-permissions servers the
+    // only after the server accepted the registration. On space-permissions servers the
     // creation goes key-less (org-bound, creator = owner); none and older servers keep the
     // original key path byte-for-byte. An unknown probe refuses outright (fail-closed): no
     // request, no local entry — a probe failure is never treated as none.
@@ -156,7 +156,7 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       const probeStartedAt = Date.now();
       const probe = await probeAuthMode(serverUrl, probeStartedAt + NONE_OP_BUDGET_MS);
       if (probe.mode === 'unknown') return { ok: false, reason: 'auth-unavailable' };
-      if (probe.mode === 'herald' && probe.workspacePermissions) {
+      if (probe.mode === 'herald' && probe.spacePermissions) {
         const id = api.generateSpaceId();
         const outcome = await authedOperation(
           serverUrl,
@@ -193,7 +193,7 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
 
     // Join parses the pasted code locally first, then verifies against the server before storing
     // — a mistyped code never lands in local state. Space codes take the original key path;
-    // invite codes ("…#iv-…") redeem into read-only membership on workspace-permissions servers
+    // invite codes ("…#iv-…") redeem into read-only membership on space-permissions servers
     // (none/older servers are refused locally with zero traffic; an unknown probe fail-closes).
     case 'sp:syncJoinSpace': {
       const serverUrl = await requireServer();
@@ -219,7 +219,7 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       const probeStartedAt = Date.now();
       const probe = await probeAuthMode(serverUrl, probeStartedAt + NONE_OP_BUDGET_MS);
       if (probe.mode === 'unknown') return { ok: false, reason: 'auth-unavailable' };
-      if (probe.mode !== 'herald' || !probe.workspacePermissions) {
+      if (probe.mode !== 'herald' || !probe.spacePermissions) {
         return { ok: false, reason: 'invite-unsupported' };
       }
       // The wire form is the pasted string itself; a sent-timeout surfaces as
@@ -520,7 +520,7 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
       return { ok: true };
     }
 
-    // --- workspace permissions: invites and member management (org-bound spaces only) ---
+    // --- space permissions: invites and member management (org-bound spaces only) ---
 
     // The plaintext code exists exactly once, in this response — never stored, never logged
     case 'sp:syncIssueInvite': {

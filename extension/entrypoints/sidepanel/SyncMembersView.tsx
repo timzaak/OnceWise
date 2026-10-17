@@ -1,4 +1,4 @@
-// Sync tab members view (workspace-permissions spaces): the live member list (fetched on open,
+// Sync tab members view (space-permissions spaces): the live member list (fetched on open,
 // kept in component state only — never in storage), one-time invite issuing with the single
 // plaintext display + copy, and the explicit-confirm member operations (promote / demote /
 // remove / transfer ownership). Leaving is not done here — the spaces row's Leave button owns

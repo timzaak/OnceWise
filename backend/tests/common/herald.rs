@@ -1,4 +1,4 @@
-// Herald plumbing shared by the Herald-auth and workspace-permissions scenario suites: the
+// Herald plumbing shared by the Herald-auth and space-permissions scenario suites: the
 // docker container handle, its HTTP/PostgreSQL/Redis surfaces, the inline RESP client behind
 // the rate-limit resets, the org-channel client/config assembly and the env-rewrite guard for
 // the config tests. Everything here talks to the REAL Herald instance started by
@@ -22,7 +22,7 @@ pub(crate) const PASSWORD: &str = "password";
 pub(crate) const CALLBACK_URI: &str = "http://127.0.0.1:8099/api/auth/oauth/callback";
 const HERALD_CONTAINER: &str = "oncewise-test-herald";
 /// The org-channel API key seeded into the test Herald's client_api_keys row bound to the BFF
-/// client app (scenario_workspace_permissions' seed).
+/// client app (scenario_space_permissions' seed).
 pub(crate) const ORG_API_KEY: &str = "ow-test-org-api-key-0000000000000001";
 
 pub(crate) fn herald_base_url() -> String {

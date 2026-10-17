@@ -62,7 +62,7 @@ Two design calls worth knowing:
 
 ## Backend
 
-`oncewise-ai-sync` (Rust/Axum, sqlx migrations at startup, utoipa for the spec): key spaces (client-generated ID + key) and org-bound spaces, scripts, immutable versions. Routes group into `auth`, `spaces`, a workspace group (invites, members, ownership — gated deployments only), `scripts`, `ops`; the whole surface is generated into the [OpenAPI reference](./openapi) and served at `/api/openapi.json`. The server keeps no accounts or member tables of its own; on a gated deployment, org-bound spaces resolve membership and roles live from the Herald organization layer, while key spaces keep the space-code semantics ([Self-hosting](./self-hosting)).
+`oncewise-ai-sync` (Rust/Axum, sqlx migrations at startup, utoipa for the spec): key spaces (client-generated ID + key) and org-bound spaces, scripts, immutable versions. Routes group into `auth`, `spaces`, a space-permissions group (invites, members, ownership — gated deployments only), `scripts`, `ops`; the whole surface is generated into the [OpenAPI reference](./openapi) and served at `/api/openapi.json`. The server keeps no accounts or member tables of its own; on a gated deployment, org-bound spaces resolve membership and roles live from the Herald organization layer, while key spaces keep the space-code semantics ([Self-hosting](./self-hosting)).
 
 On the client, `sync-*` modules implement the same surface: server URL and mode probe, spaces and versions, and the Herald OAuth flow (authorization window, silent renewal, epoch-guarded local session storage).
 

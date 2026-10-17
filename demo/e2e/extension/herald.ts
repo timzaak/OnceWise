@@ -10,8 +10,8 @@ import { SyncServer } from './sync-server'
 // 播种不带角色（无权限点账号即有效登录，登录门禁不查角色）。demo 后端监听随机端口，其
 // callback 必须并入播种 client 的 redirect_uris 白名单（与后端测试的 8099 条目共存；后端
 // 套件重跑会把白名单重置回 8099，本播种每次重新收敛，不累积陈旧的随机端口条目）。
-// workspace-permissions 之上再补组织通道播种（client_api_keys + orgs.view/orgs.manage 角色，
-// 与后端 scenario_workspace_permissions 同款 SQL 事实），使 demo 后端能以 herald 模式代理
+// space-permissions 之上再补组织通道播种（client_api_keys + orgs.view/orgs.manage 角色，
+// 与后端 scenario_space_permissions 同款 SQL 事实），使 demo 后端能以 herald 模式代理
 // 组织/成员操作。
 
 const execFileAsync = promisify(execFile)

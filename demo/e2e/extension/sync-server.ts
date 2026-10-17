@@ -128,7 +128,7 @@ export class SyncServer {
     return server
   }
 
-  // Herald 鉴权模式工厂：env 注入五项 HERALD_* 配置（HERALD_ORG_API_KEY 是 workspace-permissions
+  // Herald 鉴权模式工厂：env 注入五项 HERALD_* 配置（HERALD_ORG_API_KEY 是 space-permissions
   // 起的必需组织通道凭证，缺它后端 fail-fast 拒绝启动），指向 scripts/test-start.py 起的真实
   // docker Herald；HERALD_REDIRECT_URI 是本实例自己的 callback（loopback HTTP），调用方须先把
   // 它并入 Herald 播种 client 的 redirect_uris 白名单（herald.ts seedHeraldFixture 一并播种该
@@ -248,7 +248,7 @@ export class SyncServer {
     return this.output.join('').slice(-4000)
   }
 
-  // 本实例自有库上的查询入口（workspace-permissions 故事用）：断言服务端状态或构造时间类
+  // 本实例自有库上的查询入口（space-permissions 故事用）：断言服务端状态或构造时间类
   // 前置（邀请码过期推移）。库结构由后端迁移建齐，调用方只读/小改，不代替 API 面断言。
   private async withDb<T>(fn: (client: Client) => Promise<T>): Promise<T> {
     return await withClient(databaseUrlFor(this.database), fn)

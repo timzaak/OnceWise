@@ -70,7 +70,7 @@ test('T2 失败原因可见且可重试：停止时操作失败原因展示，�
   try {
     await setupEnabledConsumer(server, host, page, extensionId)
 
-    // 服务停止时尝试创建空间：失败原因可见（地址已保存可重试）。workspace-permissions 起
+    // 服务停止时尝试创建空间：失败原因可见（地址已保存可重试）。space-permissions 起
     // 创建先探测模式，停机时探测不可达 → unknown fail-closed 拒绝（unknown 绝不当 none——
     // 文案为「登录服务暂不可用，可稍后重试」，同为可见+可重试）
     await server.stop()

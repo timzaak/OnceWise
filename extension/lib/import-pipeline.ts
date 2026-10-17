@@ -34,7 +34,7 @@ export type ImportContentResult =
   | { ok: true; draft: Flow; hadEnvelope: boolean }
   | { ok: false; reason: 'invalid-flow'; errors: string[] };
 
-// Workspace pull/switch channel (data-sync): the server's flowContent is already a parsed JSON
+// Space pull/switch channel (data-sync): the server's flowContent is already a parsed JSON
 // object. Validation and envelope-rewrite semantics are identical to importFlowText.
 export function importFlowContent(content: unknown): ImportContentResult {
   const hadEnvelope =

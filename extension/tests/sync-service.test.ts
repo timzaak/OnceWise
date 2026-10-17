@@ -790,10 +790,10 @@ describe('sign-in gate wiring (herald mode)', () => {
   });
 });
 
-// Workspace permissions: creation branches by the probed server capability, join routes invite
+// Space permissions: creation branches by the probed server capability, join routes invite
 // codes, the scripts view refreshes the server-fresh role, and the five member handlers stay
 // org-bound-only with the local-first guarantees (removed/self-exited keeps local data).
-describe('workspace permissions (org-bound spaces)', () => {
+describe('space permissions (org-bound spaces)', () => {
   const CONFIG_URL = `${SERVER}/api/auth/config`;
   const MY_USER = '11111111-1111-1111-1111-111111111111';
   const OTHER_USER = '22222222-2222-2222-2222-222222222222';
@@ -806,7 +806,7 @@ describe('workspace permissions (org-bound spaces)', () => {
   function wpProbe(handler: (url: string, init: RequestInit) => Response = () => noContent()) {
     return mockFetch((url, init) =>
       url === CONFIG_URL
-        ? ok({ enabled: true, loginUrl: '/api/auth/oauth/start', workspacePermissions: true })
+        ? ok({ enabled: true, loginUrl: '/api/auth/oauth/start', spacePermissions: true })
         : handler(url, init),
     );
   }
@@ -838,7 +838,7 @@ describe('workspace permissions (org-bound spaces)', () => {
     await syncUiItem.setValue({ currentSpaceId: SPACE_ID });
   }
 
-  it('creation on a workspace server is key-less and stores the owner role facts from the response', async () => {
+  it('creation on a space-permissions server is key-less and stores the owner role facts from the response', async () => {
     await writeSyncConfig({ serverUrl: SERVER, spaces: [] });
     await seedSession();
     const fetchMock = wpProbe((url, init) =>
@@ -872,12 +872,12 @@ describe('workspace permissions (org-bound spaces)', () => {
     expect(await syncUiItem.getValue()).toEqual({ currentSpaceId: body.id });
   });
 
-  it('a herald server without workspacePermissions keeps the original key path byte-for-byte', async () => {
+  it('a herald server without spacePermissions keeps the original key path byte-for-byte', async () => {
     await writeSyncConfig({ serverUrl: SERVER, spaces: [] });
     await seedSession();
     const fetchMock = mockFetch((url, init) =>
       url === CONFIG_URL
-        ? ok({ enabled: true, loginUrl: '/api/auth/oauth/start', workspacePermissions: false })
+        ? ok({ enabled: true, loginUrl: '/api/auth/oauth/start', spacePermissions: false })
         : url === `${SERVER}/api/spaces`
           ? ok({ id: (JSON.parse(String(init.body)) as { id: string }).id, name: 'Old', createdAt: 't' }, 201)
           : noContent(),
@@ -926,7 +926,7 @@ describe('workspace permissions (org-bound spaces)', () => {
     // Idempotent replay of an already-used code returns the caller's ACTUAL role
     mockFetch((url) =>
       url === CONFIG_URL
-        ? ok({ enabled: true, loginUrl: '/api/auth/oauth/start', workspacePermissions: true })
+        ? ok({ enabled: true, loginUrl: '/api/auth/oauth/start', spacePermissions: true })
         : url === redeemUrl
           ? ok({ id: SPACE_ID, name: 'Team Space', createdAt: 't', myRole: 'admin', myUserId: MY_USER })
           : noContent(),
@@ -1181,7 +1181,7 @@ describe('workspace permissions (org-bound spaces)', () => {
     await orgConfigured('admin');
     await seedSession();
     mockFetch((url) => {
-      if (url === CONFIG_URL) return ok({ enabled: true, loginUrl: '/api/auth/oauth/start', workspacePermissions: true });
+      if (url === CONFIG_URL) return ok({ enabled: true, loginUrl: '/api/auth/oauth/start', spacePermissions: true });
       throw new DOMException('aborted', 'TimeoutError');
     });
     expect(await handleSyncMessage({ type: 'sp:syncRemoveMember', spaceId: SPACE_ID, userId: OTHER_USER })).toEqual({

@@ -109,7 +109,7 @@ pub struct AuthConfigDto {
     pub login_url: Option<String>,
     /// Whether org-bound spaces, invites and member management are served (herald mode with
     /// the organization channel configured; false on older servers and in none mode).
-    pub workspace_permissions: bool,
+    pub space_permissions: bool,
 }
 
 /// A one-time invite code: the plaintext appears exactly once, in the issuing response.

@@ -123,7 +123,7 @@ async fn require_org_space<'a>(
     let org = org_client_of(state)?;
     let Some(org_id) = space_org_binding(&state.pool, space_id).await? else {
         return Err(ApiError::InvalidInput {
-            message: "This space is key-addressed; workspace permissions do not apply".to_string(),
+            message: "This space is key-addressed; space permissions do not apply".to_string(),
         });
     };
     let (role, is_owner) = org_space_access(org, identity, &org_id, need).await?;
@@ -162,7 +162,7 @@ fn member_dto(view: &crate::orgs::OrgMemberView) -> Result<MemberDto, ApiError> 
 #[utoipa::path(
     post,
     path = "/api/spaces/{spaceId}/invites",
-    tag = "workspace",
+    tag = "space-permissions",
     request_body = (),
     params(("spaceId" = String, Path, description = "Space id")),
     security(("bearer_auth" = [])),
@@ -213,7 +213,7 @@ pub async fn issue_space_invite(
         return Err(ApiError::internal(err));
     }
     tx.commit().await.map_err(ApiError::internal)?;
-    tracing::info!(action = "issue_invite", space = %space_id, "workspace invite issued");
+    tracing::info!(action = "issue_invite", space = %space_id, "space invite issued");
     Ok((
         StatusCode::CREATED,
         Json(InviteDto {
@@ -234,7 +234,7 @@ pub async fn issue_space_invite(
 #[utoipa::path(
     post,
     path = "/api/invites/redeem",
-    tag = "workspace",
+    tag = "space-permissions",
     request_body = RedeemInviteReq,
     security(("bearer_auth" = [])),
     responses(
@@ -382,7 +382,7 @@ pub async fn redeem_invite(
                 }
                 return Err(err);
             }
-            tracing::info!(action = "redeem_invite", space = %row_space_id, "workspace invite redeemed");
+            tracing::info!(action = "redeem_invite", space = %row_space_id, "space invite redeemed");
             Ok(space_dto("member"))
         }
         Err(err) => Err(map_redeem_error(err)),
@@ -427,7 +427,7 @@ fn parse_member_page(query: &HashMap<String, String>) -> Result<(u64, u64), ApiE
 #[utoipa::path(
     get,
     path = "/api/spaces/{spaceId}/members",
-    tag = "workspace",
+    tag = "space-permissions",
     params(
         ("spaceId" = String, Path, description = "Space id"),
         ("page" = Option<u64>, Query, description = "Page number (1-based, default 1)"),
@@ -490,7 +490,7 @@ pub async fn list_space_members(
 #[utoipa::path(
     patch,
     path = "/api/spaces/{spaceId}/members/{userId}",
-    tag = "workspace",
+    tag = "space-permissions",
     request_body = UpdateMemberRoleReq,
     params(
         ("spaceId" = String, Path, description = "Space id"),
@@ -553,7 +553,7 @@ pub async fn update_space_member_role(
 #[utoipa::path(
     delete,
     path = "/api/spaces/{spaceId}/members/{userId}",
-    tag = "workspace",
+    tag = "space-permissions",
     params(
         ("spaceId" = String, Path, description = "Space id"),
         ("userId" = String, Path, description = "Member account id (UUID); self-addressing leaves the space"),
@@ -623,7 +623,7 @@ pub async fn remove_space_member(
 #[utoipa::path(
     post,
     path = "/api/spaces/{spaceId}/ownership",
-    tag = "workspace",
+    tag = "space-permissions",
     request_body = TransferOwnershipReq,
     params(("spaceId" = String, Path, description = "Space id")),
     security(("bearer_auth" = [])),

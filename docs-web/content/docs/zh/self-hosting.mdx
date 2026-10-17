@@ -59,12 +59,12 @@ docker run -d --name oncewise-sync \
 
 默认（`AUTH_MODE=herald`）把业务端点放在登录之后：客户端经服务器对某个 [Herald](https://github.com/timzaak/herald) 部署（同样开源，镜像 `ghcr.io/timzaak/herald`）的 OAuth 流程取得 bearer token。健康检查、OpenAPI 文档与 auth 端点保持公开。
 
-登录身份同时驱动工作区层：门禁部署上新建的空间都是组织绑定空间——创建者即所有者，加入凭一次性邀请码，成员资格与角色在每次请求时从 Herald 实时判定，所以移除或降级在该成员下一次访问即生效。升级前已存在的空间保持空间码模型、语义不变，不做迁移。
+登录身份同时驱动空间权限层：门禁部署上新建的空间都是组织绑定空间——创建者即所有者，加入凭一次性邀请码，成员资格与角色在每次请求时从 Herald 实时判定，所以移除或降级在该成员下一次访问即生效。升级前已存在的空间保持空间码模型、语义不变，不做迁移。
 
 扩展一侧对应同步页签里的登录卡片：开一次授权窗口，之后静默续期。
 
-`AUTH_MODE=none` 显式回到仅凭空间密钥的形态：所有空间都凭密钥寻址，工作区端点（邀请、成员、所有权）一律 404。任何人拿到空间码就能用你服务器的空间端点，所以把 `none` 当作环回/开发便利，而不是部署姿态。`AUTH_MODE=none` 时设置了 Herald 变量，日志会说明它们被忽略。
+`AUTH_MODE=none` 显式回到仅凭空间密钥的形态：所有空间都凭密钥寻址，空间权限端点（邀请、成员、所有权）一律 404。任何人拿到空间码就能用你服务器的空间端点，所以把 `none` 当作环回/开发便利，而不是部署姿态。`AUTH_MODE=none` 时设置了 Herald 变量，日志会说明它们被忽略。
 
 ## HTTP 接口
 
-端点按 `auth`（登录模式探测、OAuth 发起/回调、token 刷新）、`spaces`、一个工作区组（邀请签发与核销、成员列表、角色变更、移除与自主退出、所有权转移——仅门禁部署提供）、`scripts`、`ops`（健康、OpenAPI）分组。密钥空间请求用 `X-Space-Key` 头认证；开门禁的部署还要在其前叠加 bearer token。组织绑定空间根本不发空间密钥——准入是 bearer token 加成员资格与角色，每次从 Herald 实时判定。完整的请求/响应 schema 由后端 utoipa 注解生成，渲染在 [OpenAPI 参考](./openapi)，线上亦实时提供于 `/api/openapi.json`。
+端点按 `auth`（登录模式探测、OAuth 发起/回调、token 刷新）、`spaces`、一个空间权限组（邀请签发与核销、成员列表、角色变更、移除与自主退出、所有权转移——仅门禁部署提供）、`scripts`、`ops`（健康、OpenAPI）分组。密钥空间请求用 `X-Space-Key` 头认证；开门禁的部署还要在其前叠加 bearer token。组织绑定空间根本不发空间密钥——准入是 bearer token 加成员资格与角色，每次从 Herald 实时判定。完整的请求/响应 schema 由后端 utoipa 注解生成，渲染在 [OpenAPI 参考](./openapi)，线上亦实时提供于 `/api/openapi.json`。

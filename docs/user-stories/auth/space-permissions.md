@@ -1,7 +1,7 @@
-# 空间权限与角色（workspace-permissions）用户故事
+# 空间权限与角色（space-permissions）用户故事
 
 > 角色：**空间参与者**与**部署者**，定义见 [`docs/user-stories/_roles.md`](../_roles.md)；本 feature 内空间参与者按能力分级为**所有者 / 管理员 / 只读成员**（分级已并入该文件；映射 Herald 组织档位 org-owner / org-admin / org-member），成员与角色事实托管于 Herald 组织层。
-> 关联：[正式 PRD](../../prd/auth/workspace-permissions.md)、[正式 PRD data-sync](../../prd/core/data-sync.md)、[正式 PRD herald-support](../../prd/auth/herald-support.md)。
+> 关联：[正式 PRD](../../prd/auth/space-permissions.md)、[正式 PRD data-sync](../../prd/core/data-sync.md)、[正式 PRD herald-support](../../prd/auth/herald-support.md)。
 > 术语：**组织绑定空间** = Herald 鉴权模式下新建、受角色权限保护的空间（无空间码）；**存量密钥空间** = 升级前已存在、保持密钥对等的空间；**邀请码** = 管理员签发的单次加入凭证。
 
 ## 用户故事

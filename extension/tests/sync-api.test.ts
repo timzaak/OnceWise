@@ -194,7 +194,7 @@ describe('entry code format (single source for `<id>#<key>` and `<id>#iv-<secret
   });
 });
 
-describe('workspace-permissions endpoint construction', () => {
+describe('space-permissions endpoint construction', () => {
   it('issueSpaceInvite is a bodyless POST — no Content-Type, no payload, no space key', async () => {
     mockFetch(() =>
       jsonResponse(201, { spaceId: 'sp-abcdefghijklmnop', code: 'sp-abcdefghijklmnop#iv-x', createdAt: 't', expiresAt: 't2' }),
@@ -287,7 +287,7 @@ describe('machine-code → reason mapping', () => {
     expect(api.syncErrorToReason({ kind: 'http', status: 418, code: 'SOME_NEW_CODE', message: 'x' }).reason).toBe('some-new-code');
   });
 
-  it('the eight workspace-permissions codes map through the same generic transform — zero new mapping code', () => {
+  it('the eight space-permissions codes map through the same generic transform — zero new mapping code', () => {
     expect(api.syncErrorToReason({ kind: 'http', status: 403, code: 'SPACE_ACCESS_DENIED', message: 'x' }).reason).toBe('space-access-denied');
     expect(api.syncErrorToReason({ kind: 'http', status: 403, code: 'SPACE_ROLE_REQUIRED', message: 'x' }).reason).toBe('space-role-required');
     expect(api.syncErrorToReason({ kind: 'http', status: 409, code: 'SPACE_OWNER_PROTECTED', message: 'x' }).reason).toBe('space-owner-protected');

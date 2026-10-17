@@ -1291,7 +1291,7 @@ async fn a09_config_fail_fast_and_modes() {
 
     // Default mode with nothing configured: all five variables listed (the org channel key
     // among them), both exits offered, and no configured value is echoed back. The org-key
-    // specifics (console steps) are asserted by w07 in scenario_workspace_permissions.rs.
+    // specifics (console steps) are asserted by w07 in scenario_space_permissions.rs.
     std::env::set_var("HERALD_BASE_URL", "https://herald.secret-example.invalid");
     let err = Config::from_env().expect_err("missing Herald config must fail");
     let err = err.to_string();

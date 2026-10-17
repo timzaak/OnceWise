@@ -17,7 +17,7 @@ use routes::auth::HeraldAuth;
 
 /// Carries the connection pool plus the optional Herald sign-in gate: `auth: None` is the
 /// explicit none mode (space-key only, the pre-gate behavior). `org` — the server-to-server
-/// organization channel behind workspace permissions — is assembled exactly when `auth` is
+/// organization channel behind space permissions — is assembled exactly when `auth` is
 /// (herald mode); the org-bound surface is mounted only then. Access control queries the
 /// database per request; the only in-memory state is the short-lived login handshake inside
 /// HeraldAuth.

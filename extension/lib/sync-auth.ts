@@ -56,11 +56,11 @@ export function authReady(): Promise<boolean> {
 }
 
 // herald implies a non-null loginUrl; none/unknown never carry one. Single-literal discriminants
-// so signIn's early returns narrow probe down to the herald variant. workspacePermissions says
+// so signIn's early returns narrow probe down to the herald variant. spacePermissions says
 // whether the server serves org-bound spaces/invites/member management (absent on older servers
 // reads as false — key-space behavior everywhere).
 export type AuthModeProbe =
-  | { mode: 'herald'; loginUrl: string; workspacePermissions: boolean }
+  | { mode: 'herald'; loginUrl: string; spacePermissions: boolean }
   | { mode: 'none'; loginUrl: null }
   | { mode: 'unknown'; loginUrl: null };
 
@@ -68,11 +68,11 @@ function asAuthConfig(v: unknown): api.AuthConfigDto | null {
   if (!isPlainObject(v)) return null;
   if (typeof v.enabled !== 'boolean') return null;
   if (v.loginUrl !== null && typeof v.loginUrl !== 'string') return null;
-  if (v.workspacePermissions !== undefined && typeof v.workspacePermissions !== 'boolean') return null;
+  if (v.spacePermissions !== undefined && typeof v.spacePermissions !== 'boolean') return null;
   return {
     enabled: v.enabled,
     loginUrl: v.loginUrl,
-    ...(v.workspacePermissions === undefined ? {} : { workspacePermissions: v.workspacePermissions }),
+    ...(v.spacePermissions === undefined ? {} : { spacePermissions: v.spacePermissions }),
   };
 }
 
@@ -86,7 +86,7 @@ export async function probeAuthMode(serverUrl: string, deadlineAt: number): Prom
     if (config === null) return { mode: 'unknown', loginUrl: null };
     if (config.enabled) {
       if (typeof config.loginUrl === 'string' && config.loginUrl !== '') {
-        return { mode: 'herald', loginUrl: config.loginUrl, workspacePermissions: config.workspacePermissions === true };
+        return { mode: 'herald', loginUrl: config.loginUrl, spacePermissions: config.spacePermissions === true };
       }
       return { mode: 'unknown', loginUrl: null };
     }
@@ -263,7 +263,7 @@ function refreshedResponse(refreshed: { resp: ExtensionResponse } | { authChange
 // sent to a server whose mode could not be established); herald attaches the bearer with lazy
 // renewal, at most one refresh and one 401 AUTH_REQUIRED retry, all inside the shared deadline.
 // preProbe reuses a probe the caller already made in this message (e.g. create needed
-// workspacePermissions before choosing the request shape) — one probe per message, never two;
+// spacePermissions before choosing the request shape) — one probe per message, never two;
 // probeStartedAt re-anchors the budget to when that probe began, so probe + request still answer
 // within one UI hop budget instead of getting a fresh one after the probe.
 export async function authedOperation<T>(

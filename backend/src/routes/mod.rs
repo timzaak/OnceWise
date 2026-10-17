@@ -1,7 +1,7 @@
 pub mod auth;
 pub mod scripts;
+pub mod space_permissions;
 pub mod spaces;
-pub mod workspace;
 
 use axum::middleware;
 use axum::response::IntoResponse;
@@ -11,12 +11,12 @@ use axum::Router;
 use crate::error::endpoint_not_found;
 use crate::AppState;
 
-/// Single assembly point. In herald mode the nine business routes plus the workspace surface
-/// (org-bound spaces: invites, member management, ownership transfer) sit behind the sign-in
-/// gate and all five auth endpoints are mounted; in none mode only the mode probe
+/// Single assembly point. In herald mode the nine business routes plus the space-permissions
+/// surface (org-bound spaces: invites, member management, ownership transfer) sit behind the
+/// sign-in gate and all five auth endpoints are mounted; in none mode only the mode probe
 /// `/api/auth/config` and the key-addressed business routes exist (the other auth endpoints
-/// and the workspace endpoints fall through to the 404 fallback) — the previous behavior
-/// plus that one new public probe.
+/// and the space-permissions endpoints fall through to the 404 fallback) — the previous
+/// behavior plus that one new public probe.
 pub fn build_router(state: AppState) -> Router {
     let mut business = Router::new()
         .route("/api/spaces", post(spaces::create_space))
@@ -42,24 +42,28 @@ pub fn build_router(state: AppState) -> Router {
         );
     let gated = state.auth.is_some();
     if gated {
-        // Workspace surface: org-bound spaces only — absent (404) in none mode.
+        // Space-permissions surface: org-bound spaces only — absent (404) in none mode.
         business = business
-            .route("/api/invites/redeem", post(workspace::redeem_invite))
+            .route(
+                "/api/invites/redeem",
+                post(space_permissions::redeem_invite),
+            )
             .route(
                 "/api/spaces/{spaceId}/invites",
-                post(workspace::issue_space_invite),
+                post(space_permissions::issue_space_invite),
             )
             .route(
                 "/api/spaces/{spaceId}/members",
-                get(workspace::list_space_members),
+                get(space_permissions::list_space_members),
             )
             .route(
                 "/api/spaces/{spaceId}/members/{userId}",
-                patch(workspace::update_space_member_role).delete(workspace::remove_space_member),
+                patch(space_permissions::update_space_member_role)
+                    .delete(space_permissions::remove_space_member),
             )
             .route(
                 "/api/spaces/{spaceId}/ownership",
-                post(workspace::transfer_space_ownership),
+                post(space_permissions::transfer_space_ownership),
             );
     }
     let business = if gated {
@@ -146,10 +150,10 @@ mod tests {
         );
     }
 
-    // None mode must not mount the workspace surface: the endpoints fall through to the 404
-    // fallback — no new behavior without the sign-in mode.
+    // None mode must not mount the space-permissions surface: the endpoints fall through to
+    // the 404 fallback — no new behavior without the sign-in mode.
     #[tokio::test]
-    async fn workspace_routes_absent_in_none_mode() {
+    async fn space_permissions_routes_absent_in_none_mode() {
         let pool = crate::db::init_test_pool().await;
         sqlx::migrate!("./migrations")
             .run(&pool)

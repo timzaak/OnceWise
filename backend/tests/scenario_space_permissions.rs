@@ -1,4 +1,4 @@
-// Scenario tests for workspace permissions (w01–w08) against a REAL Herald ≥0.6.4 instance
+// Scenario tests for space permissions (w01–w08) against a REAL Herald ≥0.6.4 instance
 // running in docker (scripts/test-start.py; image ghcr.io/timzaak/herald:0.6.4, overridable via
 // HERALD_IMAGE). The org channel is exercised end to end: realms, the BFF client app, its
 // bound API key (client_api_keys + orgs.view/orgs.manage policies) and the per-test users are
@@ -16,7 +16,7 @@
 //
 // The tests serialize on one mutex: w05/w06 stop the shared Herald container mid-run.
 //
-// Story mapping: w01–w08 correspond to US-WP-001～009 (docs/user-stories/auth/workspace-permissions.md).
+// Story mapping: w01–w08 correspond to US-WP-001～009 (docs/user-stories/auth/space-permissions.md).
 
 mod common;
 
@@ -401,7 +401,7 @@ fn script_body(script_id: &str) -> Value {
 // creator as owner — atomically (a Herald failure leaves nothing behind), with myRole/myUserId
 // visible on create and get; key-addressed creation coexists unchanged; replay converges for
 // members and denies anyone else; none mode keeps creating key spaces only and does not mount
-// the workspace endpoints.
+// the space-permissions endpoints.
 #[tokio::test]
 async fn w01_org_bound_creation_and_role_visibility() {
     let _suite = SUITE.lock().await;
@@ -512,7 +512,7 @@ async fn w01_org_bound_creation_and_role_visibility() {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(error_code(&body), "SPACE_KEY_MISMATCH");
 
-    // none mode: no key → 400; the workspace endpoints are not mounted (404).
+    // none mode: no key → 400; the space-permissions endpoints are not mounted (404).
     let none_app = spawn_none().await;
     let (status, body) = call(
         &none_app.app,
@@ -1098,7 +1098,7 @@ async fn w05_deletion_cascade() {
 // w06 — fail-closed and identity invalidation
 // ---------------------------------------------------------------------------
 
-// Covers US-WP-009: every workspace operation fails closed while Herald is down (the invite
+// Covers US-WP-009: every space-permissions operation fails closed while Herald is down (the invite
 // code is not consumed), a disabled member account is rejected at the gate on its next
 // request, and the public endpoints never depend on the provider.
 #[tokio::test]
@@ -1136,7 +1136,7 @@ async fn w06_fail_closed_and_identity_invalidation() {
         .set_account_status(REALM, "w06-joiner@test.oncewise.local", 1)
         .await;
 
-    // Outage: every workspace operation fails closed; the invite survives it.
+    // Outage: every space-permissions operation fails closed; the invite survives it.
     let outage_code = issue_invite(&app.app, &owner, space).await;
     let _ = herald.org_of(space).await.expect("org");
     herald.stop_container().await;
@@ -1206,7 +1206,7 @@ async fn w07_org_api_key_fail_fast() {
         ),
         "{err}"
     );
-    assert!(err.contains("workspace permissions"), "{err}");
+    assert!(err.contains("space permissions"), "{err}");
     assert!(
         err.contains("Prepare HERALD_ORG_API_KEY in the Herald console:"),
         "{err}"
@@ -1290,7 +1290,7 @@ async fn w07_org_api_key_fail_fast() {
 
 // Covers US-WP-007: on a herald deployment the key-addressed flow keeps working byte for byte
 // next to the new surface (join by key, peer read/write, BAD_SPACE_KEY distinguishable from the
-// new 403 family), and the mode probe advertises workspacePermissions only when it is served.
+// new 403 family), and the mode probe advertises spacePermissions only when it is served.
 // The full s01–s10 / a01–a09 regression is the runner's gate.
 #[tokio::test]
 async fn w08_key_spaces_unchanged_and_probe() {
@@ -1360,14 +1360,14 @@ async fn w08_key_spaces_unchanged_and_probe() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(error_code(&body), "SPACE_ACCESS_DENIED");
 
-    // The probe: workspacePermissions is true exactly when the org channel is assembled.
+    // The probe: spacePermissions is true exactly when the org channel is assembled.
     let (status, body) = call(&app.app, "GET", "/api/auth/config", None, None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["enabled"], json!(true));
-    assert_eq!(body["workspacePermissions"], json!(true));
+    assert_eq!(body["spacePermissions"], json!(true));
     let none_app = spawn_none().await;
     let (status, body) = call(&none_app.app, "GET", "/api/auth/config", None, None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["enabled"], json!(false));
-    assert_eq!(body["workspacePermissions"], json!(false));
+    assert_eq!(body["spacePermissions"], json!(false));
 }

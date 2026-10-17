@@ -62,7 +62,7 @@ WXT + React，四个入口：
 
 ## 后端
 
-`oncewise-ai-sync`（Rust/Axum，启动时跑 sqlx 迁移，utoipa 生成规范）：密钥空间（客户端生成的 ID + 密钥）与组织绑定空间、脚本、不可变版本。路由分为 `auth`、`spaces`、一个工作区组（邀请、成员、所有权——仅门禁部署提供）、`scripts`、`ops`；全部接口生成到 [OpenAPI 参考](./openapi)并实时提供于 `/api/openapi.json`。服务端自己不建账号或成员表；门禁部署上，组织绑定空间的成员资格与角色每次从 Herald 组织层实时判定，密钥空间保持空间码语义（见[自托管同步服务](./self-hosting)）。
+`oncewise-ai-sync`（Rust/Axum，启动时跑 sqlx 迁移，utoipa 生成规范）：密钥空间（客户端生成的 ID + 密钥）与组织绑定空间、脚本、不可变版本。路由分为 `auth`、`spaces`、一个空间权限组（邀请、成员、所有权——仅门禁部署提供）、`scripts`、`ops`；全部接口生成到 [OpenAPI 参考](./openapi)并实时提供于 `/api/openapi.json`。服务端自己不建账号或成员表；门禁部署上，组织绑定空间的成员资格与角色每次从 Herald 组织层实时判定，密钥空间保持空间码语义（见[自托管同步服务](./self-hosting)）。
 
 客户端侧的 `sync-*` 模块实现同一套接口：服务器地址与模式探测、空间与版本、以及 Herald OAuth 流程（授权窗口、静默续期、epoch 守护的本地会话存储）。
 
