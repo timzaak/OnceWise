@@ -17,6 +17,9 @@ export default defineConfig({
     //   handover channel; nothing else in the extension uses it
     // - identity: launchWebAuthFlow + getRedirectURL for the sync sign-in on Herald-gated servers
     //   (the authorization window renders the real Herald pages; the extension builds no login form)
+    // - alarms: timed-trigger schedules — wakes the worker at each schedule's next occurrence and
+    //   for the timed-start expiry janitor; record-driven reconcile keeps semantics off any
+    //   platform alarm-replay behavior
     // - host_permissions: all http(s) granted at install — every flow carries its own site, so there is
     //   no separate per-site authorization step; content scripts are still registered dynamically only
     //   for origins that actually carry flows
@@ -30,7 +33,7 @@ export default defineConfig({
     //   allowed_origins binds to exactly this origin (skills/oncewise-message/protocol.mjs
     //   EXTENSION_ID). Dev instances that previously loaded without a key derive a different ID and
     //   cannot see old-profile flows — re-create them through the native channel (no migration promise).
-    permissions: ['storage', 'scripting', 'nativeMessaging', 'identity'],
+    permissions: ['storage', 'scripting', 'nativeMessaging', 'identity', 'alarms'],
     host_permissions: ['http://*/*', 'https://*/*'],
     default_locale: 'en',
     name: '__MSG_extName__',

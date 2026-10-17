@@ -3,10 +3,12 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import {
   businessClaimKey,
   pendingHandoversItem,
+  pendingTimedStartsItem,
   businessClaimsItem,
   claimBusinessInstance,
   deleteFlowCompletely,
   deleteFlowInputValues,
+  flowSchedulesItem,
   loadFlows,
   nativeSaveRecord,
   onboardingItem,
@@ -22,6 +24,7 @@ import {
 } from '@/lib/storage';
 import { deriveFlowId, type InputDefinition, type Flow } from '@/lib/flow-schema';
 import { inputDefinitionSignature } from '@/lib/flow-inputs';
+import type { FlowSchedule, StagedTimedStart } from '@/lib/flow-schedules';
 
 function makeFlow(overrides: Partial<Flow> = {}): Flow {
   const now = Date.now();
@@ -376,6 +379,58 @@ describe('flowInputValues lifecycle', () => {
     ]);
     const all = await flowInputValuesItem.getValue();
     expect(Object.keys(all).sort()).toEqual(['r1', 'r2', 'r3']);
+  });
+});
+
+// Timed-trigger store (support-scheduler): both items are device-local by design and die with the
+// flow in the same serialized section as every other flow-owned record.
+describe('local:flowSchedules / local:pendingTimedStarts (timed-trigger store)', () => {
+  const schedule = (flowId: string): FlowSchedule => ({
+    id: 'sched-1',
+    flowId,
+    site: 'https://saas.example.com',
+    entryUrl: 'https://saas.example.com/orders/new',
+    period: { kind: 'daily', time: '09:00' },
+    createdAt: 1,
+    updatedAt: 1,
+    nextDueAt: 1_900_000_000_000,
+  });
+  const staged = (flowId: string): StagedTimedStart => ({
+    triggerId: 'sched-1@1900000000000',
+    scheduleId: 'sched-1',
+    flowId,
+    site: 'https://saas.example.com',
+    page: { urlIncludes: '/orders' },
+    deadline: 1_900_000_060_000,
+    createdAt: 1,
+  });
+
+  it('both items default to empty and live in the local area (survive restart mid-window)', async () => {
+    expect(await flowSchedulesItem.getValue()).toEqual([]);
+    expect(await pendingTimedStartsItem.getValue()).toEqual([]);
+    await flowSchedulesItem.setValue([schedule('r_x')]);
+    await pendingTimedStartsItem.setValue([staged('r_x')]);
+    const localArea = (await fakeBrowser.storage.local.get(null)) as Record<string, unknown>;
+    expect(Object.keys(localArea).sort()).toEqual(['flowSchedules', 'pendingTimedStarts']);
+    const sessionArea = (await fakeBrowser.storage.session.get(null)) as Record<string, unknown>;
+    expect(Object.keys(sessionArea)).not.toContain('flowSchedules');
+    expect(Object.keys(sessionArea)).not.toContain('pendingTimedStarts');
+  });
+
+  it('deleting a flow removes its schedules and staged starts in the same section and reports the ids', async () => {
+    const flow = makeFlow();
+    await saveFlowRecord(flow);
+    const keep = makeFlow();
+    await saveFlowRecord(keep);
+    await flowSchedulesItem.setValue([schedule(flow.id), { ...schedule(flow.id), id: 'sched-2', flowId: keep.id }]);
+    await pendingTimedStartsItem.setValue([staged(flow.id), { ...staged(flow.id), triggerId: 'sched-2@1', scheduleId: 'sched-2', flowId: keep.id }]);
+
+    const removed = await deleteFlowCompletely(flow.id);
+    expect(removed).toEqual(['sched-1']);
+    const schedules = await flowSchedulesItem.getValue();
+    expect(schedules.map((s) => s.id)).toEqual(['sched-2']);
+    const starts = await pendingTimedStartsItem.getValue();
+    expect(starts.map((t) => t.scheduleId)).toEqual(['sched-2']);
   });
 });
 

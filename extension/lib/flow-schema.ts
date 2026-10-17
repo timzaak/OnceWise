@@ -173,6 +173,44 @@ export function parseOrigin(site: string): string | null {
   }
 }
 
+// Schedule period closed set (timed triggers): one validator shared by the sp:saveSchedule
+// payload guard and the single writer in flow-schedules, so the two layers can never drift
+// apart on what a valid period is. Bounds: HH:mm wall clock with range-valid components,
+// weekday 0–6, interval minutes 1–1440 (Chrome's 30s minimum alarm spacing makes sub-minute
+// intervals meaningless).
+export type SchedulePeriod =
+  | { kind: 'daily'; time: string } // 'HH:mm', this machine's wall clock
+  | { kind: 'weekly'; weekday: number; time: string } // 0–6, Date#getDay (0 = Sunday)
+  | { kind: 'interval'; minutes: number }; // 1–1440; longer periods are expressed daily/weekly
+
+export function parseHm(time: string): { h: number; m: number } | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  if (match === null) return null;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (h > 23 || m > 59) return null;
+  return { h, m };
+}
+
+export function isValidSchedulePeriod(v: unknown): v is SchedulePeriod {
+  if (!isPlainObject(v)) return false;
+  if (v.kind === 'daily') return typeof v.time === 'string' && parseHm(v.time) !== null;
+  if (v.kind === 'weekly') {
+    return (
+      typeof v.time === 'string' &&
+      parseHm(v.time) !== null &&
+      typeof v.weekday === 'number' &&
+      Number.isSafeInteger(v.weekday) &&
+      v.weekday >= 0 &&
+      v.weekday <= 6
+    );
+  }
+  if (v.kind === 'interval') {
+    return typeof v.minutes === 'number' && Number.isSafeInteger(v.minutes) && v.minutes >= 1 && v.minutes <= 1440;
+  }
+  return false;
+}
+
 function isTriggerCondition(v: unknown): v is TriggerCondition {
   if (!isPlainObject(v)) return false;
   if (v.kind === 'anyChange') return true;

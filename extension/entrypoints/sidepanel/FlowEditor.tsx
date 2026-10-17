@@ -5,12 +5,15 @@ import {
   describePages,
   describeFlow,
   describeSteps,
+  parseOrigin,
   shortFlowId,
   type InputDefinition,
   type Flow,
 } from '@/lib/flow-schema';
 import type { InputIssue, InputValue } from '@/lib/flow-inputs';
+import type { FlowSchedule } from '@/lib/flow-schedules';
 import { t, type MessageKey } from '@/lib/i18n';
+import { formatTime } from '@/lib/ui-labels';
 import { redactText } from '@/lib/redact';
 import FlowHistorySection from './FlowHistorySection';
 
@@ -45,6 +48,44 @@ export default function FlowEditor({ flow: initial, contentState, failureText, o
   // succeeds; inputsRetry re-runs the effect.
   const [inputLoadError, setInputLoadError] = useState<string | null>(null);
   const [inputsRetry, setInputsRetry] = useState(0);
+
+  // Timed-trigger schedules (device-local, never part of the flow definition). The card pulls the
+  // plan list on mount and after each mutation; the next-trigger display always reads the record's
+  // nextDueAt — the background is the only place it is computed, so there is no second calculation
+  // to drift. The form is component-local state; nothing persists beyond the records themselves.
+  const [schedules, setSchedules] = useState<FlowSchedule[] | null>(null);
+  const [schedulesRetry, setSchedulesRetry] = useState(0);
+  const [schedulesLoadError, setSchedulesLoadError] = useState<string | null>(null);
+  const [scheduleFormOpen, setScheduleFormOpen] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [scheduleKind, setScheduleKind] = useState<'daily' | 'weekly' | 'interval'>('daily');
+  const [scheduleTime, setScheduleTime] = useState('09:00');
+  const [scheduleWeekday, setScheduleWeekday] = useState('1');
+  const [scheduleMinutes, setScheduleMinutes] = useState('30');
+  const [scheduleEntryUrl, setScheduleEntryUrl] = useState('');
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setSchedulesLoadError(null);
+      try {
+        const res = await sendRuntimeMessage({ type: 'sp:getSchedules', flowId: initial.id });
+        if (cancelled) return;
+        if (res?.ok) {
+          setSchedules(res.schedules ?? []);
+        } else {
+          setSchedulesLoadError(t('editor.schedules.loadFail', { reason: res?.reason ?? t('common.unknownReason') }));
+        }
+      } catch {
+        if (!cancelled) setSchedulesLoadError(t('editor.schedules.loadTimeout'));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initial.id, schedulesRetry]);
 
   useEffect(() => {
     if ((initial.inputs?.length ?? 0) === 0) return;
@@ -184,6 +225,106 @@ export default function FlowEditor({ flow: initial, contentState, failureText, o
       setErrors([t('editor.optimizeFail', { reason: t('common.timeoutWord') })]);
     } finally {
       setStatusBusy(false);
+    }
+  };
+
+  const describeSchedulePeriod = (schedule: FlowSchedule): string => {
+    if (schedule.period.kind === 'daily') return t('editor.schedules.desc.daily', { time: schedule.period.time });
+    if (schedule.period.kind === 'weekly') {
+      return t('editor.schedules.desc.weekly', {
+        weekday: t(`editor.schedules.weekday.${schedule.period.weekday}` as MessageKey),
+        time: schedule.period.time,
+      });
+    }
+    return t('editor.schedules.desc.interval', { minutes: schedule.period.minutes });
+  };
+
+  const scheduleReasonText = (reason: string | undefined): string => {
+    // The guard rejects a malformed period before the writer can answer 'invalid-schedule' — the
+    // only payload this form builds — so the same wording is shown instead of the unknown fallback
+    const known = ['schedule-limit', 'flow-not-found', 'flow-not-enabled', 'invalid-schedule', 'invalid-entry-url'];
+    const key = reason === 'bad-payload' ? 'invalid-schedule' : reason;
+    return key !== undefined && known.includes(key)
+      ? t(`editor.schedules.reason.${key}` as MessageKey)
+      : t('common.unknownReason');
+  };
+
+  const closeScheduleForm = (): void => {
+    setScheduleFormOpen(false);
+    setEditingScheduleId(null);
+    setScheduleError(null);
+  };
+
+  const openScheduleCreate = (): void => {
+    setScheduleKind('daily');
+    setScheduleTime('09:00');
+    setScheduleWeekday('1');
+    setScheduleMinutes('30');
+    // Prefill from the active tab when it already sits on this flow's site
+    setScheduleEntryUrl(contentState !== null && parseOrigin(contentState.url) === flow.site ? contentState.url : '');
+    setScheduleError(null);
+    setScheduleFormOpen(true);
+    setEditingScheduleId(null);
+  };
+
+  const openScheduleEdit = (schedule: FlowSchedule): void => {
+    setScheduleKind(schedule.period.kind);
+    if (schedule.period.kind === 'daily' || schedule.period.kind === 'weekly') setScheduleTime(schedule.period.time);
+    if (schedule.period.kind === 'weekly') setScheduleWeekday(String(schedule.period.weekday));
+    if (schedule.period.kind === 'interval') setScheduleMinutes(String(schedule.period.minutes));
+    setScheduleEntryUrl(schedule.entryUrl);
+    setScheduleError(null);
+    setEditingScheduleId(schedule.id);
+    setScheduleFormOpen(true);
+  };
+
+  const saveSchedule = async (): Promise<void> => {
+    setScheduleBusy(true);
+    setScheduleError(null);
+    const period: unknown =
+      scheduleKind === 'daily'
+        ? { kind: 'daily', time: scheduleTime }
+        : scheduleKind === 'weekly'
+          ? { kind: 'weekly', weekday: Number(scheduleWeekday), time: scheduleTime }
+          : { kind: 'interval', minutes: Number(scheduleMinutes) };
+    try {
+      const res = await sendRuntimeMessage({
+        type: 'sp:saveSchedule',
+        schedule: {
+          ...(editingScheduleId !== null ? { id: editingScheduleId } : {}),
+          flowId: flow.id,
+          entryUrl: scheduleEntryUrl.trim(),
+          period,
+        },
+      });
+      if (res?.ok) {
+        closeScheduleForm();
+        setSchedulesRetry((n) => n + 1);
+      } else {
+        setScheduleError(t('editor.schedules.saveFail', { reason: scheduleReasonText(res?.ok === false ? res.reason : undefined) }));
+      }
+    } catch {
+      setScheduleError(t('editor.schedules.saveFail', { reason: t('common.timeoutWord') }));
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
+
+  // Deleting a schedule is a light record rebuild (unlike deleting a flow, nothing is
+  // irreversible) — no confirm dialog
+  const removeSchedule = async (id: string): Promise<void> => {
+    setScheduleBusy(true);
+    setScheduleError(null);
+    try {
+      const res = await sendRuntimeMessage({ type: 'sp:deleteSchedule', id });
+      if (!res?.ok) {
+        setScheduleError(t('editor.schedules.deleteFail', { reason: scheduleReasonText(res?.ok === false ? res.reason : undefined) }));
+      }
+      setSchedulesRetry((n) => n + 1);
+    } catch {
+      setScheduleError(t('editor.schedules.deleteFail', { reason: t('common.timeoutWord') }));
+    } finally {
+      setScheduleBusy(false);
     }
   };
 
@@ -343,6 +484,133 @@ export default function FlowEditor({ flow: initial, contentState, failureText, o
           )}
         </section>
       )}
+
+      <section className="sp-card" aria-label={t('editor.schedules.title')}>
+        <h2 className="sp-title">{t('editor.schedules.title')}</h2>
+        {schedules === null ? (
+          schedulesLoadError !== null ? (
+            <>
+              <p className="sp-error" role="alert">{schedulesLoadError}</p>
+              <div className="sp-row">
+                <button type="button" className="sp-btn" onClick={() => setSchedulesRetry((n) => n + 1)}>
+                  {t('common.retry')}
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="sp-sub">{t('common.loading')}</p>
+          )
+        ) : (
+          <>
+            <p className="sp-sub">{t('editor.schedules.count', { n: schedules.length })}</p>
+            {schedules.length === 0 && <p className="sp-sub">{t('editor.schedules.empty')}</p>}
+            {schedules.map((schedule) => (
+              <div key={schedule.id} className="sp-field">
+                <p className="sp-desc">
+                  {describeSchedulePeriod(schedule)} ·{' '}
+                  {t('editor.schedules.nextRun', { time: formatTime(schedule.nextDueAt, { withSeconds: false }) })}
+                </p>
+                <p className="sp-sub" style={{ overflowWrap: 'anywhere' }}>{redactText(schedule.entryUrl)}</p>
+                <div className="sp-row">
+                  <button type="button" className="sp-btn" onClick={() => openScheduleEdit(schedule)} disabled={scheduleBusy}>
+                    {t('editor.schedules.edit')}
+                  </button>
+                  <button type="button" className="sp-btn" onClick={() => void removeSchedule(schedule.id)} disabled={scheduleBusy}>
+                    {t('common.delete')}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {flow.status !== 'enabled' ? (
+              <p className="sp-sub">{t('editor.schedules.createDisabled')}</p>
+            ) : scheduleFormOpen ? (
+              <>
+                <div className="sp-field">
+                  <label className="sp-label" htmlFor="schedule-kind">{t('editor.schedules.kind')}</label>
+                  <select
+                    id="schedule-kind"
+                    className="sp-select"
+                    value={scheduleKind}
+                    onChange={(e) => setScheduleKind(e.target.value as 'daily' | 'weekly' | 'interval')}
+                  >
+                    <option value="daily">{t('editor.schedules.kind.daily')}</option>
+                    <option value="weekly">{t('editor.schedules.kind.weekly')}</option>
+                    <option value="interval">{t('editor.schedules.kind.interval')}</option>
+                  </select>
+                </div>
+                {scheduleKind !== 'interval' && (
+                  <div className="sp-field">
+                    <label className="sp-label" htmlFor="schedule-time">{t('editor.schedules.time')}</label>
+                    <input
+                      id="schedule-time"
+                      className="sp-input"
+                      type="time"
+                      value={scheduleTime}
+                      onChange={(e) => setScheduleTime(e.target.value)}
+                    />
+                  </div>
+                )}
+                {scheduleKind === 'weekly' && (
+                  <div className="sp-field">
+                    <label className="sp-label" htmlFor="schedule-weekday">{t('editor.schedules.weekday')}</label>
+                    <select
+                      id="schedule-weekday"
+                      className="sp-select"
+                      value={scheduleWeekday}
+                      onChange={(e) => setScheduleWeekday(e.target.value)}
+                    >
+                      {[0, 1, 2, 3, 4, 5, 6].map((day) => (
+                        <option key={day} value={String(day)}>
+                          {t(`editor.schedules.weekday.${day}` as MessageKey)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {scheduleKind === 'interval' && (
+                  <div className="sp-field">
+                    <label className="sp-label" htmlFor="schedule-minutes">{t('editor.schedules.intervalMinutes')}</label>
+                    <input
+                      id="schedule-minutes"
+                      className="sp-input"
+                      type="text"
+                      inputMode="numeric"
+                      value={scheduleMinutes}
+                      onChange={(e) => setScheduleMinutes(e.target.value)}
+                    />
+                  </div>
+                )}
+                <div className="sp-field">
+                  <label className="sp-label" htmlFor="schedule-entry">{t('editor.schedules.entryUrl')}</label>
+                  <input
+                    id="schedule-entry"
+                    className="sp-input"
+                    type="text"
+                    value={scheduleEntryUrl}
+                    onChange={(e) => setScheduleEntryUrl(e.target.value)}
+                  />
+                  <p className="sp-sub">{t('editor.schedules.entryUrlHint')}</p>
+                </div>
+                <div className="sp-row">
+                  <button type="button" className="sp-btn" onClick={() => void saveSchedule()} disabled={scheduleBusy}>
+                    {scheduleBusy ? t('common.saving') : t('editor.schedules.save')}
+                  </button>
+                  <button type="button" className="sp-btn" onClick={closeScheduleForm} disabled={scheduleBusy}>
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="sp-row">
+                <button type="button" className="sp-btn" onClick={openScheduleCreate}>
+                  {t('editor.schedules.add')}
+                </button>
+              </div>
+            )}
+            {scheduleError && <p className="sp-error" role="alert">{scheduleError}</p>}
+          </>
+        )}
+      </section>
 
       <section className="sp-card" aria-label={t('editor.run.title')}>
         <h2 className="sp-title">{t('editor.run.title')}</h2>

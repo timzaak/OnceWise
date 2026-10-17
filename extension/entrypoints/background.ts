@@ -58,6 +58,16 @@ import {
   takeHandover,
   type PendingHandover,
 } from '@/lib/flow-handover';
+import {
+  deleteSchedule,
+  reconcileSchedules,
+  saveSchedule,
+  scheduleAlarmName,
+  schedulesForFlow,
+  takeTimedStart,
+  timedStartDescriptorsFor,
+  type ScheduleInput,
+} from '@/lib/flow-schedules';
 import { handleSyncMessage } from '@/lib/sync-service';
 import { initAuthReady } from '@/lib/sync-auth';
 import type { Browser } from '@wxt-dev/browser';
@@ -169,10 +179,12 @@ async function handleUiPage(msg: ExtensionMessage): Promise<ExtensionResponse | 
     }
 
     case 'sp:deleteFlow': {
-      // One serialized section removes the flow, its saved input values, its failure notice and any
-      // read grant pointing at it — separate writes could be interrupted between them, orphaning the
-      // values. The store delete also clears the flow's history and receipts.
-      await deleteFlowCompletely(msg.id);
+      // One serialized section removes the flow, its saved input values, its failure notice, any
+      // read grant pointing at it and its schedules + staged timed starts — separate writes could
+      // be interrupted between them, orphaning the values. The store delete also clears the flow's
+      // history and receipts. The removed schedules' alarms are cleared outside the section.
+      const removedScheduleIds = await deleteFlowCompletely(msg.id);
+      await Promise.all(removedScheduleIds.map((id) => browser.alarms.clear(scheduleAlarmName(id)).catch(() => undefined)));
       await afterFlowsWrite();
       return { ok: true };
     }
@@ -197,6 +209,24 @@ async function handleUiPage(msg: ExtensionMessage): Promise<ExtensionResponse | 
       await reconcileInputNotice(flow, evaluation.issues);
       return { ok: true, values: evaluation.values, inputIssues: evaluation.issues };
     }
+
+    // Timed-trigger schedule CRUD (single writer): validation, the device cap and the entry-URL
+    // gates all live in lib/flow-schedules.ts; a reconcile pass follows each write so expiry
+    // notices never wait for the next alarm
+    case 'sp:getSchedules':
+      return { ok: true, schedules: await schedulesForFlow(msg.flowId) };
+
+    case 'sp:saveSchedule': {
+      const saved = await saveSchedule(msg.schedule as ScheduleInput);
+      if (!saved.ok) return { ok: false, reason: saved.reason };
+      void reconcileSchedules().catch((error) => log.error('schedule reconcile failed', error));
+      return { ok: true, nextDueAt: saved.nextDueAt };
+    }
+
+    case 'sp:deleteSchedule':
+      await deleteSchedule(msg.id);
+      void reconcileSchedules().catch((error) => log.error('schedule reconcile failed', error));
+      return { ok: true };
 
     case 'bg:startDryRun':
     case 'bg:abortDryRun':
@@ -224,12 +254,22 @@ async function handleContent(
 
   switch (msg.type) {
     case 'ct:getEnabledFlows': {
-      // The two storage reads are independent and run concurrently
-      const [allFlows, handovers] = await Promise.all([loadFlows(), handoverDescriptorsFor(origin)]);
+      // The three storage reads are independent and run concurrently
+      const [allFlows, handovers, timedStarts] = await Promise.all([
+        loadFlows(),
+        handoverDescriptorsFor(origin),
+        timedStartDescriptorsFor(origin),
+      ]);
       const flows = allFlows.filter((r) => r.site === origin && r.status === 'enabled');
-      // Startup piggyback: this site's in-flight handover descriptors ride the flows pull — the
-      // claiming evaluation happens locally on the content side, zero extra round trips
-      return { ok: true, flows, ...(handovers.length > 0 ? { handovers } : {}) };
+      // Startup piggyback: this site's in-flight handover and timed-start descriptors ride the
+      // flows pull — the claiming evaluation happens locally on the content side, zero extra
+      // round trips
+      return {
+        ok: true,
+        flows,
+        ...(handovers.length > 0 ? { handovers } : {}),
+        ...(timedStarts.length > 0 ? { timedStarts } : {}),
+      };
     }
     // Cross-page handover ops — all adjudication lives in lib/flow-handover.ts under the single
     // writer; here we only forward the sender facts it cannot know (tab id, url)
@@ -256,6 +296,14 @@ async function handleContent(
     case 'ct:dropHandover':
       await dropHandover(msg.runId);
       return { ok: true };
+    // Timed-start claim — adjudication lives in lib/flow-schedules.ts under the single writer;
+    // only the sender facts the module cannot know are forwarded
+    case 'ct:takeTimedStart': {
+      const taken = await takeTimedStart(msg.triggerId, { origin, url: sender.url ?? '' });
+      return taken.ok
+        ? { ok: true, start: { triggerId: msg.triggerId, flow: taken.flow } }
+        : { ok: false, reason: taken.reason };
+    }
     // Run-start input snapshot: this site's flow, values revalidated against the current definitions.
     // Automatic runs additionally require the enabled status and a current draft hash — a stale script
     // pulls nothing. A dry-run preview (dryRun: true) carries the editor's flow (typically a draft,
@@ -377,6 +425,15 @@ export default defineBackground(() => {
     void cancelHandoversByTab(closedTabId);
   });
 
+  // Any alarm (a schedule's next occurrence or the timed-start janitor) just wakes the worker:
+  // one full record-driven reconcile handles both — no per-alarm name routing, nextDueAt stays
+  // the single truth, so a replayed or lost platform alarm can neither double-fire nor skip
+  browser.alarms.onAlarm.addListener(() => {
+    void reconcileSchedules().catch((error) => {
+      log.error('schedule reconcile failed', error);
+    });
+  });
+
   // On install (not update — reopening after upgrades would be disruptive) the welcome page opens
   // once: first-run tutorial plus the repository star CTA. The import page stays reachable from the
   // sidepanel settings and the welcome page's own link.
@@ -388,15 +445,19 @@ export default defineBackground(() => {
 
   // Every SW cold start: re-align dynamic content-script registrations with the flow-site set
   // (repairs drift such as registrations dropped by the profile), sweep value records orphaned by
-  // an interrupted delete (writes only when orphans exist), and lazily GC expired or invalidated
-  // handovers (one leg of the deadline's three-way enforcement). All consume the same single store
-  // read and have no data dependency, so they run concurrently.
+  // an interrupted delete (writes only when orphans exist), lazily GC expired or invalidated
+  // handovers (one leg of the deadline's three-way enforcement), and run the schedule reconcile —
+  // occurrences that fell due while the browser was closed surface here as honest missed notices,
+  // and every surviving schedule's alarm is re-armed idempotently (platform-side alarm loss
+  // self-heals). All consume the same single store read and have no data dependency, so they run
+  // concurrently.
   void (async () => {
     const flows = await loadFlows();
     await Promise.all([
       syncFlowSiteScripts([...new Set(flows.map((r) => r.site))]),
       pruneOrphanFlowInputValues(new Set(flows.map((r) => r.id))),
       gcHandovers(),
+      reconcileSchedules(),
     ]);
   })().catch((error) => {
     // A silent failure here would leave stale site injections until the next successful cold start

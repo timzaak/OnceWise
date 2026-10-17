@@ -24,6 +24,7 @@ import { createDomFlowDriver } from '@/lib/flow-dom';
 import { createFlowRuntime, type FlowLogEvent } from '@/lib/flow-runtime';
 import type { FlowRunResult } from '@/lib/flow-compiler';
 import { withHandover, type HandoverDescriptor, type PendingHandover } from '@/lib/flow-handover';
+import type { TimedStartDescriptor } from '@/lib/flow-schedules';
 import { redactText } from '@/lib/redact';
 import { t } from '@/lib/i18n';
 import { flowDraftHash, type RunFailureDetail, type Flow } from '@/lib/flow-schema';
@@ -49,6 +50,10 @@ export default defineContentScript({
     // runIds this document has already consumed (claimed, or adjudicated dead) — never re-attempted
     let handovers: HandoverDescriptor[] = [];
     const deadHandoverRuns = new Set<string>();
+    // Same shape for timed starts: staged trigger descriptors plus the triggerIds already
+    // adjudicated dead here (failed claim) — retried on later arm cycles only while live
+    let timedStarts: TimedStartDescriptor[] = [];
+    const deadTimedTriggers = new Set<string>();
     // A payload claimed while the document mutex was busy: held in memory and started on a later
     // arm cycle until its deadline (serialized boundary — no queue jumping)
     let pendingResume: PendingHandover | null = null;
@@ -262,14 +267,20 @@ export default defineContentScript({
       autoRunQueue = autoRunQueue.then(start, start);
     };
 
-    const startAutoRun = async (flow: Flow, businessKey: string | null) => {
+    // `businessKey` carries the page-enter tracker's rising-edge read for page/field triggers; a
+    // timed start passes undefined and the key is read fresh at claim time. `reportOccupiedSkip`
+    // surfaces the business-instance-claimed refusal to the session notice — automatic triggers
+    // stay silent (noise governance), but an unattended timed trigger's skip must be visible.
+    const startAutoRun = async (flow: Flow, businessKey?: string | null, reportOccupiedSkip = false) => {
       // The queue can hold this start behind a long run; re-check the flow is still enabled then
       if (!flows.some((r) => r.id === flow.id && r.status === 'enabled')) return;
       const gate = await gateFlowInputs(flow);
       if (!gate.ok) return;
       const claim = await claimBeforeRun(flow, businessKey);
       if (claim.kind === 'refused') {
-        if (claim.reason !== 'business-instance-claimed' && claim.reason !== 'page-left') {
+        const audible =
+          claim.reason === 'business-instance-claimed' ? reportOccupiedSkip : claim.reason !== 'page-left';
+        if (audible) {
           void emitEvent({ type: 'ct:flowRunStatus', flowId: flow.id, flowDraftHash: flowDraftHash(flow),
             failure: { nodeId: 'trigger', iterationPath: '', stage: 'trigger', reason: claim.reason } });
         }
@@ -355,20 +366,45 @@ export default defineContentScript({
       );
     };
 
+    // Timed-start twin of the above: entry page fingerprint re-evaluated locally, deadline-bound
+    const matchingTimedDescriptor = (): TimedStartDescriptor | undefined => {
+      const now = Date.now();
+      return timedStarts.find(
+        (d) => now <= d.deadline && !deadTimedTriggers.has(d.triggerId) && pageMatches(doc, d.page),
+      );
+    };
+
     // Reconcile observers and page-enter edges with the current flows + page fingerprint. Also the
     // cancellation poll: a run whose flow was paused/deleted/replaced (reloadFlows updated the list) or
     // whose business route was left stops immediately. Finally the handover claim pass: a matched
     // declared page tries to claim its staged run (the pre-claim seeding below keeps the same cycle's
     // pageEnter evaluation from firing the flow as a fresh entry on pathologically overlapping
     // fingerprints).
-    const arm = async () => {
+    const runArmPass = async () => {
       const claimable = activeRun === null && pendingResume === null ? matchingDescriptor() : undefined;
+      // Claim priority: a held resume > a handover claim > a timed start — in-flight runs always
+      // outrank new ones; the timed claim waits for the next cycle (800ms) until its deadline
+      const timedClaimable =
+        claimable === undefined && activeRun === null && pendingResume === null ? matchingTimedDescriptor() : undefined;
       if (claimable !== undefined) {
         // Seed every dedup-key form the descriptor knows: a businessKey-carrying flow evaluates
         // under `${flowId}|${key}`, and this cycle's evaluate() runs before the claim pass — the
         // flow-level key alone would let a fresh entry double-fire on overlapping fingerprints
         pageEnterTracker.suppress(claimable.flowId, null);
         if (claimable.businessKey !== null) pageEnterTracker.suppress(claimable.flowId, claimable.businessKey);
+      }
+
+      // Timed-claim twin of that seeding: the entry gate guarantees the schedule's page matches
+      // the flow fingerprint, so the fresh tab raises the pageEnter edge in the SAME cycle as the
+      // claim — without seeding, every schedule-opened tab double-fires (pageEnter run + timed run)
+      let timedBusinessKey: string | null | undefined;
+      if (timedClaimable !== undefined) {
+        pageEnterTracker.suppress(timedClaimable.flowId, null);
+        const timedFlow = flows.find((r) => r.id === timedClaimable.flowId);
+        if (timedFlow?.businessKey !== undefined) {
+          timedBusinessKey = await readBusinessKey(timedFlow);
+          if (timedBusinessKey !== null) pageEnterTracker.suppress(timedClaimable.flowId, timedBusinessKey);
+        }
       }
 
       if (activeRun !== null) {
@@ -473,6 +509,38 @@ export default defineContentScript({
         }
         await runResumed(taken.handover);
       }
+
+      // Timed claim pass: the single winner enters the regular automatic-run pipeline (input
+      // gate -> business claim -> single-run mutex), deduped against this cycle's pageEnter edge by
+      // the seeding above. The claim CONSUMES the occurrence, so a declared business key must read
+      // now — an unreadable key (SPA form not yet rendered on the freshly opened tab) waits for a
+      // later cycle inside the deadline instead of turning into an unrecoverable loss. 'wrong-tab'
+      // is the one refusal that keeps the start staged and this page re-matchable: it retries on
+      // later cycles until the deadline; every other refusal is final for this document (flow
+      // disabled at claim time etc.): stop trying, zero actions.
+      if (timedClaimable !== undefined && activeRun === null && timedBusinessKey !== null) {
+        const taken = await sendRuntimeMessage({ type: 'ct:takeTimedStart', triggerId: timedClaimable.triggerId }).catch(() => undefined);
+        if (taken === undefined) return; // transient send failure — retried next cycle
+        if (!taken.ok || taken.start === undefined) {
+          if (taken.ok !== false || taken.reason !== 'wrong-tab') deadTimedTriggers.add(timedClaimable.triggerId);
+          return;
+        }
+        enqueueAutoRun(() => startAutoRun(taken.start!.flow, undefined, true));
+      }
+    };
+
+    // One arm pass at a time: interval ticks, observer debounces and fetchFlows re-arms overlap
+    // freely, and interleaved claim passes would defeat the documented priority (held resume >
+    // handover claim > timed start) — a dropped tick only waits for the next 800ms cadence
+    let arming = false;
+    const arm = async (): Promise<void> => {
+      if (arming) return;
+      arming = true;
+      try {
+        await runArmPass();
+      } finally {
+        arming = false;
+      }
     };
 
     const fetchFlows = async () => {
@@ -481,11 +549,13 @@ export default defineContentScript({
         if (res?.ok && res.flows) {
           flows = res.flows;
           handovers = res.handovers ?? [];
+          timedStarts = res.timedStarts ?? [];
         } else if (res && res.ok === false) {
           // A definitive rejection (sender-guard failure, or a future background policy) clears the
           // flows so a rejected site executes nothing from now on
           flows = [];
           handovers = [];
+          timedStarts = [];
         }
       } catch {
         // Keep existing observers when SW wake-up fails; the next arm cycle retries
@@ -502,7 +572,10 @@ export default defineContentScript({
         case 'bg:reloadFlows':
         // Compensation for the target=_blank race: a handover for a page this tab is already
         // showing was staged after this script started — re-pull descriptors and re-evaluate
-        case 'bg:handoverStaged': {
+        case 'bg:handoverStaged':
+        // Same compensation for timed starts: the trigger was staged after this script's last
+        // pull (or a tab was already showing the entry page at trigger time)
+        case 'bg:timedStartStaged': {
           await fetchFlows();
           return { ok: true };
         }

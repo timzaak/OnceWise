@@ -280,6 +280,17 @@ function formatFlowFailure(notice: FlowFailureNotice | undefined): string {
   if (failure.reason === 'input-unavailable') {
     return t('flows.inputUnavailable');
   }
+  // Timed-trigger outcomes are trigger-layer facts (no run was formed) with their own wording;
+  // the missed detail carries the occurrence count and latest time
+  if (failure.reason === 'schedule-missed') {
+    return t('flows.scheduleMissed', { detail: failure.detail ?? '' });
+  }
+  if (failure.reason === 'timed-start-expired') {
+    return t('flows.timedStartExpired');
+  }
+  if (failure.reason === 'business-instance-claimed') {
+    return t('flows.businessInstanceClaimed');
+  }
   const pagePrefix = failure.pageId !== undefined ? t('flows.failurePage', { page: failure.pageId }) : '';
   return redactText(`${pagePrefix}${failure.nodeId}${failure.iterationPath} · ${failure.stage}: ${failure.reason}${failure.detail ? ` (${failure.detail})` : ''}`);
 }

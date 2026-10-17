@@ -106,3 +106,52 @@ describe('ct:stageHandover / probe / take / drop payload guards', () => {
     expect(isExtensionMessage({ ...base, failure: { ...failure, pageId: 3 } })).toBe(false);
   });
 });
+
+// Timed-trigger message guards (support-scheduler): the schedule upsert's period is a closed set —
+// per-kind fields must arrive in exactly the guarded shape or the writer never sees the message
+// (bad-payload). The claim op is triggerId-only; the compensation push carries no payload.
+describe('schedule message guards', () => {
+  it('sp:getSchedules / sp:deleteSchedule take their id strings; bg:timedStartStaged carries no payload', () => {
+    expect(isExtensionMessage({ type: 'sp:getSchedules', flowId: 'r1' })).toBe(true);
+    expect(isExtensionMessage({ type: 'sp:getSchedules' })).toBe(false);
+    expect(isExtensionMessage({ type: 'sp:deleteSchedule', id: 'sched-1' })).toBe(true);
+    expect(isExtensionMessage({ type: 'sp:deleteSchedule', id: 7 })).toBe(false);
+    expect(isExtensionMessage({ type: 'bg:timedStartStaged' })).toBe(true);
+  });
+
+  it('sp:saveSchedule accepts each period kind, with and without the edit id', () => {
+    expect(
+      isExtensionMessage({ type: 'sp:saveSchedule', schedule: { flowId: 'r1', entryUrl: 'https://s.example.com/orders', period: { kind: 'daily', time: '09:00' } } }),
+    ).toBe(true);
+    expect(
+      isExtensionMessage({ type: 'sp:saveSchedule', schedule: { id: 'sched-1', flowId: 'r1', entryUrl: 'https://s.example.com/orders', period: { kind: 'weekly', weekday: 0, time: '23:59' } } }),
+    ).toBe(true);
+    expect(
+      isExtensionMessage({ type: 'sp:saveSchedule', schedule: { flowId: 'r1', entryUrl: 'https://s.example.com/orders', period: { kind: 'interval', minutes: 1440 } } }),
+    ).toBe(true);
+  });
+
+  it('sp:saveSchedule rejects malformed periods per kind and non-string ids/urls', () => {
+    const base = { type: 'sp:saveSchedule' };
+    const entryUrl = 'https://s.example.com/orders';
+    expect(isExtensionMessage({ ...base, schedule: { flowId: 'r1', entryUrl, period: { kind: 'daily', time: '9:00' } } })).toBe(false);
+    expect(isExtensionMessage({ ...base, schedule: { flowId: 'r1', entryUrl, period: { kind: 'daily', time: '09:60' } } })).toBe(false);
+    expect(isExtensionMessage({ ...base, schedule: { flowId: 'r1', entryUrl, period: { kind: 'weekly', weekday: 7, time: '09:00' } } })).toBe(false);
+    expect(isExtensionMessage({ ...base, schedule: { flowId: 'r1', entryUrl, period: { kind: 'weekly', weekday: '1', time: '09:00' } } })).toBe(false);
+    expect(isExtensionMessage({ ...base, schedule: { flowId: 'r1', entryUrl, period: { kind: 'interval', minutes: 0 } } })).toBe(false);
+    expect(isExtensionMessage({ ...base, schedule: { flowId: 'r1', entryUrl, period: { kind: 'interval', minutes: 1441 } } })).toBe(false);
+    expect(isExtensionMessage({ ...base, schedule: { flowId: 'r1', entryUrl, period: { kind: 'interval', minutes: 30.5 } } })).toBe(false);
+    expect(isExtensionMessage({ ...base, schedule: { flowId: 'r1', entryUrl, period: { kind: 'cron' } } })).toBe(false);
+    expect(isExtensionMessage({ ...base, schedule: { entryUrl, period: { kind: 'daily', time: '09:00' } } })).toBe(false);
+    expect(isExtensionMessage({ ...base, schedule: { flowId: 7, entryUrl, period: { kind: 'daily', time: '09:00' } } })).toBe(false);
+    expect(isExtensionMessage({ ...base, schedule: { id: 7, flowId: 'r1', entryUrl, period: { kind: 'daily', time: '09:00' } } })).toBe(false);
+    expect(isExtensionMessage({ ...base, schedule: { flowId: 'r1', period: { kind: 'daily', time: '09:00' } } })).toBe(false);
+  });
+
+  it('ct:takeTimedStart needs a non-empty triggerId', () => {
+    expect(isExtensionMessage({ type: 'ct:takeTimedStart', triggerId: 'sched-1@1770000000000' })).toBe(true);
+    expect(isExtensionMessage({ type: 'ct:takeTimedStart' })).toBe(false);
+    expect(isExtensionMessage({ type: 'ct:takeTimedStart', triggerId: '' })).toBe(false);
+    expect(isExtensionMessage({ type: 'ct:takeTimedStart', triggerId: 7 })).toBe(false);
+  });
+});

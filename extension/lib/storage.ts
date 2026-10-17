@@ -10,6 +10,7 @@ import { storage } from 'wxt/utils/storage';
 import { djb2, flowDraftHash, validateFlow, type ExecOutcome, type Flow, type RunFailureDetail } from './flow-schema';
 import type { FlowInputValueMap } from './flow-inputs';
 import type { PendingHandover } from './flow-handover';
+import type { FlowSchedule, StagedTimedStart } from './flow-schedules';
 
 export interface OnboardingState {
   seen: boolean;
@@ -96,12 +97,14 @@ export function deleteFlowInputValues(flowId: string): Promise<void> {
 }
 
 // The full delete of one flow: store entry (flow + history + receipts, watermark advanced), saved
-// input values, session failure notice and any read grant removed in ONE serialized section. Separate
-// writes could be interrupted between them — that gap is what orphans value records (personal data)
-// in storage and leaves a grant pointing at a deleted flow.
+// input values, session failure notice, any read grant and the flow's timed schedules plus their
+// staged starts removed in ONE serialized section. Separate writes could be interrupted between
+// them — that gap is what orphans value records (personal data) in storage, leaves a grant
+// pointing at a deleted flow, and arms alarms for a deleted flow's schedules. Returns the removed
+// schedule ids so the caller can clear their alarms outside the section.
 // Reads and writes go straight to the items: the wrapped helpers above re-enter the write chain and
 // would deadlock inside this section.
-export function deleteFlowCompletely(id: string): Promise<void> {
+export function deleteFlowCompletely(id: string): Promise<string[]> {
   return serializeStorageWrite(async () => {
     const store = await flowStoreItem.getValue();
     if (store.flows.some((r) => r.id === id)) {
@@ -128,7 +131,16 @@ export function deleteFlowCompletely(id: string): Promise<void> {
       delete notices[id];
       await flowFailuresItem.setValue(notices);
     }
+    const schedules = await flowSchedulesItem.getValue();
+    const removedScheduleIds = schedules.filter((s) => s.flowId === id).map((s) => s.id);
+    if (removedScheduleIds.length > 0) {
+      await flowSchedulesItem.setValue(schedules.filter((s) => s.flowId !== id));
+      const starts = await pendingTimedStartsItem.getValue();
+      const keptStarts = starts.filter((t) => t.flowId !== id);
+      if (keptStarts.length !== starts.length) await pendingTimedStartsItem.setValue(keptStarts);
+    }
     await clearReadGrantLocked(id);
+    return removedScheduleIds;
   });
 }
 
@@ -163,6 +175,23 @@ export const businessClaimsItem = storage.defineItem('session:businessClaims', {
 // machine's session: no logs, no sync, no export.
 export const pendingHandoversItem = storage.defineItem('session:pendingHandovers', {
   fallback: [] as PendingHandover[],
+});
+
+// Timed-trigger schedules (DEC-support-scheduler-002): device-local records, never part of a Flow
+// definition, the draft hash, a sync payload, a log or an export — they neither travel nor
+// influence flow version comparison. Background single writer only (the UI goes through sp:*
+// messages).
+export const flowSchedulesItem = storage.defineItem('local:flowSchedules', {
+  fallback: [] as FlowSchedule[],
+});
+
+// Staged timed starts awaiting a page's atomic claim. local: rather than session: deliberately —
+// when the browser closes inside the distribution window, the restart's expiry GC must still land
+// the honest timed-start-expired notice instead of the record vanishing with the session; the
+// deadline (<=60s out) keeps the list short-lived either way. Holds ids/fingerprints/timestamps
+// only, no runtime-read values.
+export const pendingTimedStartsItem = storage.defineItem('local:pendingTimedStarts', {
+  fallback: [] as StagedTimedStart[],
 });
 
 // Dry-run result fallback: closing the sidepanel mid dry-run still shows the result on reopen

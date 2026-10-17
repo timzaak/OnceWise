@@ -9,10 +9,11 @@
 import { browser } from 'wxt/browser';
 import { createLogger } from './logger';
 import type { Flow, RunFailureDetail } from './flow-schema';
-import { isPlainObject, parseOrigin } from './flow-schema';
+import { isPlainObject, isValidSchedulePeriod, parseOrigin } from './flow-schema';
 import type { InputIssue, InputSnapshot } from './flow-inputs';
 import type { FlowOutcome } from './flow-compiler';
 import type { PendingHandover, HandoverDescriptor } from './flow-handover';
+import type { FlowSchedule, TimedStartDescriptor } from './flow-schedules';
 import type { ScriptDto, SpaceRole, VersionMetaDto } from './sync-api';
 import type { SyncSpaceEntry } from './sync-storage';
 import type { FlowHistoryMeta } from './storage';
@@ -38,6 +39,14 @@ export type ExtensionMessage =
   // are expressed by key absence. background validates against the current definitions (single writer).
   | { type: 'sp:getFlowInputs'; flowId: string }
   | { type: 'sp:saveFlowInputs'; flowId: string; values: Record<string, unknown> }
+  // timed trigger: device-local schedule CRUD for the flow detail. saveSchedule is a unified
+  // upsert (id present = edit, absent = create); the payload guard and the writer share
+  // isValidSchedulePeriod for the period closed set (single implementation, no drift), and the
+  // background re-validates the flow's enabled state and the entry URL against the flow's site
+  // and page rule (single writer)
+  | { type: 'sp:getSchedules'; flowId: string }
+  | { type: 'sp:saveSchedule'; schedule: unknown }
+  | { type: 'sp:deleteSchedule'; id: string }
   // data-sync: sp:sync* — all handled by lib/sync-service.ts in the background (fetch + space
   // bookkeeping); the UI hop uses SYNC_TIMEOUT_MS instead of the 10s default. No accounts: spaces are
   // locally generated id+key pairs, the UI never sees keys except through SyncSpaceView.code.
@@ -82,6 +91,9 @@ export type ExtensionMessage =
   // A handover was staged for a page this tab is already showing (target=_blank race compensation):
   // re-pull the descriptors and re-evaluate locally
   | { type: 'bg:handoverStaged' }
+  // Same compensation shape for timed starts: a staged trigger arrived after this script's last
+  // pull — re-pull flows + descriptors and re-evaluate
+  | { type: 'bg:timedStartStaged' }
   // content -> background (events; getEnabledFlows, claimBusiness and releaseBusiness are request-response)
   | { type: 'ct:getEnabledFlows' }
   // Cross-page handover: stage the run state at a navigate node, poll it from the waiting source,
@@ -91,6 +103,10 @@ export type ExtensionMessage =
   | { type: 'ct:probeHandover'; runId: string }
   | { type: 'ct:takeHandover'; runId: string }
   | { type: 'ct:dropHandover'; runId: string }
+  // Timed start claim: atomically take a staged trigger — the single winner receives the flow as
+  // currently stored; every loser gets a structured refusal (gone/expired/wrong-tab/site-mismatch/
+  // flow-not-enabled) and stops trying
+  | { type: 'ct:takeTimedStart'; triggerId: string }
   // form-support: run-start input snapshot — background checks the sender site and, for automatic
   // runs, the flow status and draft hash; a dry-run preview (dryRun: true) carries the editor's flow
   // (typically a draft or unsaved edits), so it must pass only the site check and its refusals never
@@ -237,6 +253,14 @@ export type ExtensionResponse =
       handover?: PendingHandover;
       // ct:getEnabledFlows — startup piggyback descriptors for this site's pages
       handovers?: HandoverDescriptor[];
+      // ct:getEnabledFlows — startup piggyback timed-start descriptors for this site
+      timedStarts?: TimedStartDescriptor[];
+      // sp:getSchedules — this flow's device-local schedules (display reads nextDueAt)
+      schedules?: FlowSchedule[];
+      // sp:saveSchedule — the freshly computed next occurrence for immediate display
+      nextDueAt?: number;
+      // ct:takeTimedStart — the single winner's start payload (flow read from the current store)
+      start?: { triggerId: string; flow: Flow };
       // sp:getNativeChannelState — in-memory port display state, never a persistence fact
       connected?: boolean;
       // sp:grantNativeRead — remaining grant lifetime
@@ -279,15 +303,16 @@ const MESSAGE_TYPES = new Set([
   'sp:getFlows', 'sp:saveFlow', 'sp:setFlowStatus', 'sp:deleteFlow',
   'sp:grantNativeRead', 'sp:getNativeChannelState', 'sp:getFlowHistory', 'sp:rollbackFlow',
   'sp:getFlowInputs', 'sp:saveFlowInputs',
+  'sp:getSchedules', 'sp:saveSchedule', 'sp:deleteSchedule',
   'sp:syncGetStatus', 'sp:syncProbeHealth', 'sp:syncSetServer', 'sp:syncCreateSpace',
   'sp:syncJoinSpace', 'sp:syncSelectSpace', 'sp:syncForgetSpace', 'sp:syncDeleteSpace',
   'sp:syncListScripts', 'sp:syncListVersions', 'sp:syncPreviewVersion', 'sp:syncPullVersion',
   'sp:syncUploadScript', 'sp:syncPublishVersion', 'sp:syncUpdateScript', 'sp:syncUnlink',
   'sp:syncGetAuthState', 'sp:syncSignIn', 'sp:syncSignOut',
   'sp:syncIssueInvite', 'sp:syncListMembers', 'sp:syncUpdateMemberRole', 'sp:syncRemoveMember', 'sp:syncTransferOwnership',
-  'bg:startDryRun', 'bg:abortDryRun', 'bg:getContentState', 'bg:reloadFlows', 'bg:handoverStaged',
+  'bg:startDryRun', 'bg:abortDryRun', 'bg:getContentState', 'bg:reloadFlows', 'bg:handoverStaged', 'bg:timedStartStaged',
   'ct:getEnabledFlows', 'ct:getInputSnapshot', 'ct:claimBusiness', 'ct:releaseBusiness', 'ct:flowRunStatus', 'ct:dryRunProgress', 'ct:dryRunFinished',
-  'ct:stageHandover', 'ct:probeHandover', 'ct:takeHandover', 'ct:dropHandover',
+  'ct:stageHandover', 'ct:probeHandover', 'ct:takeHandover', 'ct:dropHandover', 'ct:takeTimedStart',
 ]);
 
 // Every message payload passes a type guard; invalid payloads get a structured error instead of a thrown exception
@@ -322,6 +347,19 @@ export function isExtensionMessage(v: unknown): v is ExtensionMessage {
             (Array.isArray(x) && x.every((i) => typeof i === 'string')),
         )
       );
+    case 'sp:getSchedules':
+      return typeof v.flowId === 'string';
+    case 'sp:saveSchedule':
+      return (
+        isPlainObject(v.schedule) &&
+        typeof v.schedule.flowId === 'string' &&
+        v.schedule.flowId.length > 0 &&
+        typeof v.schedule.entryUrl === 'string' &&
+        (v.schedule.id === undefined || typeof v.schedule.id === 'string') &&
+        isValidSchedulePeriod(v.schedule.period)
+      );
+    case 'sp:deleteSchedule':
+      return typeof v.id === 'string';
     case 'ct:getInputSnapshot':
       return (
         typeof v.flowId === 'string' &&
@@ -420,6 +458,8 @@ export function isExtensionMessage(v: unknown): v is ExtensionMessage {
     case 'ct:takeHandover':
     case 'ct:dropHandover':
       return typeof v.runId === 'string' && v.runId.length > 0;
+    case 'ct:takeTimedStart':
+      return typeof v.triggerId === 'string' && v.triggerId.length > 0;
     case 'ct:dryRunProgress':
       return (
         typeof v.runId === 'string' &&
