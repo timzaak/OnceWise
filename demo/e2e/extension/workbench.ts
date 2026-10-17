@@ -1,5 +1,6 @@
 import type { BrowserContext, Page } from '@playwright/test'
-import { expect, extensionEntryUrl } from './fixtures'
+import { expect, extensionEntryUrl, launchExtensionContext, readExtensionManifest, resolveExtensionId } from './fixtures'
+import { extensionPath } from './extension-target'
 import { clearHeraldRateLimits, HERALD_ACCOUNT_PASSWORD } from './herald'
 
 // 故事驱动 helper：同步用户故事用例（stories/us-ds-*.e2e.ts）共用的 UI 驱动原语。
@@ -393,10 +394,11 @@ export function expectHostPhoneFilled(page: Page, value: string, timeout: number
   return expect(page.locator('#contactPhone')).toHaveValue(value, { timeout })
 }
 
-// demo 流程 JSON（schemaVersion 1 流程）：进入 form-page.html 即把 #contactPhone 填为常量值。
-// 值用 7+ 位电话样式，兼证脱敏展示。导入校验会重写 envelope（id/status/provenance），故只需
-// 内容字段；无提交类动作，无需 businessKey。
-export function demoFlowJson(site: string, opts: { name?: string; value: string; label?: string }): string {
+// demo 流程 JSON（schemaVersion 1 流程）：进入 form-page.html 即把目标输入（默认 #contactPhone，
+// 可选 #remark——多计划故事需要同页第二字段）填为常量值。值用 7+ 位电话样式，兼证脱敏展示。
+// 导入校验会重写 envelope（id/status/provenance），故只需内容字段；无提交类动作，无需 businessKey。
+export function demoFlowJson(site: string, opts: { name?: string; value: string; label?: string; field?: 'contactPhone' | 'remark' }): string {
+  const field = opts.field ?? 'contactPhone'
   return JSON.stringify({
     schemaVersion: 1,
     name: opts.name ?? `Demo flow ${opts.value.slice(0, 3)}`,
@@ -412,7 +414,7 @@ export function demoFlowJson(site: string, opts: { name?: string; value: string;
           kind: 'action',
           action: {
             type: 'setInputValue',
-            target: { clues: { id: 'contactPhone' }, componentType: 'input', displayLabel: opts.label ?? '联系电话' },
+            target: { clues: { id: field }, componentType: 'input', displayLabel: opts.label ?? (field === 'remark' ? '备注' : '联系电话') },
             value: opts.value,
           },
         },
@@ -549,6 +551,161 @@ export async function peekSessionStore(page: Page, key: string): Promise<unknown
 export async function countPendingHandovers(page: Page): Promise<number> {
   const value = await peekSessionStore(page, 'pendingHandovers')
   return Array.isArray(value) ? value.length : 0
+}
+
+// 每日计划的「当前时刻 + offsetMs」时间串（HH:mm）：nextOccurrenceAfter 按墙钟分量取该分钟桶
+// 的 0 秒为 occurrence，保存（点保存的时刻）落在桶内，到点间隔约 offset-60s ~ offset——一次真实
+// 等待覆盖墙钟路径且高于 Chrome 30s alarm 最小间隔（PRD §5.2：可控短间隔，不等真实长周期）。
+export function dailyTimeIn(offsetMs: number): string {
+  const target = new Date(Date.now() + offsetMs)
+  return `${String(target.getHours()).padStart(2, '0')}:${String(target.getMinutes()).padStart(2, '0')}`
+}
+
+// 计划卡片（FlowEditor 内 section，aria-label 双语）
+export function schedulesCard(page: Page) {
+  return page.locator('section.sp-card[aria-label="Schedules"], section.sp-card[aria-label="定时计划"]')
+}
+
+export async function openScheduleCreate(page: Page): Promise<void> {
+  await schedulesCard(page).getByRole('button', { name: /^(Add schedule|新建计划)$/ }).click()
+  await expect(page.locator('#schedule-kind')).toBeVisible()
+}
+
+export interface ScheduleFormFields {
+  kind: 'daily' | 'weekly' | 'interval'
+  time?: string
+  weekday?: number
+  minutes?: number
+  entryUrl: string
+}
+
+// 时刻字段最后填：调用方在参数处计算的时刻串到「保存生效」之间的窗口只剩本次 fill + 点击，
+// 把负载尖峰下 UI 延迟把 occurrence 推过分钟桶（落入明日）的风险压到分钟桶余量（≥60s）之内。
+export async function fillScheduleForm(page: Page, fields: ScheduleFormFields): Promise<void> {
+  await page.locator('#schedule-kind').selectOption(fields.kind)
+  await page.locator('#schedule-entry').fill(fields.entryUrl)
+  if (fields.kind === 'weekly') await page.locator('#schedule-weekday').selectOption(String(fields.weekday))
+  if (fields.kind === 'interval') await page.locator('#schedule-minutes').fill(String(fields.minutes))
+  if (fields.kind !== 'interval') await page.locator('#schedule-time').fill(fields.time!)
+}
+
+// 保存计划（仅点击；被拒等不适用成功行断言的路径由调用方自行断言提示）
+export async function saveSchedule(page: Page): Promise<void> {
+  await schedulesCard(page).getByRole('button', { name: /^(Save schedule|保存计划)$/ }).click()
+}
+
+// 保存并断言列表行出现（行以周期描述文本定位：Daily HH:mm / Weekly Monday HH:mm / Every N min）
+export async function saveScheduleExpectRow(page: Page, rowPattern: RegExp): Promise<void> {
+  await saveSchedule(page)
+  await expect(schedulesCard(page).locator('p.sp-desc', { hasText: rowPattern })).toBeVisible({ timeout: 15_000 })
+}
+
+// 行内编辑入口：定位行描述所在的 sp-field（按钮与描述同层）
+function scheduleRowField(page: Page, rowPattern: RegExp) {
+  return schedulesCard(page).locator('div.sp-field').filter({
+    has: page.locator('p.sp-desc', { hasText: rowPattern }),
+  })
+}
+
+export async function editScheduleViaUi(page: Page, rowPattern: RegExp): Promise<void> {
+  await scheduleRowField(page, rowPattern).getByRole('button', { name: /^(Edit|编辑)$/ }).click()
+  await expect(page.locator('#schedule-kind')).toBeVisible()
+}
+
+export async function deleteScheduleViaUi(page: Page, rowPattern: RegExp): Promise<void> {
+  await scheduleRowField(page, rowPattern).getByRole('button', { name: /^(Delete|删除)$/ }).click()
+  await expect(schedulesCard(page).locator('p.sp-desc', { hasText: rowPattern })).toHaveCount(0, { timeout: 15_000 })
+}
+
+// 计划记录（local:flowSchedules）宽松形状：用例按需窄化断言字段
+export interface FlowScheduleRecord {
+  id: string
+  flowId: string
+  site: string
+  entryUrl: string
+  period: { kind: string; time?: string; weekday?: number; minutes?: number }
+  nextDueAt: number
+  [key: string]: unknown
+}
+
+export async function peekFlowSchedules(page: Page): Promise<FlowScheduleRecord[]> {
+  const value = await peekExtensionLocal(page, 'flowSchedules')
+  return Array.isArray(value) ? value as FlowScheduleRecord[] : []
+}
+
+export async function peekPendingTimedStarts(page: Page): Promise<unknown[]> {
+  const value = await peekExtensionLocal(page, 'pendingTimedStarts')
+  return Array.isArray(value) ? value : []
+}
+
+// 受信任扩展页直写存储：伪造计划记录 / 业务占用等测试前置。绕过后台单写者，仅用于按
+// PRD §5.2 前提构造触发条件（过期记录、上限存量、占用未解除），不用于替代被测路径。
+export async function pokeExtensionStorage(
+  page: Page, area: 'local' | 'session', key: string, value: unknown,
+): Promise<void> {
+  await page.evaluate(async (args: { area: string; key: string; value: unknown }) => {
+    const store = (globalThis as any).chrome?.storage?.[args.area]
+    if (!store) throw new Error(`当前页不是扩展页（chrome.storage.${args.area} 不可用）`)
+    await store.set({ [args.key]: args.value })
+  }, { area, key, value })
+}
+
+export async function pokeFlowSchedules(page: Page, schedules: unknown[]): Promise<void> {
+  await pokeExtensionStorage(page, 'local', 'flowSchedules', schedules)
+}
+
+// 业务实例占用直写（session:businessClaims 形状：{ key: site|flowId|businessKey, claimedAt }[]）
+export async function pokeBusinessClaims(page: Page, keys: string[]): Promise<void> {
+  const claimedAt = Date.now()
+  await pokeExtensionStorage(page, 'session', 'businessClaims', keys.map(key => ({ key, claimedAt })))
+}
+
+// 「浏览器重启」替身（错过故事的冷启动路径）：在同一 profile 目录上先关旧 persistent context
+// 再启动新 context——storage.local 落盘留存（流程/计划/描述符），alarm 与 SW 随旧进程消亡；
+// 新进程的 SW 冷启动执行 main body 的 reconcileSchedules，正是「浏览器关闭期间到点，之后启动
+// 浏览器」的真实语义。chrome.runtime.reload() 在本 fixture 的 headless 加载形态下会永久禁用
+// 扩展（实测：无新 worker、扩展页全部 ERR_BLOCKED_BY_CLIENT），重启以换进程实现。
+// profileDir 的创建与清理由调用方负责；旧 context 也由调用方先行关闭后再调用。
+export interface RelaunchedDevice {
+  context: BrowserContext
+  extensionId: string
+}
+
+export async function relaunchExtensionOnProfile(
+  profileDir: string, headless: boolean,
+): Promise<RelaunchedDevice> {
+  const manifest = await readExtensionManifest()
+  const context = await launchExtensionContext(extensionPath, headless, profileDir)
+  try {
+    const extensionId = await resolveExtensionId(context, manifest)
+    return { context, extensionId }
+  } catch (error) {
+    await context.close()
+    throw error
+  }
+}
+
+// 等待扩展自动打开（定时分发 tabs.create）或其它来源出现的新标签页；只认本次调用后新出现的
+// 页面，返回首个 URL 命中 urlPart 的标签页。
+export async function waitForTabPage(context: BrowserContext, urlPart: string, timeout = 30_000): Promise<Page> {
+  const existing = new Set(context.pages())
+  const deadline = Date.now() + timeout
+  for (;;) {
+    for (const p of context.pages()) {
+      if (!existing.has(p) && p.url().includes(urlPart)) return p
+    }
+    if (Date.now() > deadline) throw new Error(`等待 URL 含 ${urlPart} 的新标签页超时`)
+    await new Promise(resolve => setTimeout(resolve, 300))
+  }
+}
+
+// 「原定时刻零动作」断言：静置 holdMs 后，context 内不应存在任何 URL 命中的标签页（到点分发
+// 的可观察面只有开页；不开页 = 零动作）。
+export async function expectNoTabPage(context: BrowserContext, urlPart: string, holdMs: number): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, holdMs))
+  for (const p of context.pages()) {
+    expect(p.url(), `不应出现 ${urlPart} 标签页，实际：${p.url()}`).not.toContain(urlPart)
+  }
 }
 
 // 三档角色徽标文案（空间行与成员行共用一套词表；en/zh 双语 regex）。
