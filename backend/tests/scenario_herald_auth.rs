@@ -42,9 +42,12 @@ const REALM_OTHER: &str = "oncewise-other";
 static SUITE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 impl Herald {
-    /// Idempotent seed: two realms, the BFF client app (both realms — the second backs the
-    /// realm-mismatch case), one role, and the per-test users. Re-running resets account
-    /// status, so a disabled account from a previous run never leaks in.
+    /// Idempotent seed: two realms, the realm's first-party login client (Herald ≥0.6.6
+    /// refuses /authorize without one — every provisioned realm ships an enabled
+    /// admin-web-console, which a hand-created test realm must mirror), the BFF client app
+    /// (both realms — the second backs the realm-mismatch case), one role, and the per-test
+    /// users. Re-running resets account status, so a disabled account from a previous run
+    /// never leaks in.
     async fn seed(&self) {
         let users: &[(&str, &str, bool)] = &[
             (REALM, "a02@test.oncewise.local", false),
@@ -93,6 +96,9 @@ impl Herald {
              \n  SELECT password INTO v_hash FROM account WHERE realm_id = 'admin' LIMIT 1;\
              \n  INSERT INTO realm (id, name) VALUES ('{REALM}', 'OnceWise Test') ON CONFLICT (id) DO NOTHING;\
              \n  INSERT INTO realm (id, name) VALUES ('{REALM_OTHER}', 'OnceWise Other') ON CONFLICT (id) DO NOTHING;\
+             \n  INSERT INTO client_app (id, realm_id, client_id, name, is_first_party, enabled)\
+             \n  VALUES (uuidv7(), '{REALM}', 'admin-web-console', 'Admin Web Console', true, true)\
+             \n  ON CONFLICT (realm_id, client_id) DO NOTHING;\
              \n  INSERT INTO client_app (id, realm_id, client_id, name, redirect_uris)\
              \n  VALUES (uuidv7(), '{REALM}', '{CLIENT_ID}', 'OnceWise Sync BFF', '[\"{CALLBACK_URI}\"]'::jsonb)\
              \n  ON CONFLICT (realm_id, client_id) DO UPDATE SET redirect_uris = EXCLUDED.redirect_uris;\
@@ -162,7 +168,8 @@ impl Herald {
         assert_eq!(
             response.status().as_u16(),
             302,
-            "Herald authorize did not redirect to the login page: {}",
+            "Herald authorize did not redirect (0.6.6+ hands the browser to the consent \
+             page, earlier versions to the login page): {}",
             response.text().await.unwrap_or_default()
         );
         let state = query_param_of(authorize_url, "state").expect("state in authorize url");

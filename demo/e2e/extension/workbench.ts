@@ -63,9 +63,19 @@ export async function openFlowsTab(page: Page): Promise<void> {
   await page.locator('nav.sp-nav .sp-tab', { hasText: /^(Flows|流程)$/ }).click()
 }
 
+// 同步页的三个表单（服务器地址/创建空间/凭码加入）默认折叠为按钮，展开后才渲染输入框。
+// 填写前先确保已展开：已展开时再点 toggle 会把表单收起，所以必须先探输入框可见性。
+export async function expandSyncForm(page: Page, inputSel: string, toggle: RegExp): Promise<void> {
+  const input = page.locator(inputSel)
+  if (await input.isVisible()) return
+  await page.getByRole('button', { name: toggle }).click()
+  await expect(input).toBeVisible()
+}
+
 // Connect：填写服务器地址并连接（保存 + 探测）。此 helper 断言可达成功，失败时把错误文案
 // 带进断言消息。
 export async function connectServer(page: Page, origin: string): Promise<void> {
+  await expandSyncForm(page, '#sync-server', /^(Change address|修改地址)$/)
   await page.locator('#sync-server').fill(origin)
   await page.getByRole('button', { name: /^(Connect|连接)$/ }).click()
   const reachable = page.locator('p.sp-hint', { hasText: /^(Server reachable|服务可达)/ })
@@ -78,6 +88,7 @@ export async function connectServer(page: Page, origin: string): Promise<void> {
 // SyncSpacesView 的 notice（创建/加入/忘记/删除的结果文案）统一以 p.sp-error 渲染（该视图
 // 不按成败切类名，成功文案也在此元素上）；只有 serverMsg 与详情视图 notice 按 kind 切类。
 export async function createSpaceViaUi(page: Page, name: string): Promise<void> {
+  await expandSyncForm(page, '#sync-space-name', /^(Create space|创建空间)$/)
   await page.locator('#sync-space-name').fill(name)
   await page.getByRole('button', { name: /^(Create space|创建空间)$/ }).click()
   await expect(page.locator('p.sp-error', { hasText: /created and selected|已创建空间/ }))
@@ -98,6 +109,7 @@ export async function readSpaceCode(page: Page, spaceName: string): Promise<stri
 // 凭码提交加入表单（填码 + 点 Join）。提交后的结果文案（成功/已用/过期/登录门禁/服务故障）
 // 因场景而异，由调用方自行断言。
 export async function submitJoinCode(page: Page, code: string): Promise<void> {
+  await expandSyncForm(page, '#sync-join-code', /^(Join|加入)$/)
   await page.locator('#sync-join-code').fill(code)
   await page.getByRole('button', { name: /^(Join|加入)$/ }).click()
 }

@@ -54,10 +54,13 @@ test('T2 不配置不影响本地：同步页预置默认服务器，流程闭�
   // 首启 onboarding 流程不变（确认后进入工作台导航）
   await ackOnboarding(page)
 
-  // 未显式配置服务器：地址栏预置托管默认（产品内置 DEFAULT_SYNC_SERVER_URL），
+  // 未显式配置服务器：折叠状态行显示托管默认地址（产品内置 DEFAULT_SYNC_SERVER_URL），
   // 空间清单为空态；同步面板可用与否不影响本地
   await openSyncTab(page)
-  await expect(page.locator('#sync-server')).toHaveValue('https://auto.fornetcode.com')
+  await expect(page.locator(
+    'section.sp-card[aria-label="Server"] .sp-desc, section.sp-card[aria-label="服务器"] .sp-desc',
+    { hasText: 'https://auto.fornetcode.com' },
+  )).toBeVisible()
   await expect(page.locator('p.sp-hint', { hasText: /No spaces yet|尚无空间/ })).toBeVisible()
 
   // 流程视图照常可用（空态提示，无任何同步前置）

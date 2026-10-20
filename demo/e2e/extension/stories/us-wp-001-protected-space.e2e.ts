@@ -2,8 +2,8 @@ import { expect, test } from '../fixtures'
 import { startHeraldContainerAndWait, startHeraldServer, stopHeraldContainer } from '../herald'
 import {
   ackOnboarding, autoAcceptDialogs, connectAndExpectSignIn, createSpaceViaUi, expectMemberRow,
-  expectNoShareCodeRow, expectSpaceRoleBadge, issueInviteAndReadCode, openSpaceMembers, openWorkbench,
-  peekSyncSpaces, signInViaUi, spaceGroup,
+  expectNoShareCodeRow, expandSyncForm, expectSpaceRoleBadge, issueInviteAndReadCode, openSpaceMembers,
+  openWorkbench, peekSyncSpaces, signInViaUi, spaceGroup,
 } from '../workbench'
 
 // US-WP-001 创建受保护空间并成为所有者（docs/user-stories/auth/space-permissions.md 故事 1）。
@@ -66,6 +66,7 @@ test('T2 权限服务不可用时创建失败（fail-closed）：明确可重试
     // 真实故障手段（与后端 w06 同款）：停 Herald 容器后创建——后端组织登记失败整体回滚 503，
     // 扩展经既有 auth-unavailable 文案明确「稍后重试」
     await stopHeraldContainer()
+    await expandSyncForm(page, '#sync-space-name', /^(Create space|创建空间)$/)
     await page.locator('#sync-space-name').fill('Fault Space')
     await page.getByRole('button', { name: /^(Create space|创建空间)$/ }).click()
     await expect(page.locator('p.sp-error', { hasText: /temporarily unavailable — try again later|暂不可用，请稍后重试/ }))

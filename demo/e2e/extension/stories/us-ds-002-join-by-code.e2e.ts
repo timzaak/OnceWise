@@ -7,7 +7,7 @@ import {
   ackOnboarding, autoAcceptDialogs, connectServer, createSpaceViaUi, demoFlowJson,
   joinSpaceViaUi, openScriptDetail, openSpaceScripts, openSyncTab,
   openWorkbench, pullVersion, readSpaceCode, renameScript, scriptCard,
-  seedFlow, uploadFlowAsScript, spaceGroup,
+  seedFlow, submitJoinCode, uploadFlowAsScript, spaceGroup,
 } from '../workbench'
 
 // US-DS-002 凭空间码加入空间（docs/user-stories/core/data-sync.md 故事 2）。
@@ -88,8 +88,8 @@ test('T2 无效空间码：格式本地拒绝、未知 ID 与错密钥服务端�
     await connectServer(b.page, server.origin)
 
     const joinExpecting = async (codeText: string, message: RegExp) => {
-      await b!.page.locator('#sync-join-code').fill(codeText)
-      await b!.page.getByRole('button', { name: /^(Join|加入)$/ }).click()
+      // submitJoinCode 自带按需展开：首次调用时加入表单还是折叠按钮
+      await submitJoinCode(b!.page, codeText)
       await expect(b!.page.locator('p.sp-error', { hasText: message })).toBeVisible()
       // 三种失败后 B 的空间清单保持为空（不记入本机）
       await expect(b!.page.locator('.sp-group')).toHaveCount(0)

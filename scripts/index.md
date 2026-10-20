@@ -29,7 +29,7 @@
 | 停止（移除 Herald/Redis 测试容器，不动共享 PostgreSQL 与 `herald_test` 库） | `uv run scripts/test-stop.py` |
 
 - 地址：Herald `http://127.0.0.1:13001`（就绪判定 `/health`）、Herald 库 `herald_test`（共享 demo PostgreSQL 5432 上）、Redis `127.0.0.1:16381`；`TEST_HERALD_URL` / `TEST_HERALD_DATABASE_URL` / `TEST_HERALD_REDIS` 可覆盖。
-- 镜像默认 `ghcr.io/timzaak/herald:0.6.4`（space-permissions 组织授权能力面所在版本），`HERALD_IMAGE` 可覆盖；生成的 config.toml 含 `static_dir`，在 API origin 服务真实登录页。
+- 镜像默认 `ghcr.io/timzaak/herald:0.6.7`（跟随上游 cas-2 发布钉版；组织授权能力面要求 ≥0.6.4），`HERALD_IMAGE` 可覆盖；生成的 config.toml 含 `static_dir`，在 API origin 服务真实登录页。
 - 前置：uv、Docker；共享 PostgreSQL 由脚本自动确保（本机 5432 无监听时起 `oncewise-demo-pg`）。
 
 ## 前端测试（扩展 Demo e2e）
@@ -40,5 +40,5 @@
 | 失败用例重测 | 上述命令追加 `--grep "<完整测试标题>"`，使用新的 run ID；通过后重跑整文件 |
 
 - ⚠️ 每次执行前先扩展构建 `cd extension && npm run build`，成功后才启动 runner（`.output/chrome-mv3-dev` 热更新产物不得作为验证输入）。
-- 环境由 fixture/用例自管（扩展加载、临时 profile、同步服务端、宿主静态页均自起自清），runner 不提供任何环境管理；us-hs 与 us-wp 故事先起 Herald 鉴权测试环境（见上，us-wp 同一 0.6.4 钉版口径）。
+- 环境由 fixture/用例自管（扩展加载、临时 profile、同步服务端、宿主静态页均自起自清），runner 不提供任何环境管理；us-hs 与 us-wp 故事先起 Herald 鉴权测试环境（见上，us-wp 同一钉版口径）。
 - 日志：runner 末行 `Result`（`logs` 相对 `demo/`），常见位置 `demo/test-results/runs/<run-id>/` 与统一日志 `demo/test-results/unified-logs/`。

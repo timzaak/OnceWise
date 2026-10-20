@@ -4,7 +4,7 @@ import { SyncServer } from '../sync-server'
 import { startHostSite, type HostSite } from '../host-site'
 import {
   ackOnboarding, autoAcceptDialogs, connectServer, createSpaceViaUi, demoFlowJson,
-  enableFlowFromFlowsTab, expectHostPhoneFilled, expectFlowStatus,
+  enableFlowFromFlowsTab, expandSyncForm, expectHostPhoneFilled, expectFlowStatus,
   openHostPage, openSpaceScripts, openSyncTab,
   openWorkbench, seedFlow, uploadFlowAsScript,
 } from '../workbench'
@@ -75,6 +75,7 @@ test('T2 失败原因可见且可重试：停止时操作失败原因展示，�
     // 文案为「登录服务暂不可用，可稍后重试」，同为可见+可重试）
     await server.stop()
     await openSyncTab(page)
+    await expandSyncForm(page, '#sync-space-name', /^(Create space|创建空间)$/)
     await page.locator('#sync-space-name').fill('Second Space')
     await page.getByRole('button', { name: /^(Create space|创建空间)$/ }).click()
     await expect(page.locator('p.sp-error', { hasText: /temporarily unavailable — try again later|暂不可用，请稍后重试/ }))
@@ -86,6 +87,8 @@ test('T2 失败原因可见且可重试：停止时操作失败原因展示，�
     await openSyncTab(page)
     let reachable = false
     for (let attempt = 0; attempt < 4 && !reachable; attempt++) {
+      // 成功连接即收起地址表单，SW 侧重试轮里先确保表单展开再点连接
+      await expandSyncForm(page, '#sync-server', /^(Change address|修改地址)$/)
       await page.getByRole('button', { name: /^(Connect|连接)$/ }).first().click()
       try {
         await expect(page.locator('p.sp-hint', { hasText: /^(Server reachable|服务可达)/ })).toBeVisible({ timeout: 10_000 })

@@ -2,6 +2,10 @@
 // create (id generated on this device; key-less org-bound creation on space-permissions
 // servers, otherwise the original key path), join by a pasted space code or invite code, select,
 // copy the share code, forget (local), delete (server) or leave (org-bound self-exit).
+// Progressive disclosure: status content (server row, spaces list) is always shown; every form
+// (server address, create, join) starts collapsed behind a button and expands on demand —
+// the join form must stay reachable while signed out (the gate refusal keeps the pasted code
+// in the form, pinned by us-wp-002 T4).
 import { useState } from 'react';
 import { parseOrigin } from '@/lib/flow-schema';
 import type { SyncCall, SyncHealth } from '@/lib/use-sync';
@@ -59,18 +63,23 @@ export default function SyncSpacesView({
   onOpenScripts,
   onOpenMembers,
 }: Props) {
+  const configured = status.serverUrl !== '';
   const [serverInput, setServerInput] = useState(status.serverUrl);
   const [serverBusy, setServerBusy] = useState(false);
   const [serverMsg, setServerMsg] = useState<{ kind: 'error' | 'ok'; text: string } | null>(null);
+  // The address form only mounts while editing: configured servers show the compact status row
+  // (address + health), matching the row the other sync views render
+  const [editingServer, setEditingServer] = useState(!configured);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [createName, setCreateName] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const rawInput = serverInput.trim();
   const parsedOrigin = rawInput === '' ? null : parseOrigin(rawInput.includes('://') ? rawInput : `https://${rawInput}`);
-  const configured = status.serverUrl !== '';
 
   const connectServer = () => {
     setNotice(null);
@@ -99,6 +108,7 @@ export default function SyncSpacesView({
           });
           return;
         }
+        setEditingServer(false);
         const next = await probeHealth();
         // The parent's status snapshot decides whether the spaces forms are enabled — refresh it
         onChanged();
@@ -130,6 +140,7 @@ export default function SyncSpacesView({
         return;
       }
       setCreateName('');
+      setCreating(false);
       setNotice(t('sync.spaces.createdOk', { name: res.space!.name }));
       onChanged();
     } finally {
@@ -151,6 +162,7 @@ export default function SyncSpacesView({
         return;
       }
       setJoinCode('');
+      setJoining(false);
       setNotice(t('sync.spaces.joinedOk', { name: res.space!.name }));
       onChanged();
     } finally {
@@ -238,38 +250,56 @@ export default function SyncSpacesView({
             ⓘ
           </a>
         </h2>
-        {configured && (
-          <p className="sp-sub">
-            {t('sync.server.current', {
-              url: status.serverUrl,
-              state:
-                health === 'ok'
-                  ? t('sync.server.state.ok')
+        {configured && !editingServer ? (
+          <div className="sp-row" style={{ justifyContent: 'space-between' }}>
+            <span className="sp-desc">{status.serverUrl}</span>
+            <div className="sp-row">
+              <span className={`sp-badge ${health === 'ok' ? 'enabled' : health === 'unreachable' ? 'fail' : ''}`}>
+                {health === 'ok'
+                  ? t('sync.state.ok')
                   : health === 'unreachable'
-                    ? t('sync.server.state.unreachable')
-                    : t('sync.server.state.unknown'),
-            })}
-          </p>
-        )}
-        <div className="sp-field">
-          <label className="sp-label" htmlFor="sync-server">{t('sync.server.label')}</label>
-          <input
-            id="sync-server"
-            className="sp-input"
-            placeholder={t('sync.server.placeholder')}
-            value={serverInput}
-            onChange={(e) => setServerInput(e.target.value)}
-          />
-        </div>
-        {parsedOrigin?.startsWith('http://') && (
-          <p className="sp-warn">{t('sync.server.httpWarn')}</p>
+                    ? t('sync.state.unreachable')
+                    : t('sync.state.unknown')}
+              </span>
+              <button type="button" className="sp-btn" onClick={() => void probeHealth()}>
+                {t('sync.server.probe')}
+              </button>
+              <button
+                type="button"
+                className="sp-btn"
+                onClick={() => {
+                  setServerInput(status.serverUrl);
+                  setServerMsg(null);
+                  setEditingServer(true);
+                }}
+              >
+                {t('sync.server.change')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="sp-field">
+              <label className="sp-label" htmlFor="sync-server">{t('sync.server.label')}</label>
+              <input
+                id="sync-server"
+                className="sp-input"
+                placeholder={t('sync.server.placeholder')}
+                value={serverInput}
+                onChange={(e) => setServerInput(e.target.value)}
+              />
+            </div>
+            {parsedOrigin?.startsWith('http://') && (
+              <p className="sp-warn">{t('sync.server.httpWarn')}</p>
+            )}
+            <div className="sp-row">
+              <button type="button" className="sp-btn primary" disabled={serverBusy} onClick={connectServer}>
+                {serverBusy ? t('sync.server.connecting') : t('sync.server.connect')}
+              </button>
+            </div>
+          </>
         )}
         {serverMsg && <p className={serverMsg.kind === 'ok' ? 'sp-hint' : 'sp-error'}>{serverMsg.text}</p>}
-        <div className="sp-row">
-          <button type="button" className="sp-btn primary" disabled={serverBusy} onClick={connectServer}>
-            {serverBusy ? t('sync.server.connecting') : t('sync.server.connect')}
-          </button>
-        </div>
       </section>
 
       <section className="sp-card" aria-label={t('sync.spaces.title')}>
@@ -355,35 +385,67 @@ export default function SyncSpacesView({
       {configured && (
         <>
           <section className="sp-card" aria-label={t('sync.spaces.create')}>
-            <div className="sp-field">
-              <label className="sp-label" htmlFor="sync-space-name">{t('sync.spaces.newName')}</label>
-              <input
-                id="sync-space-name"
-                className="sp-input"
-                placeholder={t('sync.spaces.namePlaceholder')}
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
-              />
-            </div>
-            <button type="button" className="sp-btn primary" disabled={busy} onClick={() => void create()}>
-              {t('sync.spaces.create')}
-            </button>
+            {creating ? (
+              <>
+                <div className="sp-field">
+                  <label className="sp-label" htmlFor="sync-space-name">{t('sync.spaces.newName')}</label>
+                  <input
+                    id="sync-space-name"
+                    className="sp-input"
+                    placeholder={t('sync.spaces.namePlaceholder')}
+                    value={createName}
+                    onChange={(e) => setCreateName(e.target.value)}
+                  />
+                </div>
+                <div className="sp-row">
+                  <button type="button" className="sp-btn primary" disabled={busy} onClick={() => void create()}>
+                    {t('sync.spaces.create')}
+                  </button>
+                  {/* Cancel only collapses — the typed name stays for a re-open */}
+                  <button type="button" className="sp-btn" disabled={busy} onClick={() => setCreating(false)}>
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="sp-row">
+                <button type="button" className="sp-btn" onClick={() => setCreating(true)}>
+                  {t('sync.spaces.create')}
+                </button>
+              </div>
+            )}
           </section>
 
           <section className="sp-card" aria-label={t('sync.spaces.join')}>
-            <div className="sp-field">
-              <label className="sp-label" htmlFor="sync-join-code">{t('sync.spaces.joinLabel')}</label>
-              <input
-                id="sync-join-code"
-                className="sp-input"
-                placeholder={t('sync.spaces.joinPlaceholder')}
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value)}
-              />
-            </div>
-            <button type="button" className="sp-btn primary" disabled={busy} onClick={() => void join()}>
-              {t('sync.spaces.join')}
-            </button>
+            {joining ? (
+              <>
+                <div className="sp-field">
+                  <label className="sp-label" htmlFor="sync-join-code">{t('sync.spaces.joinLabel')}</label>
+                  <input
+                    id="sync-join-code"
+                    className="sp-input"
+                    placeholder={t('sync.spaces.joinPlaceholder')}
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value)}
+                  />
+                </div>
+                <div className="sp-row">
+                  <button type="button" className="sp-btn primary" disabled={busy} onClick={() => void join()}>
+                    {t('sync.spaces.join')}
+                  </button>
+                  {/* Same retention rule as a gate refusal: cancel collapses but keeps the pasted code */}
+                  <button type="button" className="sp-btn" disabled={busy} onClick={() => setJoining(false)}>
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="sp-row">
+                <button type="button" className="sp-btn" onClick={() => setJoining(true)}>
+                  {t('sync.spaces.join')}
+                </button>
+              </div>
+            )}
           </section>
         </>
       )}

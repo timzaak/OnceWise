@@ -3,7 +3,7 @@
 Mirrors the rmqtt-things test tooling pattern: one shared PostgreSQL (the demo container,
 same one the scenario tests use for TEST_DATABASE_URL) hosts Herald's ``herald_test``
 database; Redis and Herald run as dedicated test containers. The Herald image defaults to
-``ghcr.io/timzaak/herald:0.6.1`` and can be overridden via the ``HERALD_IMAGE`` env var.
+``ghcr.io/timzaak/herald:0.6.7`` and can be overridden via the ``HERALD_IMAGE`` env var.
 
 Realm / client app / test users are NOT seeded here — the Rust tests seed them idempotently
 directly against Herald's database (see backend/tests/scenario_herald_auth.rs).
@@ -26,7 +26,7 @@ HERALD_DATABASE_NAME = "herald_test"
 HERALD_DATABASE_URL = f"postgres://postgres:postgres@127.0.0.1:5432/{HERALD_DATABASE_NAME}"
 HERALD_REDIS_ADDR = f"127.0.0.1:{REDIS_PORT}"
 
-HERALD_IMAGE_DEFAULT = "ghcr.io/timzaak/herald:0.6.4"
+HERALD_IMAGE_DEFAULT = "ghcr.io/timzaak/herald:0.6.7"
 REDIS_IMAGE = "redis:8.4-alpine"
 
 # The BFF redirect URI whitelisted in the seeded Herald client app. Nothing ever serves it:
