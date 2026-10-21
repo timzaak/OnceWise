@@ -72,10 +72,12 @@ export async function expandSyncForm(page: Page, inputSel: string, toggle: RegEx
   await expect(input).toBeVisible()
 }
 
-// Connect：填写服务器地址并连接（保存 + 探测）。此 helper 断言可达成功，失败时把错误文案
-// 带进断言消息。
+// Connect：切换「自建」模式后填写服务器地址并连接（保存 + 探测）。此 helper 断言可达成功，
+// 失败时把错误文案带进断言消息。展开探针用模式选择器（官方模式下地址输入框不渲染，
+// #sync-server 不存在）。
 export async function connectServer(page: Page, origin: string): Promise<void> {
-  await expandSyncForm(page, '#sync-server', /^(Change address|修改地址)$/)
+  await expandSyncForm(page, '#sync-server-mode', /^(Change address|修改地址)$/)
+  await page.locator('#sync-server-mode').selectOption('custom')
   await page.locator('#sync-server').fill(origin)
   await page.getByRole('button', { name: /^(Connect|连接)$/ }).click()
   const reachable = page.locator('p.sp-hint', { hasText: /^(Server reachable|服务可达)/ })

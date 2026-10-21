@@ -12,11 +12,11 @@
 
 **OnceWise Flow Browser Extension — Privacy Policy**
 
-Effective date: 2026-10-07
+Effective date: 2026-10-21
 
 ### Overview
 
-OnceWise Flow is a self-service browser automation extension. It turns web page operations you specify into automation flows ("constrained step trees") and runs them on the target pages you choose. The extension is local-first: your data is processed in your browser, and the extension developer does not collect, receive, or sell any of your data.
+OnceWise Flow is a self-service browser automation extension. It turns web page operations you specify into automation flows ("constrained step trees") and runs them on the target pages you choose. The extension is local-first: your data is processed in your browser, nothing leaves your device unless you explicitly save a flow as a script into a sync space, and the extension developer does not sell your data.
 
 ### What the extension stores on your device
 
@@ -29,9 +29,9 @@ Data read from web pages during a flow run is processed in memory to execute tha
 
 ### Data transmission
 
-The extension makes network requests to exactly one kind of destination, and only when you configure it:
+The extension makes network requests to exactly one kind of destination — a oncewise-ai-sync sync server — and only when you use the Sync tab:
 
-- **A sync server you configure.** If you set up synchronization, the extension sends your flows/scripts and related configuration to the oncewise-ai-sync server URL you enter, authenticated with the space key you provide. That server is operated by you or whoever you trust with the URL. The extension developer operates no server in this loop and never sees your data.
+- **The sync server configured in the Sync tab.** The extension ships pre-configured against the official hosted sync service, which is operated by the extension developer; you can switch it to your own oncewise-ai-sync deployment at any time. Opening the Sync tab sends an automated sign-in-mode check to the configured server (it carries no flow data); your flows/scripts and related configuration are transmitted only when you save a script into a space, pull a script, or manage spaces and members — only the content involved in that action. Key spaces authenticate with the space key you hold; sign-in-gated spaces use the server's own sign-in: credentials are entered on the server's login page and never pass through the extension, and the resulting sign-in tokens are stored only on your device.
 
 Besides network requests, the extension exchanges data over one kind of channel that never leaves your device:
 
@@ -49,7 +49,7 @@ There is no analytics, telemetry, advertising, or tracking of any kind, and the 
 ### Retention and deletion
 
 - Uninstalling the extension deletes all locally stored flows and settings.
-- Data previously synced to a sync server is governed by the operator of that server; remove it with that server's own means (or stop using it).
+- Data previously saved to a sync space lives on that sync server and is governed by its operator — the extension developer for the official hosted service, or whoever runs your self-hosted deployment. Spaces and scripts can be deleted with the controls inside the extension (deleting a space removes its scripts from the server), or you can stop using sync.
 - The optional native host lives outside the browser, so uninstalling the extension does not remove it; its files (host script, manifest, socket directory) can be deleted with the uninstall command shipped with the agent skills.
 
 ### Changes
@@ -66,11 +66,11 @@ zsy.evan@gmail.com
 
 **OnceWise Flow 浏览器扩展 — 隐私政策**
 
-生效日期：2026-10-07
+生效日期：2026-10-21
 
 ### 概述
 
-OnceWise Flow 是一个自助浏览器自动化扩展。它把你指定的网页操作固化为自动化流程（受约束步骤树），并只在你选择的目标页面上运行。扩展以本地优先方式工作：数据在你的浏览器内处理，扩展开发者不收集、不接收、不出售你的任何数据。
+OnceWise Flow 是一个自助浏览器自动化扩展。它把你指定的网页操作固化为自动化流程（受约束步骤树），并只在你选择的目标页面上运行。扩展以本地优先方式工作：数据在你的浏览器内处理，除非你主动把流程保存为脚本放入同步空间，任何数据都不会离开你的设备；扩展开发者不出售你的任何数据。
 
 ### 扩展在设备上存储的内容
 
@@ -83,9 +83,9 @@ OnceWise Flow 是一个自助浏览器自动化扩展。它把你指定的网页
 
 ### 数据传输
 
-扩展只向一类目的地发起网络请求，且仅在你主动配置时发生：
+扩展只向一类目的地发起网络请求——oncewise-ai-sync 同步服务器，且仅在你使用「同步」页签的功能时发生：
 
-- **你配置的同步服务器。** 若你启用同步，扩展会把你的流程/脚本及相关配置发送到你填写的 oncewise-ai-sync 服务器地址，并使用你提供的空间密钥认证。该服务器由你或你信任的地址运营者管理；扩展开发者在链路中不运营任何服务器，也永远看不到你的数据。
+- **「同步」页签所配置的同步服务器。** 扩展出厂预配置为官方托管同步服务（由扩展开发者运营），你可以随时切换为自己部署的 oncewise-ai-sync 服务器。打开「同步」页签时会对所配置的服务器做一次登录模式自动检查（不发送任何流程数据）；只有当你把流程保存为脚本放入空间、拉取脚本或管理空间与成员时，才会把该操作涉及的流程/脚本内容及配置发送到该服务器。密钥空间使用你持有的空间密钥认证；登录门禁空间使用服务器自身的登录：凭据在服务器自己的登录页输入、不经过扩展，产生的登录令牌只保存在你的设备上。
 
 除网络请求外，扩展还会通过一类完全不离开你设备的通道收发数据：
 
@@ -103,7 +103,7 @@ OnceWise Flow 是一个自助浏览器自动化扩展。它把你指定的网页
 ### 保留与删除
 
 - 卸载扩展即删除本地存储的全部流程和设置。
-- 已同步到同步服务器的数据由该服务器的运营者管理；请通过该服务器自身的手段删除，或停止使用。
+- 已保存到同步空间的数据存放在该同步服务器上，由其运营者管理——使用官方托管服务时即扩展开发者，自建部署时即运行该服务器的人。可通过扩展内的删除控件删除空间与脚本（删除空间会同时删除服务器上的全部脚本），也可停止使用同步。
 - 可选的本机宿主安装在浏览器之外，卸载扩展不会移除它；其文件（宿主脚本、清单、套接字目录）可用 agent skills 随附的卸载命令删除。
 
 ### 政策变更

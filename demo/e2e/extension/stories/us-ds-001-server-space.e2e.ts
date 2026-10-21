@@ -54,14 +54,20 @@ test('T2 不配置不影响本地：同步页预置默认服务器，流程闭�
   // 首启 onboarding 流程不变（确认后进入工作台导航）
   await ackOnboarding(page)
 
-  // 未显式配置服务器：折叠状态行显示托管默认地址（产品内置 DEFAULT_SYNC_SERVER_URL），
-  // 空间清单为空态；同步面板可用与否不影响本地
+  // 未显式配置服务器：折叠状态行显示「官方服务」（产品内置 DEFAULT_SYNC_SERVER_URL，
+  // 官方模式不展示裸地址），空间清单为空态；同步面板可用与否不影响本地
   await openSyncTab(page)
-  await expect(page.locator(
-    'section.sp-card[aria-label="Server"] .sp-desc, section.sp-card[aria-label="服务器"] .sp-desc',
-    { hasText: 'https://auto.fornetcode.com' },
-  )).toBeVisible()
+  const serverCard = page.locator(
+    'section.sp-card[aria-label="Server"], section.sp-card[aria-label="服务器"]',
+  )
+  await expect(serverCard.locator('.sp-desc', { hasText: /^(Official service|官方服务)$/ })).toBeVisible()
+  await expect(serverCard).not.toContainText('fornetcode')
   await expect(page.locator('p.sp-hint', { hasText: /No spaces yet|尚无空间/ })).toBeVisible()
+
+  // 展开修改表单：默认即官方模式，地址输入框不渲染（官方无需也不展示 URL）
+  await page.getByRole('button', { name: /^(Change address|修改地址)$/ }).click()
+  await expect(page.locator('#sync-server-mode')).toBeVisible()
+  await expect(page.locator('#sync-server')).toHaveCount(0)
 
   // 流程视图照常可用（空态提示，无任何同步前置）
   await openFlowsTab(page)

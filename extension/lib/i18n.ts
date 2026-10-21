@@ -248,10 +248,14 @@ const en = {
   'sync.loading': 'Loading sync status…',
   'sync.intro.title': 'Script Sync',
   'sync.intro.body':
-    'Local flows live on this device and keep working without a server. Sync shares them as scripts to a space on your self-hosted server; anyone with the space code can use the same scripts.',
+    'Local flows live on this device and keep working without a server. Sync shares them as scripts to a space on the sync server (the official hosted service by default, or your own); anyone with the space code can use the same scripts.',
   'sync.server.title': 'Server',
   'sync.server.selfHost':
-    'The sync server is self-hosted: you can deploy the server-side container image published by this project yourself — source and deployment docs: https://github.com/timzaak/OnceWise',
+    'Sync server: the official hosted service by default, or point the extension at your own deployment of the server-side image — source and deployment docs: https://github.com/timzaak/OnceWise',
+  'sync.server.modeLabel': 'Server type',
+  'sync.server.official': 'Official service',
+  'sync.server.custom': 'Self-hosted service',
+  'sync.server.officialHint': 'Connects to the official hosted service — no address needed.',
   'sync.server.label': 'Server address',
   'sync.server.placeholder': 'https://sync.example.com or http://192.168.1.5:8080',
   'sync.server.invalid': 'Invalid server address — e.g. https://sync.example.com or http://192.168.1.5:8080',
@@ -680,10 +684,14 @@ const zh: Catalog = {
 
   'sync.loading': '正在加载同步状态…',
   'sync.intro.title': '脚本同步',
-  'sync.intro.body': '本机流程保存在本设备、无服务器也完全可用。同步把流程以脚本形式分享到自建服务器的空间；持有空间码的人即可使用同一批脚本。',
+  'sync.intro.body': '本机流程保存在本设备、无服务器也完全可用。同步把流程以脚本形式分享到同步服务器的空间（默认官方托管，也可自建）；持有空间码的人即可使用同一批脚本。',
   'sync.server.title': '服务器',
   'sync.server.selfHost':
-    '同步服务器为自部署服务：可自行部署本项目发布的服务器端镜像，源码与部署文档见 https://github.com/timzaak/OnceWise',
+    '同步服务器：默认使用官方托管服务，也可将扩展指向你自行部署的服务器端镜像——源码与部署文档见 https://github.com/timzaak/OnceWise',
+  'sync.server.modeLabel': '服务器类型',
+  'sync.server.official': '官方服务',
+  'sync.server.custom': '自建服务',
+  'sync.server.officialHint': '使用官方托管服务，无需输入地址。',
   'sync.server.label': '服务器地址',
   'sync.server.placeholder': 'https://sync.example.com 或 http://192.168.1.5:8080',
   'sync.server.invalid': '服务器地址不合法：示例 https://sync.example.com 或 http://192.168.1.5:8080',

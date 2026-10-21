@@ -1,6 +1,6 @@
 # Chrome Web Store 隐私/权限声明材料(控制台 Privacy 标签页逐字段粘贴)
 
-素材来源:`docs/privacy-policy.md`(2026-10-07 版)。控制台字段以实际问卷为准,若措辞与下文有出入,以"事实不变、如实勾选"为原则现场调整。
+素材来源:`docs/privacy-policy.md`(2026-10-21 版)。控制台字段以实际问卷为准,若措辞与下文有出入,以"事实不变、如实勾选"为原则现场调整。
 
 ## 1. Single purpose(单一用途声明)
 
@@ -31,16 +31,16 @@ The extension's entire interface is a browser side panel (the flows workbench). 
 
 ## 3. 数据用途问卷(Data usage / Privacy practices)
 
-CWS 对 "collect" 的定义是**传出设备**。本扩展不向开发者传任何数据,网页内容只在内存中用于执行流程,唯一出网流量是用户自配同步服务器。建议勾选:
+CWS 对 "collect" 的定义是**传出设备**。默认状态下扩展不出网:网页内容只在内存中用于执行流程。唯一出网流量是同步功能——扩展出厂预配置为开发者运营的官方托管同步服务(用户可随时切换为自建的 oncewise-ai-sync 服务器),仅当用户主动使用同步(保存脚本入空间/拉取/管理空间与成员)时才传输内容。建议勾选:
 
 | 问卷项 | 建议答案 | 依据 |
 | --- | --- | --- |
-| Website content(网页内容) | 声明为本地处理、不传输(not collected / processed locally only) | 流程运行时在内存读取页面执行流程,不持久化、不外传 |
-| Personally identifiable / Health / Financial / Authentication / Personal communications / Location / Web history 等全部类别 | 不收集 | 无账号、无遥测;业务标识仅存会话级短数据防重复提交,会话结束清除 |
+| Website content(网页内容) | 如实声明:使用官方同步并保存脚本时,流程内容(含其中的网页字段值)会传输到开发者运营的官方同步服务器,仅用于用户选定的同步功能、不售卖、不用于其他用途;仅自建路径则仍为不传输 | 流程运行时在内存读取页面执行流程,不持久化、不外传;同步仅在用户显式操作时传输该操作涉及的流程/脚本内容 |
+| Personally identifiable / Health / Financial / Authentication / Personal communications / Location / Web history 等全部类别 | 不收集(扩展自身);若官方服务开启登录门禁,用户在服务器登录页提交的凭据归服务器侧,如实按实际配置补充声明 | 扩展自身无账号、无遥测;登录门禁服务器使用服务器自身账号(凭据不经过扩展);业务标识仅存会话级短数据防重复提交,会话结束清除 |
 | Browsing activity | 不收集 | 不记录浏览历史;流程历史仅含流程定义与时间戳 |
-| Sold / transferred to third parties / used for creditworthiness 等认证项 | 全部确认"否" | 无任何数据离开设备(用户自配同步除外,且不经过开发者) |
+| Sold / transferred to third parties / used for creditworthiness 等认证项 | 全部确认"否" | 无任何数据默认离开设备;同步场景仅传输用户主动保存的脚本内容到所配置服务器(默认为开发者运营的官方服务,可自建),不用于认证/征信用途,不出售、不转移给第三方 |
 
-若问卷出现"数据是否发送到你(开发者)运营的服务器"一类问题:答"否,扩展开发者不运营任何服务器";同步功能仅在用户自行配置服务器地址后,把流程/脚本发送到该用户指定地址。
+若问卷出现"数据是否发送到你(开发者)运营的服务器"一类问题:如实回答——扩展出厂预配置为开发者运营的官方托管同步服务,打开「同步」页签会对其做一次不含内容的登录模式自动检查,用户主动保存脚本或管理空间时内容才传输到该服务器;用户可随时切换为自建服务器,自建路径完全不经过开发者。
 
 ## 4. 远程代码(Remotely hosted code)
 

@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { useSync } from '@/lib/use-sync';
 import { t } from '@/lib/i18n';
+import { DEFAULT_SYNC_SERVER_URL } from '@/lib/sync-storage';
 import SyncAuthCard from './SyncAuthCard';
 import SyncSpacesView from './SyncSpacesView';
 import SyncScriptsView from './SyncScriptsView';
@@ -55,7 +56,8 @@ export default function SyncPanel() {
         <section className="sp-card" aria-label={t('sync.server.title')}>
           <div className="sp-row" style={{ justifyContent: 'space-between' }}>
             <span className="sp-desc">
-              {currentSpace?.name ?? status.serverUrl}
+              {currentSpace?.name ??
+                (status.serverUrl === DEFAULT_SYNC_SERVER_URL ? t('sync.server.official') : status.serverUrl)}
             </span>
             <div className="sp-row">
               <span className={`sp-badge ${health === 'ok' ? 'enabled' : health === 'unreachable' ? 'fail' : ''}`}>

@@ -1,4 +1,5 @@
-// Sync tab S0/S1: server configuration (plain-HTTP warning) and the locally-known spaces list —
+// Sync tab S0/S1: server configuration (official vs self-hosted choice, plain-HTTP warning) and
+// the locally-known spaces list —
 // create (id generated on this device; key-less org-bound creation on space-permissions
 // servers, otherwise the original key path), join by a pasted space code or invite code, select,
 // copy the share code, forget (local), delete (server) or leave (org-bound self-exit).
@@ -11,6 +12,7 @@ import { parseOrigin } from '@/lib/flow-schema';
 import type { SyncCall, SyncHealth } from '@/lib/use-sync';
 import type { ExtensionResponse, SyncStateView } from '@/lib/messaging';
 import { t } from '@/lib/i18n';
+import { DEFAULT_SYNC_SERVER_URL } from '@/lib/sync-storage';
 import { commonSyncErrorText } from '@/lib/sync-errors';
 
 // Self-host pointer shown as the ⓘ tooltip beside the server title — the repo behind the
@@ -64,7 +66,12 @@ export default function SyncSpacesView({
   onOpenMembers,
 }: Props) {
   const configured = status.serverUrl !== '';
-  const [serverInput, setServerInput] = useState(status.serverUrl);
+  // Official mode connects to the built-in default and never shows or asks for an address; only
+  // a self-hosted origin is ever displayed or typed. The mode re-derives from the configured URL
+  // each time the form opens.
+  const officialDefault = status.serverUrl === '' || status.serverUrl === DEFAULT_SYNC_SERVER_URL;
+  const [serverMode, setServerMode] = useState<'official' | 'custom'>(officialDefault ? 'official' : 'custom');
+  const [serverInput, setServerInput] = useState(officialDefault ? '' : status.serverUrl);
   const [serverBusy, setServerBusy] = useState(false);
   const [serverMsg, setServerMsg] = useState<{ kind: 'error' | 'ok'; text: string } | null>(null);
   // The address form only mounts while editing: configured servers show the compact status row
@@ -83,13 +90,14 @@ export default function SyncSpacesView({
 
   const connectServer = () => {
     setNotice(null);
-    if (!parsedOrigin) {
+    const target = serverMode === 'official' ? DEFAULT_SYNC_SERVER_URL : parsedOrigin;
+    if (!target) {
       setServerMsg({ kind: 'error', text: t('sync.server.invalid') });
       return;
     }
     if (
       status.serverUrl !== '' &&
-      status.serverUrl !== parsedOrigin &&
+      status.serverUrl !== target &&
       !window.confirm(t('sync.server.confirmChange'))
     ) {
       return;
@@ -98,7 +106,7 @@ export default function SyncSpacesView({
     setServerMsg(null);
     void (async () => {
       try {
-        const res = await call({ type: 'sp:syncSetServer', serverUrl: parsedOrigin });
+        const res = await call({ type: 'sp:syncSetServer', serverUrl: target });
         if (!res?.ok) {
           // auth-unavailable refuses before anything is saved — the "address was saved" retry hint
           // would be wrong
@@ -252,7 +260,9 @@ export default function SyncSpacesView({
         </h2>
         {configured && !editingServer ? (
           <div className="sp-row" style={{ justifyContent: 'space-between' }}>
-            <span className="sp-desc">{status.serverUrl}</span>
+            <span className="sp-desc">
+              {status.serverUrl === DEFAULT_SYNC_SERVER_URL ? t('sync.server.official') : status.serverUrl}
+            </span>
             <div className="sp-row">
               <span className={`sp-badge ${health === 'ok' ? 'enabled' : health === 'unreachable' ? 'fail' : ''}`}>
                 {health === 'ok'
@@ -268,7 +278,8 @@ export default function SyncSpacesView({
                 type="button"
                 className="sp-btn"
                 onClick={() => {
-                  setServerInput(status.serverUrl);
+                  setServerMode(officialDefault ? 'official' : 'custom');
+                  setServerInput(officialDefault ? '' : status.serverUrl);
                   setServerMsg(null);
                   setEditingServer(true);
                 }}
@@ -280,17 +291,35 @@ export default function SyncSpacesView({
         ) : (
           <>
             <div className="sp-field">
-              <label className="sp-label" htmlFor="sync-server">{t('sync.server.label')}</label>
-              <input
-                id="sync-server"
-                className="sp-input"
-                placeholder={t('sync.server.placeholder')}
-                value={serverInput}
-                onChange={(e) => setServerInput(e.target.value)}
-              />
+              <label className="sp-label" htmlFor="sync-server-mode">{t('sync.server.modeLabel')}</label>
+              <select
+                id="sync-server-mode"
+                className="sp-select"
+                value={serverMode}
+                onChange={(e) => setServerMode(e.target.value as 'official' | 'custom')}
+              >
+                <option value="official">{t('sync.server.official')}</option>
+                <option value="custom">{t('sync.server.custom')}</option>
+              </select>
             </div>
-            {parsedOrigin?.startsWith('http://') && (
-              <p className="sp-warn">{t('sync.server.httpWarn')}</p>
+            {serverMode === 'official' ? (
+              <p className="sp-hint">{t('sync.server.officialHint')}</p>
+            ) : (
+              <>
+                <div className="sp-field">
+                  <label className="sp-label" htmlFor="sync-server">{t('sync.server.label')}</label>
+                  <input
+                    id="sync-server"
+                    className="sp-input"
+                    placeholder={t('sync.server.placeholder')}
+                    value={serverInput}
+                    onChange={(e) => setServerInput(e.target.value)}
+                  />
+                </div>
+                {parsedOrigin?.startsWith('http://') && (
+                  <p className="sp-warn">{t('sync.server.httpWarn')}</p>
+                )}
+              </>
             )}
             <div className="sp-row">
               <button type="button" className="sp-btn primary" disabled={serverBusy} onClick={connectServer}>

@@ -29,7 +29,7 @@
 | 停止（移除 Herald/Redis 测试容器，不动共享 PostgreSQL 与 `herald_test` 库） | `uv run scripts/test-stop.py` |
 
 - 地址：Herald `http://127.0.0.1:13001`（就绪判定 `/health`）、Herald 库 `herald_test`（共享 demo PostgreSQL 5432 上）、Redis `127.0.0.1:16381`；`TEST_HERALD_URL` / `TEST_HERALD_DATABASE_URL` / `TEST_HERALD_REDIS` 可覆盖。
-- 镜像默认 `ghcr.io/timzaak/herald:0.6.7`（跟随上游 cas-2 发布钉版；组织授权能力面要求 ≥0.6.4），`HERALD_IMAGE` 可覆盖；生成的 config.toml 含 `static_dir`，在 API origin 服务真实登录页。
+- 镜像默认 `ghcr.io/timzaak/herald:0.6.8`（跟随上游 cas-2 发布钉版；组织授权能力面要求 ≥0.6.4），`HERALD_IMAGE` 可覆盖；生成的 config.toml 含 `static_dir`，在 API origin 服务真实登录页。
 - 前置：uv、Docker；共享 PostgreSQL 由脚本自动确保（本机 5432 无监听时起 `oncewise-demo-pg`）。
 
 ## 前端测试（扩展 Demo e2e）
