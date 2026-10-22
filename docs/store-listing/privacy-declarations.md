@@ -21,10 +21,16 @@ Persist the user's automation flows, per-flow version history, delivery receipts
 Register content scripts dynamically, only for the origins that actually carry the user's flows (flows target user-chosen sites that cannot be known at install time), and top up injection for tabs that were already open when a flow was enabled. Scripts are unregistered when the last flow for a site is deleted.
 
 **Host permissions (all http/https sites)**
-Every flow targets a site the user chooses; targets cannot be known at install time, so the permission is requested up front. In practice content scripts are registered only for origins that actually carry flows. Page data is read in memory solely to execute the user's flow on the matching page and is never transmitted off the device.
+Every flow targets a site the user chooses; targets cannot be known at install time, so the permission is requested up front. In practice content scripts are registered only for origins that actually carry flows. Page data is read in memory solely to execute the user's flow on the matching page; it leaves the device only when the user explicitly saves that flow as a script into a sync space, sent to the configured sync server (the official hosted service by default, or the user's own deployment).
 
 **`nativeMessaging`**
 Opens a native-messaging port to the user-level host `ai.oncewise.native` so the user's own AI tool can deliver flow definitions through a channel that stays on the device; save results and validation summaries travel back the same way. Nothing else in the extension uses this permission and no data crosses the network through it.
+
+**`identity`**
+Used only by the optional sync feature's sign-in: chrome.identity.launchWebAuthFlow runs the OAuth code+PKCE handoff against the configured sync server (the official hosted service by default, or the user's own oncewise-ai-sync deployment), with the redirect landing on this extension's own identity redirect URL. No Google account data is read; sign-in credentials are entered on the sync server's own login page and never pass through the extension, and the resulting tokens go only to that sync server and are stored on the user's device.
+
+**`alarms`**
+The alarms permission powers the extension's timed-trigger feature: after a user creates a daily/weekly/interval schedule for one of their automation flows (in the flow editor's Schedules card), chrome.alarms wakes the extension's service worker at the user-configured time so the flow can start unattended. MV3 service workers are terminated when idle, and chrome.alarms is the only platform mechanism to wake them at a specific time, so this permission is required for that feature. One additional internal housekeeping alarm surfaces an expiry notice when a scheduled start becomes stale. Alarms are created only for schedules the user explicitly creates and are cleared when the schedule or flow is deleted; schedule records stay in local device storage (storage.local). This API collects no data and sends nothing to any server.
 
 **`sidePanel`**
 The extension's entire interface is a browser side panel (the flows workbench). The permission only lets the toolbar button open that panel; it grants no data access.
@@ -35,7 +41,7 @@ CWS 对 "collect" 的定义是**传出设备**。默认状态下扩展不出网:
 
 | 问卷项 | 建议答案 | 依据 |
 | --- | --- | --- |
-| Website content(网页内容) | 如实声明:使用官方同步并保存脚本时,流程内容(含其中的网页字段值)会传输到开发者运营的官方同步服务器,仅用于用户选定的同步功能、不售卖、不用于其他用途;仅自建路径则仍为不传输 | 流程运行时在内存读取页面执行流程,不持久化、不外传;同步仅在用户显式操作时传输该操作涉及的流程/脚本内容 |
+| Website content(网页内容) | **已勾选**(2026-10-22 提交审核):使用官方同步并保存脚本时,流程内容(含其中的网页字段值)会传输到开发者运营的官方同步服务器,仅用于用户选定的同步功能、不售卖、不用于其他用途;仅自建路径则仍为不传输 | 流程运行时在内存读取页面执行流程,不持久化、不外传;同步仅在用户显式操作时传输该操作涉及的流程/脚本内容 |
 | Personally identifiable / Health / Financial / Authentication / Personal communications / Location / Web history 等全部类别 | 不收集(扩展自身);若官方服务开启登录门禁,用户在服务器登录页提交的凭据归服务器侧,如实按实际配置补充声明 | 扩展自身无账号、无遥测;登录门禁服务器使用服务器自身账号(凭据不经过扩展);业务标识仅存会话级短数据防重复提交,会话结束清除 |
 | Browsing activity | 不收集 | 不记录浏览历史;流程历史仅含流程定义与时间戳 |
 | Sold / transferred to third parties / used for creditworthiness 等认证项 | 全部确认"否" | 无任何数据默认离开设备;同步场景仅传输用户主动保存的脚本内容到所配置服务器(默认为开发者运营的官方服务,可自建),不用于认证/征信用途,不出售、不转移给第三方 |
