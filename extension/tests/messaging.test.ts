@@ -155,3 +155,62 @@ describe('schedule message guards', () => {
     expect(isExtensionMessage({ type: 'ct:takeTimedStart', triggerId: 7 })).toBe(false);
   });
 });
+
+// support-http: the upload request guard is the first of three fences in front of the only
+// flow-declared fetch the extension makes (shape here → binding/pinning → credential in the
+// handler). A hole here would let a forged content message reach the handler; an over-strict
+// guard would silently drop the real runtime's requests as bad-payload.
+describe('ct:performUpload payload guard', () => {
+  const base = {
+    type: 'ct:performUpload',
+    flowId: 'r1',
+    flowDraftHash: 'h',
+    url: 'https://collect.example.com/api/orders',
+    method: 'POST',
+    payload: { orderNo: 'A-1', urgent: true, lines: [{ sku: 'S', qty: '2' }] },
+    timeoutMs: 15_000,
+  };
+
+  it('accepts the automatic-run and dry-run shapes with optional credentialName / captureMaxBytes', () => {
+    expect(isExtensionMessage(base)).toBe(true);
+    expect(isExtensionMessage({ ...base, dryRun: true, credentialName: '我的上报服务器', captureMaxBytes: 65_536 })).toBe(true);
+    expect(isExtensionMessage({ ...base, method: 'GET', payload: { orderNo: 'A-1', urgent: 'true' } })).toBe(true);
+    expect(isExtensionMessage({ ...base, payload: {} })).toBe(true);
+  });
+
+  it('rejects a plain-http / query / userinfo destination, a method outside GET/POST and a non-boolean dryRun', () => {
+    expect(isExtensionMessage({ ...base, url: 'http://collect.example.com/api/orders' })).toBe(false);
+    expect(isExtensionMessage({ ...base, url: 'https://collect.example.com/api/orders?x=1' })).toBe(false);
+    expect(isExtensionMessage({ ...base, url: 'https://u:p@collect.example.com/api/orders' })).toBe(false);
+    expect(isExtensionMessage({ ...base, method: 'PUT' })).toBe(false);
+    expect(isExtensionMessage({ ...base, dryRun: 'yes' })).toBe(false);
+  });
+
+  it('rejects GET payloads with non-string values and POST payloads with non-JSON values or too many keys', () => {
+    expect(isExtensionMessage({ ...base, method: 'GET', payload: { urgent: true } })).toBe(false);
+    expect(isExtensionMessage({ ...base, payload: { f: () => 1 } })).toBe(false);
+    expect(isExtensionMessage({ ...base, payload: Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`k${i}`, 'v'])) })).toBe(false);
+    expect(isExtensionMessage({ ...base, payload: 'x' })).toBe(false);
+  });
+
+  it('rejects a malformed credential name, a deadline outside the wait budget and a capture cap above the engine cap', () => {
+    expect(isExtensionMessage({ ...base, credentialName: ' padded ' })).toBe(false);
+    expect(isExtensionMessage({ ...base, credentialName: '' })).toBe(false);
+    expect(isExtensionMessage({ ...base, timeoutMs: 0 })).toBe(false);
+    expect(isExtensionMessage({ ...base, timeoutMs: 60_001 })).toBe(false);
+    expect(isExtensionMessage({ ...base, captureMaxBytes: 65_537 })).toBe(false);
+    expect(isExtensionMessage({ ...base, captureMaxBytes: 0 })).toBe(false);
+    expect(isExtensionMessage({ ...base, flowId: 7 })).toBe(false);
+  });
+});
+
+describe('upload credential message guards (sp:*)', () => {
+  it('sp:getUploadCredentials takes no payload; save needs three strings; delete needs a name string', () => {
+    expect(isExtensionMessage({ type: 'sp:getUploadCredentials' })).toBe(true);
+    expect(isExtensionMessage({ type: 'sp:saveUploadCredential', name: 'c', headerName: 'Authorization', value: 'Bearer t' })).toBe(true);
+    expect(isExtensionMessage({ type: 'sp:saveUploadCredential', name: 'c', headerName: 'Authorization' })).toBe(false);
+    expect(isExtensionMessage({ type: 'sp:saveUploadCredential', name: 'c', headerName: 7, value: 'v' })).toBe(false);
+    expect(isExtensionMessage({ type: 'sp:deleteUploadCredential', name: 'c' })).toBe(true);
+    expect(isExtensionMessage({ type: 'sp:deleteUploadCredential' })).toBe(false);
+  });
+});

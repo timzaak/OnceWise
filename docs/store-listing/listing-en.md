@@ -13,6 +13,7 @@ WHAT IT'S FOR
 
 • Forms you fill again and again: reports, ERP/OA screens, internal tools
 • Multi-step routines that should just happen when you open the page: fill, click, read, wait, verify
+• Sending what a flow reads from the page to your own server: a flow may include an upload step that posts collected data to an https endpoint you name, authenticated with a credential you keep on your device
 • Handing a verified routine to teammates as a versioned script (with optional self-hosted sync)
 
 Most automation tools hand you a recorder and wish you luck. OnceWise Flow flows are constrained step sequences with time budgets, not arbitrary scripts, and that is what makes them safe enough to run on pages you log into.
@@ -21,7 +22,8 @@ WHY IT'S SAFE: LOCAL-FIRST, NO ACCOUNTS, NO TRACKING
 
 • Local-first: flows, settings and version history live in your browser's local storage. No accounts, no analytics, no telemetry, no ads, no tracking.
 • Site-scoped: a flow only runs on the site it was written for. Content scripts load only on origins that actually carry flows, and are removed when the last flow for a site is deleted.
-• Nothing hidden: open any flow and read every step (fill, click, read, wait, assert, loop). Sensitive values are redacted in the side panel.
+• Nothing hidden: open any flow and read every step (fill, click, read, wait, assert, loop, upload). Sensitive values are redacted in the side panel.
+• Data leaves your browser only when you say so: the saved-flow summary and the flow list mark every upload step with its destination, the data it sends and the credential it uses, and nothing is sent until you enable that flow yourself. Uploads go straight from your browser to your endpoint — never through the extension developer. Upload credentials are stored on your device only and never inside a flow, so sharing a flow shares no secret.
 • You stay in charge: every flow has an on/off switch, a 10-version history you can roll back to, and a delete button. The same business instance is never submitted twice in one session.
 • The AI handover runs through a local native-messaging host (installed separately, requires Node 22+). Whatever it carries stays on your device.
 

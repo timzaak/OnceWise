@@ -3,7 +3,7 @@ import {
   sendRuntimeMessage,
   type ContentStateView,
 } from '@/lib/messaging';
-import { describeFlow, flowDraftHash, shortFlowId, type Flow } from '@/lib/flow-schema';
+import { describeFlow, flowDraftHash, shortFlowId, stepsHaveUploadStep, type Flow } from '@/lib/flow-schema';
 import { redactText } from '@/lib/redact';
 import { t } from '@/lib/i18n';
 import { formatTime, statusLabel } from '@/lib/ui-labels';
@@ -184,6 +184,9 @@ function App() {
                       <section key={flow.id} className="sp-card sp-flow-card" aria-label={t('flows.cardAria', { name: flow.name })}>
                         <div className="sp-flow-head">
                           <h2 className="sp-title">{flow.name}</h2>
+                          {/* Standing egress mark on the list (FR4): visible before enabling,
+                              regardless of which card the user enables from */}
+                          {stepsHaveUploadStep(flow.steps) && <span className="sp-badge egress">{t('flows.egressBadge')}</span>}
                           <span className={`sp-badge ${flow.status}`}>{statusLabel(flow.status)}</span>
                         </div>
                         <p className="sp-sub">
@@ -292,5 +295,29 @@ function formatFlowFailure(notice: FlowFailureNotice | undefined): string {
     return t('flows.businessInstanceClaimed');
   }
   const pagePrefix = failure.pageId !== undefined ? t('flows.failurePage', { page: failure.pageId }) : '';
-  return redactText(`${pagePrefix}${failure.nodeId}${failure.iterationPath} · ${failure.stage}: ${failure.reason}${failure.detail ? ` (${failure.detail})` : ''}`);
+  const where = `${pagePrefix}${failure.nodeId}${failure.iterationPath}`;
+  // Upload failures (support-http): the detail is the credential NAME, the HTTP status or the
+  // declared destination URL — none of them page data, and a digit-heavy URL would be masked by
+  // redactText — so these lines render their detail verbatim. The defensive refusals
+  // (bad-request / flow-mismatch) and input-missing keep the generic line below.
+  if (failure.stage === 'upload') {
+    const detail = failure.detail ?? '';
+    switch (failure.reason) {
+      case 'credential-missing':
+        return `${where} · ${t('flows.uploadCredentialMissing', { name: detail })}`;
+      case 'upload-network':
+        return `${where} · ${t('flows.uploadNetwork', { url: detail })}`;
+      case 'upload-status':
+        return `${where} · ${t('flows.uploadStatus', { status: detail })}`;
+      case 'upload-timeout':
+        return `${where} · ${t('flows.uploadTimeout', { url: detail })}`;
+      case 'upload-response-too-large':
+        return `${where} · ${t('flows.uploadResponseTooLarge', { url: detail })}`;
+      case 'upload-payload-too-large':
+        return `${where} · ${t('flows.uploadPayloadTooLarge', { url: detail })}`;
+      default:
+        break;
+    }
+  }
+  return redactText(`${where} · ${failure.stage}: ${failure.reason}${failure.detail ? ` (${failure.detail})` : ''}`);
 }

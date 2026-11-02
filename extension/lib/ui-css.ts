@@ -36,7 +36,8 @@ button, input, select, textarea { font: inherit; }
 .${p}-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .${p}-badge { display: inline-flex; align-items: center; width: fit-content; min-height: 22px; font-size: 11px; line-height: 1.2; font-weight: 650; padding: 2px 8px; border-radius: 4px; border: 1px solid #cececa; color: #555; background: #f5f5f3; }
 .${p}-badge.enabled { border-color: #b6dcd5; color: var(--ow-success); background: var(--ow-accent-soft); }
-.${p}-badge.paused { border-color: #e9d39b; color: var(--ow-warning); background: #fff5d6; }
+.${p}-badge.paused, .${p}-badge.egress { border-color: #e9d39b; color: var(--ow-warning); background: #fff5d6; }
+.${p}-egress-url { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--ow-warning); overflow-wrap: anywhere; word-break: break-all; }
 .${p}-btn { min-height: ${opts.btnMinHeight}; padding: 6px ${opts.btnPaddingX}; font-size: 13px; font-weight: 600; border-radius: 5px; border: 1px solid #cececa; background: var(--ow-surface); color: var(--ow-ink); cursor: pointer; transition: background-color .15s, border-color .15s; }
 .${p}-btn:hover:not(:disabled) { background: #f2f2f0; border-color: #aaa9a5; }
 .${p}-btn:focus-visible { outline: 2px solid var(--ow-accent); outline-offset: 2px; }

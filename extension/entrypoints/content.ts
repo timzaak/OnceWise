@@ -24,6 +24,7 @@ import { createDomFlowDriver } from '@/lib/flow-dom';
 import { createFlowRuntime, type FlowLogEvent } from '@/lib/flow-runtime';
 import type { FlowRunResult } from '@/lib/flow-compiler';
 import { withHandover, type HandoverDescriptor, type PendingHandover } from '@/lib/flow-handover';
+import { UPLOAD_FAILURE_REASONS, withUpload, type UploadHostMeta } from '@/lib/flow-upload';
 import type { TimedStartDescriptor } from '@/lib/flow-schedules';
 import { redactText } from '@/lib/redact';
 import { t } from '@/lib/i18n';
@@ -72,7 +73,16 @@ export default defineContentScript({
     const failureLine = (failure: RunFailureDetail): string =>
       (failure.pageId !== undefined ? t('flows.failurePage', { page: failure.pageId }) : '') +
       `${failure.nodeId}${failure.iterationPath} ${failure.stage}:${failure.reason}` +
-      (failure.detail !== undefined && failure.detail !== '' ? ` (${redactText(failure.detail)})` : '');
+      (failure.detail !== undefined && failure.detail !== ''
+        ? ` (${
+            // Upload details are the destination URL / credential name / status — flow-declared
+            // facts, not page data, and redactText would mask a digit-heavy URL whole (the same
+            // disclosure rule formatFlowFailure applies on the auto-run path)
+            failure.stage === 'upload' && (UPLOAD_FAILURE_REASONS as readonly string[]).includes(failure.reason)
+              ? failure.detail
+              : redactText(failure.detail)
+          })`
+        : '');
 
     const runtime = createFlowRuntime({
       driver: () => {
@@ -83,10 +93,27 @@ export default defineContentScript({
           : createDomFlowDriver(doc);
         // The handover capability reads the run's identity lazily: navigate nodes execute mid-run,
         // long after this factory call, when activeRun carries the real runId
-        return withHandover(base, () => {
+        const withPages = withHandover(base, () => {
           const run = activeRun;
           if (run === null || run.runId === '') return null;
           return { runId: run.runId, flow: run.flow, dryRun: run.dryRun, businessKey: run.businessKey };
+        });
+        // Upload (DEC-support-http-006): DOM driver and dry-run driver alike — a previewed upload is
+        // a real upload, same actor, same egress. Outermost on purpose: withHandover does not
+        // forward `upload`, withUpload forwards `handover`. The meta's draft hash is constant for a
+        // run (activeRun is only ever replaced wholesale, its flow never mutated), so it is memoized
+        // per run — a foreach uploading row by row must not re-hash the whole flow per row.
+        // No runId guard here, unlike withHandover's meta: upload's meta carries flowId/hash only,
+        // and the first actor node executes synchronously inside runtime.tryStart — before startRun
+        // writes the real runId back (a pure-upload flow would otherwise fail as 'unsupported').
+        let metaFor: { run: NonNullable<typeof activeRun>; meta: UploadHostMeta } | null = null;
+        return withUpload(withPages, () => {
+          const run = activeRun;
+          if (run === null) return null;
+          if (metaFor === null || metaFor.run !== run) {
+            metaFor = { run, meta: { flowId: run.flow.id, flowDraftHash: flowDraftHash(run.flow), dryRun: run.dryRun } };
+          }
+          return metaFor.meta;
         });
       },
       onEvent: (event) => forwardRunEvent(event),
@@ -166,6 +193,11 @@ export default defineContentScript({
                 stage: result.failure.stage,
                 reason: result.failure.reason.startsWith('assert-failed:')
                   ? 'assert-failed' : result.failure.reason,
+                // Upload failures carry a user-actionable detail (the missing credential's name,
+                // the status code, the destination) — forwarded for this stage only; every other
+                // stage keeps its detail out of the session notice as before
+                ...(result.failure.stage === 'upload' && result.failure.detail !== undefined
+                  ? { detail: result.failure.detail } : {}),
                 ...(result.failure.pageId !== undefined ? { pageId: result.failure.pageId } : {}) } } : {}),
         });
       }

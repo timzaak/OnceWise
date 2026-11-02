@@ -6,14 +6,19 @@ import { getLocale, t } from './i18n';
 import {
   describeSteps,
   isFieldRef,
+  isHttpsUploadUrl,
   isPlainObject,
   isSubmitForbiddenText,
+  isValidUploadCredentialName,
   navigateTargetsOf,
   resolveStepBudget,
   validateEnvelopeReadSpec,
   validateSteps,
   IDENT,
   INPUT_DEFINITION_TYPES,
+  MAX_UPLOAD_CAPTURE_BYTES,
+  MAX_UPLOAD_PAYLOAD_KEYS,
+  UPLOAD_METHODS,
   type FieldClues,
   type FieldRef,
   type ComponentType,
@@ -34,11 +39,31 @@ export {
   isSubmitLikeText,
   isSubmitForbiddenText,
   describeSteps,
+  stepsHaveUploadStep,
+  uploadDeclarationsOf,
+  isHttpsUploadUrl,
+  isValidUploadCredentialName,
+  CONTROL_CHARS,
   SUBMIT_ALLOWED_TERMS,
   SUBMIT_FORBIDDEN_TERMS,
   INPUT_DEFINITION_TYPES,
+  UPLOAD_METHODS,
+  MAX_UPLOAD_PAYLOAD_KEYS,
+  MAX_UPLOAD_PAYLOAD_BYTES,
+  MAX_UPLOAD_CAPTURE_BYTES,
+  UPLOAD_CREDENTIAL_NAME_MAX,
 } from './step-schema';
-export type { FieldClues, FieldRef, ComponentType, InputDefinition, InputDefinitionType, InputOption } from './step-schema';
+export type {
+  FieldClues,
+  FieldRef,
+  ComponentType,
+  InputDefinition,
+  InputDefinitionType,
+  InputOption,
+  StepDescription,
+  UploadDeclaration,
+  UploadMethod,
+} from './step-schema';
 
 export const SCHEMA_VERSION = 1;
 
@@ -209,6 +234,49 @@ export function isValidSchedulePeriod(v: unknown): v is SchedulePeriod {
     return typeof v.minutes === 'number' && Number.isSafeInteger(v.minutes) && v.minutes >= 1 && v.minutes <= 1440;
   }
   return false;
+}
+
+// Resolved upload request (the ct:performUpload payload): one shape validator shared by the
+// message guard and the background handler's defensive re-check, same pattern as the schedule
+// period above. The background only ever constructs the request these fields describe — it never
+// proxies an arbitrary URL, header or body — so everything the content side may influence is
+// bounded here: https constant destination, closed method set, flat payload (GET values must
+// already be strings; POST values JSON-compatible and shallow), credential NAME only, deadline
+// within the wait budget, capture cap within the engine cap.
+const UPLOAD_JSON_MAX_DEPTH = 4;
+
+function isUploadJsonValue(v: unknown, depth: number): boolean {
+  if (v === null || typeof v === 'string' || typeof v === 'boolean') return true;
+  if (typeof v === 'number') return Number.isFinite(v);
+  if (depth >= UPLOAD_JSON_MAX_DEPTH) return false;
+  if (Array.isArray(v)) return v.every((item) => isUploadJsonValue(item, depth + 1));
+  if (isPlainObject(v)) return Object.values(v).every((item) => isUploadJsonValue(item, depth + 1));
+  return false;
+}
+
+export function isUploadRequestShape(v: Record<string, unknown>): boolean {
+  if (!isHttpsUploadUrl(v.url)) return false;
+  if (typeof v.method !== 'string' || !(UPLOAD_METHODS as readonly string[]).includes(v.method)) return false;
+  if (!isPlainObject(v.payload)) return false;
+  const values = Object.values(v.payload);
+  if (Object.keys(v.payload).length > MAX_UPLOAD_PAYLOAD_KEYS) return false;
+  if (v.method === 'GET' ? !values.every((x) => typeof x === 'string') : !values.every((x) => isUploadJsonValue(x, 0))) {
+    return false;
+  }
+  if (v.credentialName !== undefined && !isValidUploadCredentialName(v.credentialName)) return false;
+  if (typeof v.timeoutMs !== 'number' || !Number.isFinite(v.timeoutMs) || v.timeoutMs < 1 || v.timeoutMs > STEP_BUDGET_CAPS.waitMs) {
+    return false;
+  }
+  if (
+    v.captureMaxBytes !== undefined &&
+    (typeof v.captureMaxBytes !== 'number' ||
+      !Number.isSafeInteger(v.captureMaxBytes) ||
+      v.captureMaxBytes < 1 ||
+      v.captureMaxBytes > MAX_UPLOAD_CAPTURE_BYTES)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function isTriggerCondition(v: unknown): v is TriggerCondition {

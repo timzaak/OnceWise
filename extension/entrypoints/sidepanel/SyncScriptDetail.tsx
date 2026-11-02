@@ -388,13 +388,24 @@ export default function SyncScriptDetail({ spaceId, scriptId, spaceCode, serverU
           <div className="sp-group">
             {preview.preview.actions.map((a, i) => (
               <div key={i} className="sp-option" style={{ justifyContent: 'space-between' }}>
-                <span className="sp-desc">{a.text}</span>
-                {a.submit && <span className="sp-badge submit">{t('sync.detail.preview.submit')}</span>}
+                <span className="sp-desc">
+                  {a.text}
+                  {/* The pulled version's declared destination, verbatim (not redacted) — the pull
+                      side shows exactly what the local summary shows (US-HTP-004) */}
+                  {a.egressUrl !== undefined && <> <span className="sp-egress-url">{a.egressUrl}</span></>}
+                </span>
+                <span className="sp-row">
+                  {a.egress && <span className="sp-badge egress">{t('sync.detail.preview.egress')}</span>}
+                  {a.submit && <span className="sp-badge submit">{t('sync.detail.preview.submit')}</span>}
+                </span>
               </div>
             ))}
           </div>
           {preview.preview.hasSubmit && (
             <p className="sp-warn">{t('sync.detail.preview.submitWarn')}</p>
+          )}
+          {preview.preview.hasEgress && (
+            <p className="sp-warn">{t('sync.detail.preview.egressWarn')}</p>
           )}
         </section>
       )}

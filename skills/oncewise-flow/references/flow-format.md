@@ -67,6 +67,7 @@ Every node has an ID unique in the tree, 1–64 characters from letters, digits,
 | `wait` | Positive `timeoutMs` ≤ `budget.waitMs`; `until`: WaitCondition | Read-only polling with a deadline. |
 | `assert` | `check`: predicate | Fail if the invariant is false. |
 | `navigate` | `to`: declared page id; positive `timeoutMs` ≤ `budget.waitMs` | Declare the expected jump to a continuation page; see "Cross-page flows". |
+| `upload` | `url`: constant https; `method`: `GET` or `POST`; optional `credential`: name; optional `payload`: flat object; optional `capture`: `{ "into": slot }`; positive `timeoutMs` ≤ `budget.waitMs` | Send already-collected data to the declared endpoint; see "Upload steps". |
 
 The tree may contain at most 200 nodes and 8 levels of nesting. A loop processes at most 100 items; one wait lasts at most 60 seconds; a run lasts at most 15 minutes and executes at most 2,000 nodes.
 
@@ -160,8 +161,28 @@ Labels containing `delete`, `remove`, `pay`, `payment`, `purchase`, `checkout`, 
 
 A submit-like flow needs `businessKey.read` as a scalar read of a stable identifier such as an order number; without it, automatic startup is blocked. The extension claims `site + flowId + businessKey` across tabs, allowing at most one execution per business instance per browser session, including failed runs. Do not use random values or page-template fingerprints. When the record could change during the flow, read its ID at the start, read it again before final confirmation, and assert equality. Failure stops later actions but does not undo completed submissions or replay timed-out clicks.
 
+## Upload steps
+
+An `upload` node sends data the flow has already read (and its input values) to a server the flow names. The extension performs the request itself from its background context — the page never sees the request or the credential — and treats the step as a side effect with the same rules as a submit: one attempt, no retry, no rollback, and the saved-flow summary marks every upload with its destination so the user sees where data goes before enabling.
+
+```json
+{ "id": "u1", "kind": "upload", "url": "https://collect.example.com/api/orders", "method": "POST",
+  "credential": "我的上报服务器",
+  "payload": { "orderNo": { "ref": "vars.orderNo" }, "phone": { "ref": "inputs.phone" }, "source": "warehouse" },
+  "capture": { "into": "receipt" }, "timeoutMs": 15000 }
+```
+
+- `url` is a constant `https://` URL with no username/password, no query string and no fragment. Plain `http://`, templates, and URLs carrying credentials are rejected and the whole flow fails validation. The query of a `GET` upload is built from `payload` alone.
+- `method` is `GET` or `POST` only.
+- `payload` is a flat object of key → constant string or `{ "ref": ... }`, at most 20 keys (keys 1–64 characters). `POST` sends the object as a JSON body (`Content-Type: application/json`): a scalar slot becomes a string, a boolean slot a boolean, a `rows` slot an array of row objects, a `collection` slot an array of `{ "id" }` records, a multi input an array of strings, a loop-item field a string. `GET` sends it as the query string, so every `GET` value must resolve to a scalar — a scalar or boolean slot, a loop-item field, a text/number/single/date/time/checkbox input, or `trigger.value`; `rows`, `collection` and `multi` references are rejected for `GET`. Nothing the payload does not name is ever sent.
+- `credential` is the **name** of a credential the user saves in the extension's Settings on their own device: the record holds a request header name and a value (for example `Authorization` with `Bearer <token>`, or `X-API-Key`), and the request carries exactly that one header. The flow file never contains the header name or the value — only this reference name — so a flow shared through a sync space carries no secret. If the named credential is not saved on the device that runs the flow, the step fails with the credential's name before any request is sent. Omit `credential` for endpoints that need no authentication.
+- `capture.into` stores the response body text (up to 64 KiB) in `vars.<into>` as a scalar slot for later `if`/`assert` predicates and value references. The response is data only — the extension never interprets it. Without `capture`, the body is not read at all.
+- Success is any `2xx` status. A non-`2xx` status, an unreachable destination, a redirect, a timeout (`timeoutMs`), a response over the capture limit, or a request body/query over 64 KiB fails the run conservatively at this node and the failure line names the node, the `upload` stage and the reason; the request is never retried.
+- When the same business instance must not be uploaded twice, declare `businessKey` as for submit-like flows: an upload-carrying flow with a `businessKey` takes the per-session business claim; without one it runs on every trigger.
+- In a cross-page flow, put the upload where its data is complete; captured slots travel across a later `navigate` like any other slot. A dry run from the side panel performs the upload for real, exactly like a previewed submit.
+
 ## Budget and validation
 
-`budget` may lower, never raise, the engine caps: `loopItems` ≤ 100, `waitMs` ≤ 60000, `runMs` ≤ 900000. `foreach.maxIterations` must not exceed `loopItems`; `wait.timeoutMs` and `navigate.timeoutMs` must not exceed `waitMs`. Set tight limits for the observed page.
+`budget` may lower, never raise, the engine caps: `loopItems` ≤ 100, `waitMs` ≤ 60000, `runMs` ≤ 900000. `foreach.maxIterations` must not exceed `loopItems`; `wait.timeoutMs`, `navigate.timeoutMs` and `upload.timeoutMs` must not exceed `waitMs`. Set tight limits for the observed page.
 
 The extension parses JSON and validates the entire flow before saving. Any error rejects the whole flow; fix the reported path and validate again. After validation, show the summary and exact content to the user and obtain explicit approval before `flow.save`. Saved flows are disabled until the user enables them in the extension. The user also handles rollback from locally retained version history.

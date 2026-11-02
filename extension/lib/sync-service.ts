@@ -17,7 +17,7 @@ import {
   flowDraftHash,
   validateFlow,
 } from './flow-schema';
-import { stepsHaveSubmitAction } from './step-schema';
+import { stepsHaveSubmitAction, stepsHaveUploadStep } from './step-schema';
 import { redactText } from './redact';
 import { loadFlows, saveFlowRecord } from './storage';
 import * as api from './sync-api';
@@ -354,12 +354,16 @@ export async function handleSyncMessage(msg: ExtensionMessage): Promise<Extensio
           pageDesc: describePages(draft),
           triggerDesc: describeTrigger(draft),
           // The step list covers branches and loops; submit flags come from the recursive step
-          // scan, not a top-level filter (DEC-data-sync-011)
+          // scan, not a top-level filter (DEC-data-sync-011). Upload rows pass egressUrl through
+          // UNredacted — the destination is the disclosure itself (DEC-support-http-001)
           actions: describeSteps(draft.steps).map((s) => ({
             text: redactText(s.text),
             submit: s.submit,
+            ...(s.egress === true ? { egress: true } : {}),
+            ...(s.egressUrl !== undefined ? { egressUrl: s.egressUrl } : {}),
           })),
           hasSubmit: stepsHaveSubmitAction(draft.steps),
+          hasEgress: stepsHaveUploadStep(draft.steps),
         },
       };
     }

@@ -185,6 +185,23 @@ export const flowSchedulesItem = storage.defineItem('local:flowSchedules', {
   fallback: [] as FlowSchedule[],
 });
 
+// Upload credentials (DEC-support-http-002/005): device-local named records, keyed by the name a
+// flow references — the same boundary as the schedules above: never part of a Flow definition, the
+// draft hash, a sync payload, a log or an export. Shared across flows and NOT cleared by
+// deleteFlowCompletely (FR3: deleting a flow never deletes a credential other flows may reference).
+// local: rather than session: because credentials are a cross-session device asset. storage.local is
+// restricted to trusted contexts at SW start (lib/sync-auth.ts), so content scripts structurally
+// cannot read the values; background single writer (lib/flow-upload.ts), UI via sp:* messages.
+export interface UploadCredentialRecord {
+  headerName: string;
+  value: string;
+  createdAt: number;
+}
+
+export const uploadCredentialsItem = storage.defineItem('local:uploadCredentials', {
+  fallback: {} as Record<string, UploadCredentialRecord>,
+});
+
 // Staged timed starts awaiting a page's atomic claim. local: rather than session: deliberately —
 // when the browser closes inside the distribution window, the restart's expiry GC must still land
 // the honest timed-start-expired notice instead of the record vanishing with the session; the

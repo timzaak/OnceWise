@@ -17,8 +17,13 @@ import {
 import {
   MAX_STEP_DEPTH,
   MAX_STEP_NODES,
+  MAX_UPLOAD_CAPTURE_BYTES,
+  MAX_UPLOAD_PAYLOAD_BYTES,
+  MAX_UPLOAD_PAYLOAD_KEYS,
   STEP_BUDGET_CAPS,
   STEP_NODE_KINDS,
+  UPLOAD_CREDENTIAL_NAME_MAX,
+  UPLOAD_METHODS,
 } from '@/lib/step-schema';
 import { importFlowText } from '@/lib/import-pipeline';
 
@@ -129,6 +134,28 @@ describe('corpus coverage (missing coverage turns red)', () => {
     expect(names.some((n) => n.includes('maxiterations'))).toBe(true);
   });
 
+  // Upload vocabulary (support-http, DEC-support-http-001/003/004): the corpus must pin every
+  // refusal the format document promises — the https-only destination (US-HTP-001 scene 2), the
+  // closed method set, the per-method payload tiers, the credential-name rule, the capture slot
+  // and the deadline budget — plus the happy paths the demo stories build on
+  it('covers upload vocabulary: destination, method, payload tiers, credential, capture, timeout', () => {
+    expect(names.some((n) => n.includes('upload-http-destination'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-url-with-query'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-url-userinfo'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-method-put'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-payload-bad-ref'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-payload-rows-ref-get-rejected'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-payload-rows-ref-post'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-payload-bare-itemvar-rejected'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-credential-name-invalid'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-capture-into-not-ident'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-capture-slot-type-conflict'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-timeout-over-budget'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-egress-post-capture'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-get-query'))).toBe(true);
+    expect(names.some((n) => n.includes('upload-no-credential'))).toBe(true);
+  });
+
   it('covers structural limits and envelope handling', () => {
     expect(names.some((n) => n.includes('duplicate-id'))).toBe(true);
     expect(names.some((n) => n.includes('envelope'))).toBe(true);
@@ -141,6 +168,14 @@ describe('corpus coverage (missing coverage turns red)', () => {
     expect(STEP_BUDGET_CAPS).toEqual({ loopItems: 100, waitMs: 60_000, runMs: 900_000 });
     expect(MAX_STEP_NODES).toBe(200);
     expect(MAX_STEP_DEPTH).toBe(8);
+    // Upload is a vocabulary increment under the SAME schemaVersion (DEC-support-http-004): the
+    // version anchor above must not move, and the upload caps the format doc promises are pinned
+    expect([...STEP_NODE_KINDS]).toContain('upload');
+    expect([...UPLOAD_METHODS]).toEqual(['GET', 'POST']);
+    expect(MAX_UPLOAD_PAYLOAD_KEYS).toBe(20);
+    expect(UPLOAD_CREDENTIAL_NAME_MAX).toBe(64);
+    expect(MAX_UPLOAD_PAYLOAD_BYTES).toBe(65_536);
+    expect(MAX_UPLOAD_CAPTURE_BYTES).toBe(65_536);
     // English-first term families with Chinese terms kept for flows authored on Chinese sites
     expect([...SUBMIT_ALLOWED_TERMS]).toEqual(['save', 'submit', 'confirm', '保存', '提交', '确认', '确定']);
     expect([...SUBMIT_FORBIDDEN_TERMS]).toEqual([

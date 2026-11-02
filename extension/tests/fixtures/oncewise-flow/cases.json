@@ -3551,6 +3551,958 @@
           "loopItems": 3
         }
       }
+    },
+    {
+      "name": "valid-upload-egress-post-capture",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "POST",
+              "timeoutMs": 15000,
+              "credential": "我的上报服务器",
+              "payload": {
+                "orderNo": {
+                  "ref": "vars.orderNo"
+                },
+                "phone": {
+                  "ref": "inputs.phone"
+                },
+                "source": "warehouse"
+              },
+              "capture": {
+                "into": "receipt"
+              }
+            },
+            {
+              "id": "a1",
+              "kind": "assert",
+              "check": {
+                "kind": "nonEmpty",
+                "ref": "vars.receipt"
+              }
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "key": "phone",
+            "label": "联系电话",
+            "type": "text",
+            "required": true
+          }
+        ],
+        "businessKey": {
+          "read": {
+            "kind": "scalar",
+            "target": {
+              "clues": {
+                "id": "orderNo"
+              },
+              "componentType": "input",
+              "displayLabel": "单据号"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "valid-upload-get-query-scalar-and-boolean",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "r2",
+              "kind": "read",
+              "read": {
+                "kind": "boolean",
+                "target": {
+                  "clues": {
+                    "id": "urgent"
+                  },
+                  "componentType": "checkbox",
+                  "displayLabel": "加急"
+                }
+              },
+              "into": "urgent"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "GET",
+              "timeoutMs": 15000,
+              "payload": {
+                "orderNo": {
+                  "ref": "vars.orderNo"
+                },
+                "urgent": {
+                  "ref": "vars.urgent"
+                },
+                "seed": {
+                  "ref": "trigger.value"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-upload-no-credential-post-empty-payload",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "POST",
+              "timeoutMs": 15000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-upload-payload-rows-ref-post",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r3",
+              "kind": "read",
+              "read": {
+                "kind": "rows",
+                "table": {
+                  "clues": {
+                    "id": "lines"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "明细"
+                },
+                "columns": [
+                  "sku",
+                  "qty"
+                ]
+              },
+              "into": "lines"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "POST",
+              "timeoutMs": 15000,
+              "payload": {
+                "lines": {
+                  "ref": "vars.lines"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-upload-payload-boolean-ref-post",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r2",
+              "kind": "read",
+              "read": {
+                "kind": "boolean",
+                "target": {
+                  "clues": {
+                    "id": "urgent"
+                  },
+                  "componentType": "checkbox",
+                  "displayLabel": "加急"
+                }
+              },
+              "into": "urgent"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "POST",
+              "timeoutMs": 15000,
+              "payload": {
+                "urgent": {
+                  "ref": "vars.urgent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid-upload-payload-itemvar-field-in-foreach",
+      "expect": "valid",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r3",
+              "kind": "read",
+              "read": {
+                "kind": "rows",
+                "table": {
+                  "clues": {
+                    "id": "lines"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "明细"
+                },
+                "columns": [
+                  "sku",
+                  "qty"
+                ]
+              },
+              "into": "lines"
+            },
+            {
+              "id": "f1",
+              "kind": "foreach",
+              "over": "vars.lines",
+              "itemVar": "line",
+              "do": [
+                {
+                  "id": "u1",
+                  "kind": "upload",
+                  "url": "https://collect.example.com/api/orders",
+                  "method": "POST",
+                  "timeoutMs": 15000,
+                  "payload": {
+                    "sku": {
+                      "ref": "line.sku"
+                    },
+                    "qty": {
+                      "ref": "line.qty"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-upload-http-destination",
+      "expect": "invalid",
+      "expectErrorIncludes": "constant https URL",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "http://collect.example.com/api/orders",
+              "method": "POST",
+              "timeoutMs": 15000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-upload-url-with-query",
+      "expect": "invalid",
+      "expectErrorIncludes": "constant https URL",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders?token=abc",
+              "method": "POST",
+              "timeoutMs": 15000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-upload-url-userinfo",
+      "expect": "invalid",
+      "expectErrorIncludes": "constant https URL",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://user:secret@collect.example.com/api/orders",
+              "method": "POST",
+              "timeoutMs": 15000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-upload-method-put",
+      "expect": "invalid",
+      "expectErrorIncludes": "must be one of GET/POST",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "PUT",
+              "timeoutMs": 15000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-upload-payload-bad-ref",
+      "expect": "invalid",
+      "expectErrorIncludes": "not assigned on every path",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "POST",
+              "timeoutMs": 15000,
+              "payload": {
+                "x": {
+                  "ref": "vars.nope"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-upload-payload-rows-ref-get-rejected",
+      "expect": "invalid",
+      "expectErrorIncludes": "GET payload values must resolve to scalars",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r3",
+              "kind": "read",
+              "read": {
+                "kind": "rows",
+                "table": {
+                  "clues": {
+                    "id": "lines"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "明细"
+                },
+                "columns": [
+                  "sku",
+                  "qty"
+                ]
+              },
+              "into": "lines"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "GET",
+              "timeoutMs": 15000,
+              "payload": {
+                "lines": {
+                  "ref": "vars.lines"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-upload-payload-bare-itemvar-rejected",
+      "expect": "invalid",
+      "expectErrorIncludes": "is a whole loop item",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r3",
+              "kind": "read",
+              "read": {
+                "kind": "rows",
+                "table": {
+                  "clues": {
+                    "id": "lines"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "明细"
+                },
+                "columns": [
+                  "sku",
+                  "qty"
+                ]
+              },
+              "into": "lines"
+            },
+            {
+              "id": "f1",
+              "kind": "foreach",
+              "over": "vars.lines",
+              "itemVar": "line",
+              "do": [
+                {
+                  "id": "u1",
+                  "kind": "upload",
+                  "url": "https://collect.example.com/api/orders",
+                  "method": "POST",
+                  "timeoutMs": 15000,
+                  "payload": {
+                    "line": {
+                      "ref": "line"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-upload-payload-too-many-keys",
+      "expect": "invalid",
+      "expectErrorIncludes": "more than 20 keys",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "POST",
+              "timeoutMs": 15000,
+              "payload": {
+                "k0": "v",
+                "k1": "v",
+                "k2": "v",
+                "k3": "v",
+                "k4": "v",
+                "k5": "v",
+                "k6": "v",
+                "k7": "v",
+                "k8": "v",
+                "k9": "v",
+                "k10": "v",
+                "k11": "v",
+                "k12": "v",
+                "k13": "v",
+                "k14": "v",
+                "k15": "v",
+                "k16": "v",
+                "k17": "v",
+                "k18": "v",
+                "k19": "v",
+                "k20": "v"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-upload-credential-name-invalid",
+      "expect": "invalid",
+      "expectErrorIncludes": "trimmed non-empty credential name",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "POST",
+              "timeoutMs": 15000,
+              "credential": " padded "
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-upload-capture-into-not-ident",
+      "expect": "invalid",
+      "expectErrorIncludes": "must be an identifier",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "POST",
+              "timeoutMs": 15000,
+              "capture": {
+                "into": "my-slot"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-upload-capture-slot-type-conflict",
+      "expect": "invalid",
+      "expectErrorIncludes": "already holds a different type",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r3",
+              "kind": "read",
+              "read": {
+                "kind": "rows",
+                "table": {
+                  "clues": {
+                    "id": "lines"
+                  },
+                  "componentType": "other",
+                  "displayLabel": "明细"
+                },
+                "columns": [
+                  "sku",
+                  "qty"
+                ]
+              },
+              "into": "lines"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "POST",
+              "timeoutMs": 15000,
+              "capture": {
+                "into": "lines"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-upload-timeout-over-budget",
+      "expect": "invalid",
+      "expectErrorIncludes": "exceeds the wait budget",
+      "flow": {
+        "schemaVersion": 1,
+        "name": "上报演示",
+        "site": "https://www.example.com",
+        "page": {
+          "urlIncludes": "/orders"
+        },
+        "trigger": {
+          "kind": "pageEnter"
+        },
+        "steps": {
+          "id": "root",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "r1",
+              "kind": "read",
+              "read": {
+                "kind": "scalar",
+                "target": {
+                  "clues": {
+                    "id": "orderNo"
+                  },
+                  "componentType": "input",
+                  "displayLabel": "单据号"
+                }
+              },
+              "into": "orderNo"
+            },
+            {
+              "id": "u1",
+              "kind": "upload",
+              "url": "https://collect.example.com/api/orders",
+              "method": "POST",
+              "timeoutMs": 120000
+            }
+          ]
+        }
+      }
     }
   ]
 }

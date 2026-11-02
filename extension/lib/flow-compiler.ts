@@ -14,6 +14,7 @@ import { assign, createActor, createMachine, fromPromise } from 'xstate';
 import {
   INPUTS_REF_PREFIX,
   MAX_STEP_NODES,
+  MAX_UPLOAD_CAPTURE_BYTES,
   countStepNodes,
   describePredicate,
   resolveStepBudget,
@@ -25,12 +26,15 @@ import {
   type StepNode,
   type StepValue,
 } from './step-schema';
+// Type-only: lib/flow-upload imports DriverFailure from here at runtime; the shapes it defines
+// are consumed here purely as types, so the cycle is erased at compile time
+import type { UploadDriverRequest, UploadOutcome } from './flow-upload';
 
-// Engine hard cap on total executed actor nodes per run (read/action/wait/navigate); flows cannot
-// raise it.
+// Engine hard cap on total executed actor nodes per run (read/action/wait/navigate/upload); flows
+// cannot raise it.
 export const MAX_EXECUTED_STEP_NODES = 2000;
 
-export type DriverStage = 'read' | 'action' | 'wait' | 'navigate' | 'budget';
+export type DriverStage = 'read' | 'action' | 'wait' | 'navigate' | 'upload' | 'budget';
 
 // Structured failure carried into onError and surfaced in run results and logs.
 export class DriverFailure extends Error {
@@ -69,9 +73,9 @@ export interface HandoverRequest {
 
 // The whitelist driver seam: fake in unit tests, DOM-backed in P2. Every call re-locates its target;
 // missing/ambiguous are reported, never guessed. `evaluate` (readMatches waits) is supplied by the
-// compiler so predicate semantics stay in one place. `handover` is optional: a driver without it
-// fails navigate nodes as unsupported (fake drivers in older tests, hosts without the cross-page
-// capability).
+// compiler so predicate semantics stay in one place. `handover` and `upload` are optional: a driver
+// without them fails navigate / upload nodes as unsupported (fake drivers in older tests, hosts
+// without the capability).
 export interface FlowDriver {
   read(spec: ReadSpec, scope: DriverScope, signal: AbortSignal): Promise<ReadOutcome>;
   act(
@@ -88,6 +92,7 @@ export interface FlowDriver {
     signal: AbortSignal,
   ): Promise<WaitOutcome>;
   handover?(req: HandoverRequest, signal: AbortSignal): Promise<void>;
+  upload?(req: UploadDriverRequest, signal: AbortSignal): Promise<UploadOutcome>;
 }
 
 export interface FlowRunInput {
@@ -114,10 +119,14 @@ export interface FlowResume {
 export interface StepNodeEvent {
   phase: 'start' | 'ok';
   nodeId: string;
-  kind: 'read' | 'action' | 'wait' | 'navigate';
+  kind: ActorNodeKind;
   iterationPath: string;
   executed: number;
 }
+
+// The invoked (side-effecting / observing) node kinds — the ones progress hooks and dry-run
+// highlights report; pure control nodes (sequence/if/foreach/assert) emit nothing
+export type ActorNodeKind = 'read' | 'action' | 'wait' | 'navigate' | 'upload';
 
 export interface FlowHooks {
   onNode?: (event: StepNodeEvent) => void;
@@ -400,6 +409,69 @@ function navigateActor(node: Extract<StepNode, { kind: 'navigate' }>, driver: Fl
   });
 }
 
+// Payload resolution happens before the driver call, per node, with the same input-missing
+// semantics as actions (DEC-form-support-007: an absent optional input fails the node with zero
+// egress). GET values are String()-normalized here (boolean → 'true'/'false') because the query
+// string can only carry text; POST keeps the runtime types (string / boolean / rows array /
+// {id} records / multi string[]) for the background's fixed JSON mapping. An unresolved non-input
+// reference (a missing row field) lands as '' — the engine-wide empty-value semantic — instead of
+// being dropped from the object by JSON.stringify.
+// (type alias, not interface: invokeInput's extra-fields callback needs the implicit index signature)
+type ResolvedUploadPayload = {
+  payload: Record<string, unknown>;
+  missingRef?: string;
+};
+
+function resolveUploadPayloadForRun(ctx: FlowContext, node: Extract<StepNode, { kind: 'upload' }>): ResolvedUploadPayload {
+  const resolve = makeResolver(ctx);
+  const payload: Record<string, unknown> = {};
+  let missingRef: string | undefined;
+  for (const [key, value] of Object.entries(node.payload ?? {})) {
+    let resolved: unknown;
+    if (typeof value === 'string') {
+      resolved = value;
+    } else {
+      resolved = resolve(value.ref);
+      if (isMissingInputRef(value.ref, resolved)) {
+        missingRef = missingRef ?? value.ref;
+        continue;
+      }
+      if (resolved === undefined) resolved = '';
+    }
+    payload[key] = node.method === 'GET' ? String(resolved) : resolved;
+  }
+  return missingRef === undefined ? { payload } : { payload, missingRef };
+}
+
+function uploadActor(node: Extract<StepNode, { kind: 'upload' }>, driver: FlowDriver) {
+  return fromPromise(async ({ input, signal }: any): Promise<{ body?: string }> => {
+    const inp = input as {
+      payload: Record<string, unknown>;
+      missingRef?: string;
+      executed: number;
+      startedAt: number;
+      budget: StepBudget;
+    };
+    if (inp.missingRef !== undefined) throw new DriverFailure('upload', 'input-missing', inp.missingRef);
+    budgetGuard({ ...inp, nodeId: node.id });
+    if (driver.upload === undefined) throw new DriverFailure('upload', 'unsupported', node.url);
+    const res = await driver.upload(
+      {
+        url: node.url,
+        method: node.method,
+        payload: inp.payload,
+        ...(node.credential !== undefined ? { credentialName: node.credential } : {}),
+        timeoutMs: node.timeoutMs,
+        // The cap is the engine constant, never a flow-configurable value
+        ...(node.capture !== undefined ? { captureMaxBytes: MAX_UPLOAD_CAPTURE_BYTES } : {}),
+      },
+      signal,
+    );
+    if (!res.ok) throw new DriverFailure('upload', res.reason, res.detail);
+    return res.body !== undefined ? { body: res.body } : {};
+  });
+}
+
 const invokeInput = (extra?: (ctx: FlowContext) => Record<string, unknown>) =>
   ({ context }: { context: FlowContext }): Record<string, unknown> => ({
     scope: scopeOf(context),
@@ -419,12 +491,12 @@ function stateOf(
 ): Record<string, any> {
   const nextTarget = next ?? '#__completed';
   const emitStart =
-    (kind: 'read' | 'action' | 'wait' | 'navigate') =>
+    (kind: ActorNodeKind) =>
     ({ context }: { context: FlowContext }): void => {
       hooks?.onNode?.({ phase: 'start', nodeId: node.id, kind, iterationPath: context.iterationPath, executed: context.executed });
     };
   const emitOk =
-    (kind: 'read' | 'action' | 'wait' | 'navigate') =>
+    (kind: ActorNodeKind) =>
     ({ context }: { context: FlowContext }): void => {
       hooks?.onNode?.({ phase: 'ok', nodeId: node.id, kind, iterationPath: context.iterationPath, executed: context.executed });
     };
@@ -566,6 +638,31 @@ function stateOf(
                 executed: context.executed + 1,
               }) as Partial<FlowContext>),
               emitOk('navigate'),
+            ],
+          },
+          onError: { target: '#__failed', actions: failAction(node.id) },
+        },
+      };
+
+    case 'upload':
+      return {
+        id: `n_${node.id}`,
+        entry: emitStart('upload'),
+        invoke: {
+          src: uploadActor(node, driver),
+          input: invokeInput((ctx) => resolveUploadPayloadForRun(ctx, node)),
+          onDone: {
+            target: nextTarget,
+            actions: [
+              assign(({ context, event }: CtxEvent) => {
+                const patch: Partial<FlowContext> = { executed: context.executed + 1 };
+                if (node.capture !== undefined) {
+                  // Captured text lands as a scalar slot exactly like a read (an absent body → '')
+                  patch.vars = { ...context.vars, [node.capture.into]: (event.output as { body?: string } | undefined)?.body ?? '' };
+                }
+                return patch;
+              }),
+              emitOk('upload'),
             ],
           },
           onError: { target: '#__failed', actions: failAction(node.id) },

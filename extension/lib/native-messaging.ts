@@ -267,13 +267,20 @@ export async function dispatchOp(op: string, payload: Record<string, unknown> | 
 
 function summarizeDraft(draft: Flow, hadEnvelope: boolean): Record<string, unknown> {
   // Readable summary for the in-conversation confirmation: site, page match, trigger and the
-  // action list with submit-class actions flagged; no envelope fields
+  // action list with submit-class actions flagged; no envelope fields. Upload rows carry the
+  // egress flag and the unmasked destination so the AI can show the user where data goes
+  // before asking for confirmation (DEC-support-http-001)
   return {
     name: draft.name,
     site: draft.site,
     page: describePages(draft),
     trigger: describeTrigger(draft),
-    steps: describeSteps(draft.steps).map((step) => ({ text: step.text, submit: step.submit === true })),
+    steps: describeSteps(draft.steps).map((step) => ({
+      text: step.text,
+      submit: step.submit === true,
+      ...(step.egress === true ? { egress: true } : {}),
+      ...(step.egressUrl !== undefined ? { egressUrl: step.egressUrl } : {}),
+    })),
     ...(hadEnvelope ? { envelopeIgnored: true } : {}),
   };
 }

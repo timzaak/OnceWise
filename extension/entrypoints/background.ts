@@ -16,6 +16,12 @@ import { createLogger } from '@/lib/logger';
 import { openWelcomePage } from '@/lib/import-page';
 import { connectNativeChannel, isNativeChannelConnected } from '@/lib/native-messaging';
 import {
+  deleteUploadCredential,
+  handlePerformUpload,
+  listUploadCredentials,
+  saveUploadCredential,
+} from '@/lib/flow-upload';
+import {
   buildStoredInputMap,
   evaluateFlowInputs,
   type InputIssue,
@@ -228,6 +234,21 @@ async function handleUiPage(msg: ExtensionMessage): Promise<ExtensionResponse | 
       void reconcileSchedules().catch((error) => log.error('schedule reconcile failed', error));
       return { ok: true };
 
+    // Upload credential CRUD (single writer in lib/flow-upload.ts): the list never returns values;
+    // save is an upsert with full field validation (name / header token + forbidden set / value)
+    case 'sp:getUploadCredentials':
+      return { ok: true, credentials: await listUploadCredentials() };
+
+    case 'sp:saveUploadCredential': {
+      const saved = await saveUploadCredential({ name: msg.name, headerName: msg.headerName, value: msg.value });
+      return saved.ok ? { ok: true } : { ok: false, reason: saved.reason };
+    }
+
+    case 'sp:deleteUploadCredential': {
+      const deleted = await deleteUploadCredential(msg.name);
+      return deleted.ok ? { ok: true } : { ok: false, reason: deleted.reason };
+    }
+
     case 'bg:startDryRun':
     case 'bg:abortDryRun':
     case 'bg:getContentState': {
@@ -349,6 +370,12 @@ async function handleContent(
       }
       return { ok: true, values: evaluation.values };
     }
+    // Upload execution (DEC-support-http-002/003/006): the only place the extension fetches a
+    // flow-declared destination. The whole check chain (defensive shape re-check → flow binding
+    // and destination pinning for automatic runs → credential resolution BEFORE any network)
+    // lives in lib/flow-upload.ts; only the sender origin is forwarded here
+    case 'ct:performUpload':
+      return handlePerformUpload(msg, origin);
     case 'ct:claimBusiness': {
       const granted = await claimBusinessInstance(
         businessClaimKey(msg.site, msg.flowId, msg.businessKey),

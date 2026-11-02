@@ -2,7 +2,7 @@
 // delete / history / rollback) stays in the sidepanel workbench — this list only carries the toggle.
 import { useCallback, useEffect, useState } from 'react';
 import { sendRuntimeMessage } from '@/lib/messaging';
-import type { Flow } from '@/lib/flow-schema';
+import { stepsHaveUploadStep, type Flow } from '@/lib/flow-schema';
 import { formatTime, statusLabel } from '@/lib/ui-labels';
 import { t } from '@/lib/i18n';
 import { flowStoreItem } from '@/lib/storage';
@@ -62,7 +62,12 @@ export default function FlowListSection() {
           <div key={flow.id} className="im-list-item">
             <div className="im-row" style={{ justifyContent: 'space-between' }}>
               <strong className="im-desc">{flow.name}</strong>
-              <span className={`im-badge ${flow.status}`}>{statusLabel(flow.status)}</span>
+              <span className="im-row">
+                {/* This list carries a direct enable toggle: the egress mark must be visible here
+                    too, not only on the saved-summary card (FR4 list disclosure) */}
+                {stepsHaveUploadStep(flow.steps) && <span className="im-badge egress">{t('import.egressBadge')}</span>}
+                <span className={`im-badge ${flow.status}`}>{statusLabel(flow.status)}</span>
+              </span>
             </div>
             <div className="im-kv">
               <span className="im-sub">{flow.site} · {t('import.list.updated', { time: formatTime(flow.provenance.updatedAt, { withSeconds: false }) })}</span>

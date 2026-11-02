@@ -424,8 +424,10 @@ export default function FlowEditor({ flow: initial, contentState, failureText, o
         <ol style={{ margin: 0, paddingLeft: 18 }}>
           {describeSteps(flow.steps).map((s, i) => (
             <li key={i} className="sp-desc">
-              {s.submit ? '⚠ ' : ''}
+              {s.submit || s.egress ? '⚠ ' : ''}
               {redactText(s.text)}
+              {/* Declared destination rendered verbatim — the disclosure itself, never redacted */}
+              {s.egressUrl !== undefined && <> <span className="sp-egress-url">{s.egressUrl}</span></>}
             </li>
           ))}
         </ol>

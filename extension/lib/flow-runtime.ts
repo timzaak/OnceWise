@@ -9,6 +9,7 @@
 // ids) never leak across runs; passing an instance directly reuses it for every run instead.
 import {
   runFlow,
+  type ActorNodeKind,
   type FlowDriver,
   type FlowRunHandle,
   type FlowRunInput,
@@ -23,7 +24,7 @@ export type FlowLogEvent =
       runId: string;
       phase: 'start' | 'ok';
       nodeId: string;
-      kind: 'read' | 'action' | 'wait' | 'navigate';
+      kind: ActorNodeKind;
       iterationPath: string;
       executed: number;
     }

@@ -81,7 +81,11 @@ export default function SavedFlowCard() {
           {describeSteps(flow.steps).map((step, i) => (
             <li key={i} className="im-action-item">
               {step.submit && <span className="im-badge submit">{t('import.submitBadge')}</span>}
+              {step.egress && <span className="im-badge egress">{t('import.egressBadge')}</span>}
               <span>{redactText(step.text)}</span>
+              {/* The declared destination is the disclosure itself — rendered verbatim, never
+                  through redactText (DEC-support-http-001; digit-heavy URLs would be masked) */}
+              {step.egressUrl !== undefined && <span className="im-egress-url">{step.egressUrl}</span>}
             </li>
           ))}
         </ol>

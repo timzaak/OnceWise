@@ -4,7 +4,7 @@
 // asks over ct:claimBusiness. Claims are business-scoped and never TTL-released (no page-fingerprint token).
 import { resolveField, urlIncludesMatches, pageTargetOf } from './locator';
 import { type PageFingerprint, type Flow } from './flow-schema';
-import { stepsHaveSubmitAction } from './step-schema';
+import { stepsHaveSubmitAction, stepsHaveUploadStep } from './step-schema';
 import { sendRuntimeMessage } from './messaging';
 
 // URL part of the fingerprint plus optional content features: every contentIncludes ref must resolve
@@ -147,6 +147,11 @@ export async function releaseBusinessRun(flow: Flow, businessKey: string): Promi
   }
 }
 
+// Submit-carrying flows always claim (and refuse to start without a businessKey — the
+// no-business-key gate above). An upload-carrying flow claims only when it DECLARES a businessKey
+// (PRD §2.1 "business-instance claim, when the flow declares one"): the same instance then cannot
+// be uploaded twice in a session, but a pure-upload flow without a key is neither claimed nor
+// refused — there is no page write to protect, and the gate above stays submit-only.
 export function needsBusinessClaim(flow: Flow): boolean {
-  return stepsHaveSubmitAction(flow.steps);
+  return stepsHaveSubmitAction(flow.steps) || (flow.businessKey !== undefined && stepsHaveUploadStep(flow.steps));
 }

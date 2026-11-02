@@ -229,10 +229,22 @@ describe('run-time page identity', () => {
 });
 
 describe('business-instance claim (needsBusinessClaim + session storage)', () => {
-  it('needsBusinessClaim: only submit-carrying flows, regardless of trigger kind', () => {
+  const uploadSteps = (): StepNode => ({
+    id: 'root',
+    kind: 'sequence',
+    steps: [{ id: 'u1', kind: 'upload', url: 'https://collect.example.com/api', method: 'POST', timeoutMs: 5000 }],
+  });
+
+  it('needsBusinessClaim: submit-carrying flows always; upload-carrying flows only when they declare a businessKey (support-http)', () => {
     expect(needsBusinessClaim(makeFlow('r_s', { steps: submitSteps() }))).toBe(true);
     expect(needsBusinessClaim(makeFlow('r_s_field', { steps: submitSteps(), trigger: { kind: 'fieldChange', field: ref('w'), condition: { kind: 'anyChange' } } }))).toBe(true);
     expect(needsBusinessClaim(makeFlow())).toBe(false);
+    // An upload with a declared business identity takes the per-session claim (no double upload
+    // of the same instance); a pure upload without one neither claims nor is refused — the
+    // no-business-key gate above stays submit-only
+    expect(needsBusinessClaim(makeFlow('r_u_key', { steps: uploadSteps(), businessKey: bizRead('orderNo') }))).toBe(true);
+    expect(needsBusinessClaim(makeFlow('r_u', { steps: uploadSteps() }))).toBe(false);
+    expect(needsBusinessClaim(makeFlow('r_key_only', { businessKey: bizRead('orderNo') }))).toBe(false);
   });
 
   it('claim then re-claim is refused within the session; another business key still claims', async () => {

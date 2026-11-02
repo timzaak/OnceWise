@@ -8,10 +8,10 @@
 // generalization); bg: = UI-initiated routing to the active flow-site tab; ct: = content → background.
 import { browser } from 'wxt/browser';
 import { createLogger } from './logger';
-import type { Flow, RunFailureDetail } from './flow-schema';
-import { isPlainObject, isValidSchedulePeriod, parseOrigin } from './flow-schema';
+import type { Flow, RunFailureDetail, UploadMethod } from './flow-schema';
+import { isPlainObject, isUploadRequestShape, isValidSchedulePeriod, parseOrigin } from './flow-schema';
 import type { InputIssue, InputSnapshot } from './flow-inputs';
-import type { FlowOutcome } from './flow-compiler';
+import type { ActorNodeKind, FlowOutcome } from './flow-compiler';
 import type { PendingHandover, HandoverDescriptor } from './flow-handover';
 import type { FlowSchedule, TimedStartDescriptor } from './flow-schedules';
 import type { ScriptDto, SpaceRole, VersionMetaDto } from './sync-api';
@@ -47,6 +47,12 @@ export type ExtensionMessage =
   | { type: 'sp:getSchedules'; flowId: string }
   | { type: 'sp:saveSchedule'; schedule: unknown }
   | { type: 'sp:deleteSchedule'; id: string }
+  // support-http: device-local upload credential CRUD (DEC-support-http-002/005). The list response
+  // never carries values; save is an upsert (same name = overwrite); full field validation lives in
+  // lib/flow-upload.ts under the single writer, the guard only checks string shape
+  | { type: 'sp:getUploadCredentials' }
+  | { type: 'sp:saveUploadCredential'; name: string; headerName: string; value: string }
+  | { type: 'sp:deleteUploadCredential'; name: string }
   // data-sync: sp:sync* — all handled by lib/sync-service.ts in the background (fetch + space
   // bookkeeping); the UI hop uses SYNC_TIMEOUT_MS instead of the 10s default. No accounts: spaces are
   // locally generated id+key pairs, the UI never sees keys except through SyncSpaceView.code.
@@ -114,6 +120,23 @@ export type ExtensionMessage =
   // definitions and returns the snapshot only when every item is filled/valid; otherwise the flow
   // skips with zero page actions
   | { type: 'ct:getInputSnapshot'; flowId: string; flowDraftHash: string; dryRun?: boolean }
+  // support-http: execute one upload step in the background (content never fetches — the credential
+  // value must not enter the page context). The message carries NO header fields: the background
+  // builds the single credential header from the device-local record named by credentialName. For
+  // automatic runs the background additionally pins (url, method, credentialName) to a declaration
+  // in the enabled flow's own steps; a dry run (editor flow, possibly unsaved) passes site trust only
+  | {
+      type: 'ct:performUpload';
+      flowId: string;
+      flowDraftHash: string;
+      dryRun?: boolean;
+      url: string;
+      method: UploadMethod;
+      payload: Record<string, unknown>;
+      credentialName?: string;
+      timeoutMs: number;
+      captureMaxBytes?: number;
+    }
   | { type: 'ct:claimBusiness'; site: string; flowId: string; businessKey: string }
   // Gives back a claim whose run never started (mutex refusal / route left mid round-trip)
   | { type: 'ct:releaseBusiness'; site: string; flowId: string; businessKey: string }
@@ -126,7 +149,7 @@ export type ExtensionMessage =
       phase: 'run-start' | 'node-start' | 'node-ok' | 'run-end';
       resumed?: boolean;
       nodeId?: string;
-      nodeKind?: 'read' | 'action' | 'wait' | 'navigate';
+      nodeKind?: ActorNodeKind;
       iterationPath?: string;
       executed?: number;
       highlight?: string;
@@ -196,14 +219,24 @@ export interface ScriptRowView extends ScriptDto {
   local?: ScriptLocalInfo;
 }
 
-// Pull-side preview summary (describe* + redactText applied on the background side)
+// Pull-side preview summary (describe* + redactText applied on the background side). Upload rows
+// carry egress/egressUrl straight from describeSteps — egressUrl is the declared destination and
+// is deliberately NOT redacted (DEC-support-http-001: the user must see where data goes)
 export interface VersionPreviewView {
   name: string;
   site: string;
   pageDesc: string;
   triggerDesc: string;
-  actions: { text: string; submit: boolean }[];
+  actions: { text: string; submit: boolean; egress?: boolean; egressUrl?: string }[];
   hasSubmit: boolean;
+  hasEgress: boolean;
+}
+
+// One upload credential as the Settings card lists it — name and header only, never the value
+export interface UploadCredentialView {
+  name: string;
+  headerName: string;
+  createdAt: number;
 }
 
 // One member row of the members view — display fields fall back to userId; the list lives only
@@ -284,6 +317,11 @@ export type ExtensionResponse =
       updatedAt?: number;
       scriptId?: string;
       versionNumber?: number;
+      // ct:performUpload — status plus the captured body (only when the step declared capture);
+      // the body goes to the run's vars slot in content memory and nowhere else
+      upload?: { status: number; body?: string };
+      // sp:getUploadCredentials — names and header names only, never values
+      credentials?: UploadCredentialView[];
     }
   | { ok: false; reason: string; errors?: string[]; detail?: string; inputIssues?: InputIssue[] };
 
@@ -304,6 +342,7 @@ const MESSAGE_TYPES = new Set([
   'sp:grantNativeRead', 'sp:getNativeChannelState', 'sp:getFlowHistory', 'sp:rollbackFlow',
   'sp:getFlowInputs', 'sp:saveFlowInputs',
   'sp:getSchedules', 'sp:saveSchedule', 'sp:deleteSchedule',
+  'sp:getUploadCredentials', 'sp:saveUploadCredential', 'sp:deleteUploadCredential',
   'sp:syncGetStatus', 'sp:syncProbeHealth', 'sp:syncSetServer', 'sp:syncCreateSpace',
   'sp:syncJoinSpace', 'sp:syncSelectSpace', 'sp:syncForgetSpace', 'sp:syncDeleteSpace',
   'sp:syncListScripts', 'sp:syncListVersions', 'sp:syncPreviewVersion', 'sp:syncPullVersion',
@@ -311,7 +350,7 @@ const MESSAGE_TYPES = new Set([
   'sp:syncGetAuthState', 'sp:syncSignIn', 'sp:syncSignOut',
   'sp:syncIssueInvite', 'sp:syncListMembers', 'sp:syncUpdateMemberRole', 'sp:syncRemoveMember', 'sp:syncTransferOwnership',
   'bg:startDryRun', 'bg:abortDryRun', 'bg:getContentState', 'bg:reloadFlows', 'bg:handoverStaged', 'bg:timedStartStaged',
-  'ct:getEnabledFlows', 'ct:getInputSnapshot', 'ct:claimBusiness', 'ct:releaseBusiness', 'ct:flowRunStatus', 'ct:dryRunProgress', 'ct:dryRunFinished',
+  'ct:getEnabledFlows', 'ct:getInputSnapshot', 'ct:performUpload', 'ct:claimBusiness', 'ct:releaseBusiness', 'ct:flowRunStatus', 'ct:dryRunProgress', 'ct:dryRunFinished',
   'ct:stageHandover', 'ct:probeHandover', 'ct:takeHandover', 'ct:dropHandover', 'ct:takeTimedStart',
 ]);
 
@@ -360,11 +399,24 @@ export function isExtensionMessage(v: unknown): v is ExtensionMessage {
       );
     case 'sp:deleteSchedule':
       return typeof v.id === 'string';
+    case 'sp:getUploadCredentials':
+      return true;
+    case 'sp:saveUploadCredential':
+      return typeof v.name === 'string' && typeof v.headerName === 'string' && typeof v.value === 'string';
+    case 'sp:deleteUploadCredential':
+      return typeof v.name === 'string';
     case 'ct:getInputSnapshot':
       return (
         typeof v.flowId === 'string' &&
         typeof v.flowDraftHash === 'string' &&
         (v.dryRun === undefined || typeof v.dryRun === 'boolean')
+      );
+    case 'ct:performUpload':
+      return (
+        typeof v.flowId === 'string' &&
+        typeof v.flowDraftHash === 'string' &&
+        (v.dryRun === undefined || typeof v.dryRun === 'boolean') &&
+        isUploadRequestShape(v)
       );
     case 'sp:syncSetServer':
       return typeof v.serverUrl === 'string';

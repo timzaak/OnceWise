@@ -1,6 +1,6 @@
 # Chrome Web Store 上线材料包
 
-本文件夹是 OnceWise Flow 扩展上架 Chrome Web Store 的全部材料与发布清单。除截图产物外,所有文案为"粘贴即用"形态;隐私相关声明与 `docs/privacy-policy.md`(2026-10-07 版)同源,政策变更后需同步修订。
+本文件夹是 OnceWise Flow 扩展上架 Chrome Web Store 的全部材料与发布清单。除截图产物外,所有文案为"粘贴即用"形态;隐私相关声明与 `docs/privacy-policy.md`(2026-11-02 版)同源,政策变更后需同步修订。
 
 ## 文件索引
 

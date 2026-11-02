@@ -197,7 +197,22 @@ export type StepNode =
   // Declares that the run is about to leave this document for the declared page `to` and will
   // continue there. The navigation itself is caused by a preceding whitelisted click (submit button,
   // pagination link, possibly target=_blank) — navigate only declares and awaits the arrival.
-  | { id: string; kind: 'navigate'; to: string; timeoutMs: number };
+  | { id: string; kind: 'navigate'; to: string; timeoutMs: number }
+  // Upload (DEC-support-http-003): a leaf node that POSTs/GETs the already-collected data to a
+  // constant https destination. `url` is a constant — no userinfo, query or hash (the query belongs
+  // to `payload` alone); `credential` is a reference NAME into the device-local credential store
+  // (the value never enters the flow file); `capture.into` receives the size-bounded response body
+  // as a scalar slot. Fetch itself runs in the background (the driver seam), never in the page.
+  | {
+      id: string;
+      kind: 'upload';
+      url: string;
+      method: UploadMethod;
+      credential?: string;
+      payload?: Record<string, StepValue>;
+      capture?: { into: string };
+      timeoutMs: number;
+    };
 
 export type StepNodeKind = StepNode['kind'];
 export const STEP_NODE_KINDS: readonly StepNodeKind[] = [
@@ -209,7 +224,21 @@ export const STEP_NODE_KINDS: readonly StepNodeKind[] = [
   'wait',
   'assert',
   'navigate',
+  'upload',
 ] as const;
+
+export const UPLOAD_METHODS = ['GET', 'POST'] as const;
+export type UploadMethod = (typeof UPLOAD_METHODS)[number];
+// Flat payload: at most this many keys per upload node
+export const MAX_UPLOAD_PAYLOAD_KEYS = 20;
+// Credential reference names allow CJK (the user stories name credentials in Chinese)
+export const UPLOAD_CREDENTIAL_NAME_MAX = 64;
+// Wire-size caps shared by the vocabulary, the message guard and the background executor: request
+// body/query and captured response are each bounded to 64 KiB (rows-table uploads need headroom;
+// still far below the 512 KiB native-channel cap). Defined here — the leaf module — because both
+// the messaging payload guard and lib/flow-upload consume them without an import cycle.
+export const MAX_UPLOAD_PAYLOAD_BYTES = 65_536;
+export const MAX_UPLOAD_CAPTURE_BYTES = 65_536;
 
 // Flow-level budget: engine hard caps cannot be raised, only lowered (PRD §4.3 / FR12).
 export interface StepBudget {
@@ -240,6 +269,47 @@ export const MAX_STEP_DEPTH = 8;
 export const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SLOT_PREFIX = 'vars.';
 const TRIGGER_REF = 'trigger.value';
+export const CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
+
+// Upload destination rule (DEC-support-http-001/003): a parseable https URL with no embedded
+// credentials (userinfo is a plaintext-credential carrier — PRD §2.2), no query (GET data has
+// exactly one source: `payload`) and no fragment. Plain http is rejected here — the whole flow is
+// refused at import (US-HTP-001 scene 2). Exported so the message guard re-checks the same rule.
+export function isHttpsUploadUrl(url: unknown): url is string {
+  if (typeof url !== 'string' || url.length === 0) return false;
+  // The delimiter check runs on the RAW string: WHATWG URL reports '' for a bare trailing `?`/`#`,
+  // but the runtime GET appends `?query` to the raw string — a trailing delimiter would corrupt
+  // the request (`#?q` drops the query wholesale, `??q` mangles the first key)
+  if (url.includes('?') || url.includes('#')) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  return (
+    parsed.protocol === 'https:' &&
+    parsed.username === '' &&
+    parsed.password === ''
+  );
+}
+
+// Credential reference name (the only credential fact a flow file carries): trimmed (so the draft
+// hash is stable), non-empty, bounded, no control characters, not `__proto__` (the device-local
+// store writer assigns records by plain bracket assignment — that name hits the prototype setter
+// and the record would be silently dropped); deliberately NOT an identifier — users name
+// credentials in their own language ("我的上报服务器"). One implementation for the node
+// validator, the message guard and the device-local store writer (lib/flow-upload imports it).
+export function isValidUploadCredentialName(name: unknown): name is string {
+  return (
+    typeof name === 'string' &&
+    name === name.trim() &&
+    name !== '__proto__' &&
+    name.length > 0 &&
+    name.length <= UPLOAD_CREDENTIAL_NAME_MAX &&
+    !CONTROL_CHARS.test(name)
+  );
+}
 
 // Loop item member kinds: 'string' for a foreach over a multi input (a bare `<itemVar>` IS a valid
 // string value there), 'record' for object members ({id} records, row records)
@@ -331,6 +401,53 @@ function checkStringValueRef(scope: WalkScope, ref: string, label: string, error
   const isFieldPath = rest.length > slot.length;
   if ((type === 'scalar' && !isFieldPath) || (type === 'rows' && isFieldPath)) return;
   errors.push(`${label}: "${ref}" resolves to a ${type}, a value position requires a string`);
+}
+
+// Upload payload references, tiered by method (PRD §2.1 "page data" includes rows tables and
+// booleans). POST serializes to JSON, so any definitely-assigned reference is fine — scalar,
+// boolean, collection, rows, a loop-item field — except a bare record loop item (a whole row has
+// no fixed JSON shape the receiver could rely on). GET carries data in the query string, so each
+// value must resolve to something String() renders faithfully: a scalar/boolean slot, a loop-item
+// field, a string/boolean input, trigger.value — never an array or a record.
+function checkUploadPostValueRef(scope: WalkScope, ref: string, label: string, errors: string[]): void {
+  checkRef(scope, ref, label, errors);
+  const base = refBase(ref);
+  const itemKind = scope.itemVars.get(base);
+  if (itemKind === 'record' && ref === base) {
+    errors.push(`${label}: "${ref}" is a whole loop item, an upload payload value needs one of its fields`);
+  } else if (itemKind === 'string' && ref !== base) {
+    errors.push(`${label}: "${ref}" addresses a field of "${base}", which is a string loop member, not a record`);
+  }
+}
+
+function checkUploadGetValueRef(scope: WalkScope, ref: string, label: string, errors: string[]): void {
+  checkRef(scope, ref, label, errors);
+  if (ref === TRIGGER_REF) return;
+  const inputType = declaredInputType(scope, ref);
+  if (inputType !== undefined) {
+    if (inputRuntimeTypeOf(inputType) === 'array') {
+      errors.push(`${label}: "${ref}" is a ${inputType} input (array value), GET payload values must resolve to scalars`);
+    }
+    return;
+  }
+  const base = refBase(ref);
+  const itemKind = scope.itemVars.get(base);
+  if (itemKind !== undefined) {
+    if (itemKind === 'string' && ref !== base) {
+      errors.push(`${label}: "${ref}" addresses a field of "${base}", which is a string loop member, not a record`);
+    } else if (itemKind === 'record' && ref === base) {
+      errors.push(`${label}: "${ref}" is a whole loop item, GET payload values must resolve to scalars`);
+    }
+    return;
+  }
+  if (!ref.startsWith(SLOT_PREFIX)) return;
+  const rest = ref.slice(SLOT_PREFIX.length);
+  const slot = refBase(rest);
+  const type = scope.slots.get(slot);
+  if (type === undefined) return; // the unassigned slot is already reported by checkRef
+  const isFieldPath = rest.length > slot.length;
+  if (((type === 'scalar' || type === 'boolean') && !isFieldPath) || (type === 'rows' && isFieldPath)) return;
+  errors.push(`${label}: "${ref}" resolves to a ${type}, GET payload values must resolve to scalars`);
 }
 
 // every/some iterate members: the reference must be a whole collection/rows slot. A scalar/boolean
@@ -786,6 +903,68 @@ function walk(
       return { slotsAfter: cloneSlots() };
     }
 
+    case 'upload': {
+      if (!isHttpsUploadUrl(node.url)) {
+        errors.push(`${label}.url: upload destination must be a constant https URL without credentials, query or fragment`);
+      }
+      const methodOk = typeof node.method === 'string' && (UPLOAD_METHODS as readonly string[]).includes(node.method);
+      if (!methodOk) errors.push(`${label}.method: must be one of ${UPLOAD_METHODS.join('/')}`);
+      if (node.credential !== undefined && !isValidUploadCredentialName(node.credential)) {
+        errors.push(
+          `${label}.credential: must be a trimmed non-empty credential name of at most ${UPLOAD_CREDENTIAL_NAME_MAX} characters without control characters`,
+        );
+      }
+      if (node.payload !== undefined) {
+        if (!isPlainObject(node.payload)) {
+          errors.push(`${label}.payload: must be an object of key → constant string or { "ref": "..." }`);
+        } else {
+          const keys = Object.keys(node.payload);
+          if (keys.length > MAX_UPLOAD_PAYLOAD_KEYS) {
+            errors.push(`${label}.payload: more than ${MAX_UPLOAD_PAYLOAD_KEYS} keys`);
+          }
+          for (const key of keys) {
+            // `__proto__` would pass every rule below yet vanish at runtime: the compiler copies
+            // payload keys by plain assignment, and that one hits the prototype setter instead
+            if (key === '__proto__') {
+              errors.push(`${label}.payload: key "__proto__" is not allowed`);
+            }
+            if (key.length === 0 || key.length > 64 || CONTROL_CHARS.test(key)) {
+              errors.push(`${label}.payload: key "${key}" must be 1-64 characters without control characters`);
+            }
+            const value = node.payload[key];
+            const valueLabel = `${label}.payload.${key}`;
+            if (typeof value === 'string') continue;
+            if (isPlainObject(value) && typeof value.ref === 'string') {
+              if (node.method === 'GET') checkUploadGetValueRef(scope, value.ref, valueLabel, errors);
+              else checkUploadPostValueRef(scope, value.ref, valueLabel, errors);
+              continue;
+            }
+            errors.push(`${valueLabel}: value must be a constant string or { "ref": "..." }`);
+          }
+        }
+      }
+      if (typeof node.timeoutMs !== 'number' || !Number.isFinite(node.timeoutMs) || node.timeoutMs < 1) {
+        errors.push(`${label}.timeoutMs: an upload deadline is required (positive milliseconds)`);
+      } else if (node.timeoutMs > scope.budget.waitMs) {
+        errors.push(`${label}.timeoutMs: ${node.timeoutMs} exceeds the wait budget ${scope.budget.waitMs}`);
+      }
+      // A captured response lands as a scalar slot exactly like a scalar read: definite afterwards
+      // (a non-2xx is a terminal failure), type-conflict with an existing slot is an error.
+      const slots = cloneSlots();
+      if (node.capture !== undefined) {
+        if (!isPlainObject(node.capture) || typeof node.capture.into !== 'string' || !IDENT.test(node.capture.into)) {
+          errors.push(`${label}.capture.into: must be an identifier`);
+        } else {
+          const existing = slots.get(node.capture.into);
+          if (existing !== undefined && existing !== 'scalar') {
+            errors.push(`${label}.capture.into: slot "${node.capture.into}" already holds a different type`);
+          }
+          slots.set(node.capture.into, 'scalar');
+        }
+      }
+      return { slotsAfter: slots };
+    }
+
     default:
       errors.push(`${label}: unknown node kind "${String(node.kind)}"`);
       return null;
@@ -872,6 +1051,36 @@ export function countStepNodes(root: StepNode): number {
   return total;
 }
 
+export function stepsHaveUploadStep(root: StepNode): boolean {
+  let found = false;
+  walkStepNodes(root, (node) => {
+    if (node.kind === 'upload') found = true;
+  });
+  return found;
+}
+
+// Every upload destination the tree declares — the background pins an automatic run's
+// ct:performUpload request to one of these triples, so a credential can only ever travel to a
+// destination the validated flow itself names (never to a forged URL).
+export interface UploadDeclaration {
+  url: string;
+  method: UploadMethod;
+  credential?: string;
+}
+
+export function uploadDeclarationsOf(root: StepNode): UploadDeclaration[] {
+  const out: UploadDeclaration[] = [];
+  walkStepNodes(root, (node) => {
+    if (node.kind !== 'upload' || typeof node.url !== 'string' || typeof node.method !== 'string') return;
+    out.push({
+      url: node.url,
+      method: node.method as UploadMethod,
+      ...(typeof node.credential === 'string' ? { credential: node.credential } : {}),
+    });
+  });
+  return out;
+}
+
 function describeRead(spec: ReadSpec): string {
   switch (spec.kind) {
     case 'scalar':
@@ -913,13 +1122,24 @@ export function describePredicate(pred: Predicate): string {
 
 // One summary line per actionable/observable node, indented for branches and loops. Shared by the
 // import summary and the sync version preview (both go through redactText at the presentation layer).
-export function describeSteps(root: StepNode): { text: string; submit: boolean }[] {
-  const out: { text: string; submit: boolean }[] = [];
+// Upload rows additionally carry `egress: true` and the destination in `egressUrl` (DEC-support-http-001):
+// the URL is kept OUT of `text` on purpose — redactText masks digit-heavy strings wholesale, which
+// would turn "https://10.20.30.40:8443/api/collect" into "htt****lect" and defeat the disclosure. The
+// destination is the flow's declared constant, not page data, so presentation renders egressUrl verbatim.
+export interface StepDescription {
+  text: string;
+  submit: boolean;
+  egress?: boolean;
+  egressUrl?: string;
+}
+
+export function describeSteps(root: StepNode): StepDescription[] {
+  const out: StepDescription[] = [];
   const visit = (node: unknown, indent: number): void => {
     if (!isPlainObject(node)) return;
     const pad = '  '.repeat(indent);
-    const push = (text: string, submit = false): void => {
-      out.push({ text: pad + text, submit });
+    const push = (text: string, submit = false, egressUrl?: string): void => {
+      out.push(egressUrl === undefined ? { text: pad + text, submit } : { text: pad + text, submit, egress: true, egressUrl });
     };
     switch (node.kind) {
       case 'sequence':
@@ -974,6 +1194,18 @@ export function describeSteps(root: StepNode): { text: string; submit: boolean }
       case 'navigate':
         push(`navigate to page ${node.to} (≤ ${node.timeoutMs}ms)`);
         return;
+      case 'upload': {
+        const payload = isPlainObject(node.payload) ? node.payload : {};
+        const fields = Object.entries(payload)
+          .map(([key, value]) => (isPlainObject(value) && typeof value.ref === 'string' ? `${key}←${value.ref}` : `${key}=${String(value)}`))
+          .join(', ');
+        const parts = [`upload ${String(node.method)}`];
+        if (fields.length > 0) parts.push(`payload {${fields}}`);
+        if (typeof node.credential === 'string') parts.push(`credential ${node.credential}`);
+        if (isPlainObject(node.capture) && typeof node.capture.into === 'string') parts.push(`capture → vars.${node.capture.into}`);
+        push(parts.join(' · '), false, String(node.url));
+        return;
+      }
       default:
         return;
     }
