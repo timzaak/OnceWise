@@ -84,6 +84,9 @@ export async function launchExtensionContext(
     args: [
       `--disable-extensions-except=${loadPath}`,
       `--load-extension=${loadPath}`,
+      // e2e 浏览器环境不校验 TLS 证书（为 upload-receiver 等自签 https 夹具放行）；
+      // 需要证书校验行为的故事须另起启动变体，不得依赖本参数
+      '--ignore-certificate-errors',
     ],
   })
 }

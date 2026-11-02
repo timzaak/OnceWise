@@ -243,6 +243,15 @@ export async function expectFlowStatus(page: Page, flowName: string, status: 'dr
   await expect(flowCardLocation(page, flowName).locator('.sp-badge', { hasText: labels[status] })).toBeVisible()
 }
 
+// 流程清单失败行（展开后读正文；未展开时 summary 可见即提示存在）
+export function failureRow(page: Page, flowName: string) {
+  return flowCardLocation(page, flowName).locator('details.sp-progress.fail')
+}
+
+export async function expectNoFailure(page: Page, flowName: string): Promise<void> {
+  await expect(failureRow(page, flowName)).toHaveCount(0)
+}
+
 // 流程编辑器改名：flowDraftHash 含 name，改名即构成「本机已修改未发布」的内容变化。
 export async function renameFlowViaEditor(page: Page, flowName: string, newName: string): Promise<void> {
   await openFlowsTab(page)
@@ -981,4 +990,39 @@ export function crossPageFlowJson(site: string, opts: {
       ],
     },
   })
+}
+
+// 凭据管理卡（aria-label 双语）。列表只回显「名称 · 请求头名」，永不回显值。
+export function credentialsCard(page: Page) {
+  return page.locator(
+    'section.sp-card[aria-label="Upload credentials"], section.sp-card[aria-label="上报凭据"]',
+  )
+}
+
+export async function openSettingsTab(page: Page): Promise<void> {
+  await page.locator('nav.sp-nav .sp-tab', { hasText: /^(Settings|设置)$/ }).click()
+  await expect(credentialsCard(page)).toBeVisible({ timeout: 15_000 })
+}
+
+// 经 Settings 卡真实表单录入一条凭据（默认头名 Authorization 由 UI 预填，调用方可覆盖），
+// 断言列表行出现且不含值（值只进 type=password 输入与 local:uploadCredentials）。
+export async function saveUploadCredential(
+  page: Page, fields: { name: string; value: string; headerName?: string },
+): Promise<void> {
+  await openSettingsTab(page)
+  const card = credentialsCard(page)
+  await card.getByRole('button', { name: /^(Add credential|添加凭据)$/ }).click()
+  await page.locator('#credential-name').fill(fields.name)
+  if (fields.headerName !== undefined) await page.locator('#credential-header').fill(fields.headerName)
+  await page.locator('#credential-value').fill(fields.value)
+  await card.getByRole('button', { name: /^(Save credential|保存凭据)$/ }).click()
+  const row = card.locator('.sp-option', { hasText: fields.name })
+  await expect(row).toBeVisible({ timeout: 15_000 })
+  await expect(row).toContainText(fields.headerName ?? 'Authorization')
+  await expect(row).not.toContainText(fields.value)
+}
+
+// 导入页「已保存的流程」摘要卡（aria-label 双语）
+export function savedFlowCard(page: Page) {
+  return page.locator('section.im-card[aria-label="Saved flow"], section.im-card[aria-label="已保存的流程"]')
 }
