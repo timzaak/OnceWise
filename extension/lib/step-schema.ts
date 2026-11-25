@@ -1059,8 +1059,8 @@ export function stepsHaveUploadStep(root: StepNode): boolean {
   return found;
 }
 
-// Every upload destination the tree declares — the background pins an automatic run's
-// ct:performUpload request to one of these triples, so a credential can only ever travel to a
+// Every upload destination the tree declares — the background pins every ct:performUpload
+// request to one of these triples, so a credential can only ever travel to a
 // destination the validated flow itself names (never to a forged URL).
 export interface UploadDeclaration {
   url: string;

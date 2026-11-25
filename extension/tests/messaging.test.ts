@@ -163,6 +163,7 @@ describe('schedule message guards', () => {
 describe('ct:performUpload payload guard', () => {
   const base = {
     type: 'ct:performUpload',
+    uploadId: '0123456789abcdef0123456789abcdef',
     flowId: 'r1',
     flowDraftHash: 'h',
     url: 'https://collect.example.com/api/orders',
@@ -171,19 +172,20 @@ describe('ct:performUpload payload guard', () => {
     timeoutMs: 15_000,
   };
 
-  it('accepts the automatic-run and dry-run shapes with optional credentialName / captureMaxBytes', () => {
+  it('accepts the request shape with optional credentialName / captureMaxBytes', () => {
     expect(isExtensionMessage(base)).toBe(true);
-    expect(isExtensionMessage({ ...base, dryRun: true, credentialName: '我的上报服务器', captureMaxBytes: 65_536 })).toBe(true);
+    expect(isExtensionMessage({ ...base, credentialName: '我的上报服务器', captureMaxBytes: 65_536 })).toBe(true);
     expect(isExtensionMessage({ ...base, method: 'GET', payload: { orderNo: 'A-1', urgent: 'true' } })).toBe(true);
     expect(isExtensionMessage({ ...base, payload: {} })).toBe(true);
   });
 
-  it('rejects a plain-http / query / userinfo destination, a method outside GET/POST and a non-boolean dryRun', () => {
+  it('rejects a plain-http / query / userinfo destination, a method outside GET/POST and a missing or non-string nonce', () => {
     expect(isExtensionMessage({ ...base, url: 'http://collect.example.com/api/orders' })).toBe(false);
     expect(isExtensionMessage({ ...base, url: 'https://collect.example.com/api/orders?x=1' })).toBe(false);
     expect(isExtensionMessage({ ...base, url: 'https://u:p@collect.example.com/api/orders' })).toBe(false);
     expect(isExtensionMessage({ ...base, method: 'PUT' })).toBe(false);
-    expect(isExtensionMessage({ ...base, dryRun: 'yes' })).toBe(false);
+    expect(isExtensionMessage({ ...base, uploadId: undefined })).toBe(false);
+    expect(isExtensionMessage({ ...base, uploadId: 7 })).toBe(false);
   });
 
   it('rejects GET payloads with non-string values and POST payloads with non-JSON values or too many keys', () => {
@@ -201,6 +203,14 @@ describe('ct:performUpload payload guard', () => {
     expect(isExtensionMessage({ ...base, captureMaxBytes: 65_537 })).toBe(false);
     expect(isExtensionMessage({ ...base, captureMaxBytes: 0 })).toBe(false);
     expect(isExtensionMessage({ ...base, flowId: 7 })).toBe(false);
+  });
+});
+
+describe('ct:cancelUpload payload guard', () => {
+  it('needs the nonce as a string — anything else is bad-payload and never reaches the in-flight registry', () => {
+    expect(isExtensionMessage({ type: 'ct:cancelUpload', uploadId: '0123456789abcdef0123456789abcdef' })).toBe(true);
+    expect(isExtensionMessage({ type: 'ct:cancelUpload' })).toBe(false);
+    expect(isExtensionMessage({ type: 'ct:cancelUpload', uploadId: 7 })).toBe(false);
   });
 });
 

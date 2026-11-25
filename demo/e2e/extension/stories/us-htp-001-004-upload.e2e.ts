@@ -20,7 +20,7 @@ import { nativeTest, pingUntilReady, runClient, saveFlowViaNative } from '../nat
 // 材料为人工核对项，不做 e2e）。全程真实链路：本机通道交付（T1）→ Settings 凭据卡真实表单 →
 // 启用 → 受控页「采集→上报→捕获→断言」；上报目的地为本地 https 接收端（自签证书，由
 // fixtures.ts 启动参数放行）。
-// 预演/自动执行同 actor 真实发送（DEC-006）——故事不加副作用桩；upload-payload-too-large 与
+// 自动执行真实发送（DEC-006；上报无预演路径）——故事不加副作用桩；upload-payload-too-large 与
 // input-missing 不入 e2e（分别由 Vitest 与既有输入门禁覆盖）。断言文案一律 en/zh 双语 regex。
 
 const CRED_NAME = '我的上报服务器'

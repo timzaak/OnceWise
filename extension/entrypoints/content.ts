@@ -98,11 +98,12 @@ export default defineContentScript({
           if (run === null || run.runId === '') return null;
           return { runId: run.runId, flow: run.flow, dryRun: run.dryRun, businessKey: run.businessKey };
         });
-        // Upload (DEC-support-http-006): DOM driver and dry-run driver alike — a previewed upload is
-        // a real upload, same actor, same egress. Outermost on purpose: withHandover does not
-        // forward `upload`, withUpload forwards `handover`. The meta's draft hash is constant for a
-        // run (activeRun is only ever replaced wholesale, its flow never mutated), so it is memoized
-        // per run — a foreach uploading row by row must not re-hash the whole flow per row.
+        // Upload (DEC-support-http-006): whichever base driver the run got, the background binds
+        // every request to the enabled, current flow alike — there is no preview leg (baseline
+        // FR7). Outermost on purpose: withHandover does not forward `upload`, withUpload forwards
+        // `handover`. The meta's draft hash is constant for a run (activeRun is only ever replaced
+        // wholesale, its flow never mutated), so it is memoized per run — a foreach uploading row
+        // must not re-hash the whole flow per row.
         // No runId guard here, unlike withHandover's meta: upload's meta carries flowId/hash only,
         // and the first actor node executes synchronously inside runtime.tryStart — before startRun
         // writes the real runId back (a pure-upload flow would otherwise fail as 'unsupported').
@@ -111,7 +112,7 @@ export default defineContentScript({
           const run = activeRun;
           if (run === null) return null;
           if (metaFor === null || metaFor.run !== run) {
-            metaFor = { run, meta: { flowId: run.flow.id, flowDraftHash: flowDraftHash(run.flow), dryRun: run.dryRun } };
+            metaFor = { run, meta: { flowId: run.flow.id, flowDraftHash: flowDraftHash(run.flow) } };
           }
           return metaFor.meta;
         });

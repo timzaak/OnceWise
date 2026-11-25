@@ -122,14 +122,16 @@ export type ExtensionMessage =
   | { type: 'ct:getInputSnapshot'; flowId: string; flowDraftHash: string; dryRun?: boolean }
   // support-http: execute one upload step in the background (content never fetches — the credential
   // value must not enter the page context). The message carries NO header fields: the background
-  // builds the single credential header from the device-local record named by credentialName. For
-  // automatic runs the background additionally pins (url, method, credentialName) to a declaration
-  // in the enabled flow's own steps; a dry run (editor flow, possibly unsaved) passes site trust only
+  // builds the single credential header from the device-local record named by credentialName. Every
+  // request is bound to the sender site's enabled flow at its current draft hash AND its
+  // (url, method, credentialName) pinned to a declaration in that flow's own steps — there is no
+  // looser leg (the extension has no preview entry, baseline FR7). uploadId is a content-chosen nonce
+  // naming this one request for ct:cancelUpload
   | {
       type: 'ct:performUpload';
+      uploadId: string;
       flowId: string;
       flowDraftHash: string;
-      dryRun?: boolean;
       url: string;
       method: UploadMethod;
       payload: Record<string, unknown>;
@@ -137,6 +139,9 @@ export type ExtensionMessage =
       timeoutMs: number;
       captureMaxBytes?: number;
     }
+  // Stops the in-flight upload of that uploadId: the run was cancelled (flow paused / deleted /
+  // replaced, route left, page unload). An unknown or already settled id is a no-op
+  | { type: 'ct:cancelUpload'; uploadId: string }
   | { type: 'ct:claimBusiness'; site: string; flowId: string; businessKey: string }
   // Gives back a claim whose run never started (mutex refusal / route left mid round-trip)
   | { type: 'ct:releaseBusiness'; site: string; flowId: string; businessKey: string }
@@ -350,7 +355,7 @@ const MESSAGE_TYPES = new Set([
   'sp:syncGetAuthState', 'sp:syncSignIn', 'sp:syncSignOut',
   'sp:syncIssueInvite', 'sp:syncListMembers', 'sp:syncUpdateMemberRole', 'sp:syncRemoveMember', 'sp:syncTransferOwnership',
   'bg:startDryRun', 'bg:abortDryRun', 'bg:getContentState', 'bg:reloadFlows', 'bg:handoverStaged', 'bg:timedStartStaged',
-  'ct:getEnabledFlows', 'ct:getInputSnapshot', 'ct:performUpload', 'ct:claimBusiness', 'ct:releaseBusiness', 'ct:flowRunStatus', 'ct:dryRunProgress', 'ct:dryRunFinished',
+  'ct:getEnabledFlows', 'ct:getInputSnapshot', 'ct:performUpload', 'ct:cancelUpload', 'ct:claimBusiness', 'ct:releaseBusiness', 'ct:flowRunStatus', 'ct:dryRunProgress', 'ct:dryRunFinished',
   'ct:stageHandover', 'ct:probeHandover', 'ct:takeHandover', 'ct:dropHandover', 'ct:takeTimedStart',
 ]);
 
@@ -413,11 +418,13 @@ export function isExtensionMessage(v: unknown): v is ExtensionMessage {
       );
     case 'ct:performUpload':
       return (
+        typeof v.uploadId === 'string' &&
         typeof v.flowId === 'string' &&
         typeof v.flowDraftHash === 'string' &&
-        (v.dryRun === undefined || typeof v.dryRun === 'boolean') &&
         isUploadRequestShape(v)
       );
+    case 'ct:cancelUpload':
+      return typeof v.uploadId === 'string';
     case 'sp:syncSetServer':
       return typeof v.serverUrl === 'string';
     case 'sp:syncCreateSpace':

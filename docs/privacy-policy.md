@@ -12,7 +12,7 @@
 
 **OnceWise Flow Browser Extension — Privacy Policy**
 
-Effective date: 2026-11-02
+Effective date: 2026-11-25
 
 ### Overview
 
@@ -33,7 +33,7 @@ Data read from web pages during a flow run is processed in memory to execute tha
 The extension makes network requests to exactly two kinds of destinations, and in both cases only as a direct consequence of something you did:
 
 - **The sync server configured in the Sync tab.** The extension ships pre-configured against the official hosted sync service, which is operated by the extension developer; you can switch it to your own oncewise-ai-sync deployment at any time. Opening the Sync tab sends an automated sign-in-mode check to the configured server (it carries no flow data); your flows/scripts and related configuration are transmitted only when you save a script into a space, pull a script, or manage spaces and members — only the content involved in that action. Key spaces authenticate with the space key you hold; sign-in-gated spaces use the server's own sign-in: credentials are entered on the server's login page and never pass through the extension, and the resulting sign-in tokens are stored only on your device.
-- **The upload endpoint(s) a flow declares.** A flow may contain an upload step that sends data the flow has read from the page (and values you entered for the flow) to a constant `https://` address written in the flow file. The saved-flow summary and the flow list mark every such step with its destination, the data it sends and the credential name it uses, and a flow only runs after you personally enable it. When the step runs, exactly the data the step declares is sent to exactly that address — nothing else is added — with the single request header of the credential you saved on this device, if the step names one. Such uploads go straight from your browser to that endpoint: they are never routed through, stored by, or visible to the extension developer or the sync server. The endpoint's response is used only as data for the rest of that run and is never executed.
+- **The upload endpoint(s) a flow declares.** A flow may contain an upload step that sends data the flow has read from the page (and values you entered for the flow) to a constant `https://` address written in the flow file. The saved-flow summary marks every such step with its destination, the data it sends and the credential name it uses, and the flow list flags every flow that contains such a step. A flow only runs after you personally enable it. When the step runs, exactly the data the step declares is sent to exactly that address — nothing else is added — with the single request header of the credential you saved on this device, if the step names one. Such uploads go straight from your browser to that endpoint: they are never routed through, stored by, or visible to the extension developer or the sync server. The endpoint's response is used only as data for the rest of that run and is never executed.
 
 Besides network requests, the extension exchanges data over one kind of channel that never leaves your device:
 
@@ -69,7 +69,7 @@ zsy.evan@gmail.com
 
 **OnceWise Flow 浏览器扩展 — 隐私政策**
 
-生效日期：2026-11-02
+生效日期：2026-11-25
 
 ### 概述
 
@@ -90,7 +90,7 @@ OnceWise Flow 是一个自助浏览器自动化扩展。它把你指定的网页
 扩展只向两类目的地发起网络请求，且两类都只因你本人的操作而发生：
 
 - **「同步」页签所配置的同步服务器。** 扩展出厂预配置为官方托管同步服务（由扩展开发者运营），你可以随时切换为自己部署的 oncewise-ai-sync 服务器。打开「同步」页签时会对所配置的服务器做一次登录模式自动检查（不发送任何流程数据）；只有当你把流程保存为脚本放入空间、拉取脚本或管理空间与成员时，才会把该操作涉及的流程/脚本内容及配置发送到该服务器。密钥空间使用你持有的空间密钥认证；登录门禁空间使用服务器自身的登录：凭据在服务器自己的登录页输入、不经过扩展，产生的登录令牌只保存在你的设备上。
-- **流程声明的上报端点。** 流程可以包含上报步骤，把流程从页面读取的数据（以及你为该流程填写的输入值）发送到流程文件内写明的固定 `https://` 地址。保存摘要与流程清单会对每个此类步骤标注其目的地、发送的数据与所引用的凭据名，并且流程只有在你本人启用后才会运行。该步骤执行时，只会把它声明的数据原样发往它写明的地址——不附加任何其他内容——若步骤引用了凭据，则附带你在本机保存的那一个请求头。上报请求从你的浏览器直达该端点：不经过扩展开发者或同步服务器，也不会被其存储或看到。端点返回的内容只作为该次运行后续步骤的数据使用，绝不会被执行。
+- **流程声明的上报端点。** 流程可以包含上报步骤，把流程从页面读取的数据（以及你为该流程填写的输入值）发送到流程文件内写明的固定 `https://` 地址。保存摘要会对每个此类步骤标注其目的地、发送的数据与所引用的凭据名，流程清单则会对含此类步骤的流程显示外发标注；流程只有在你本人启用后才会运行。该步骤执行时，只会把它声明的数据原样发往它写明的地址——不附加任何其他内容——若步骤引用了凭据，则附带你在本机保存的那一个请求头。上报请求从你的浏览器直达该端点：不经过扩展开发者或同步服务器，也不会被其存储或看到。端点返回的内容只作为该次运行后续步骤的数据使用，绝不会被执行。
 
 除网络请求外，扩展还会通过一类完全不离开你设备的通道收发数据：
 

@@ -66,7 +66,13 @@ export type UploadOutcome =
 export interface UploadHostMeta {
   flowId: string;
   flowDraftHash: string;
-  dryRun: boolean;
+}
+
+// Nonce naming one upload request on both sides (ct:performUpload → ct:cancelUpload).
+// getRandomValues rather than randomUUID: randomUUID is a secure-context-only API and the nonce is
+// minted in the content script, which must not depend on the flow site being https
+function newUploadId(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 // Adds the upload capability to a driver. Must be the OUTERMOST decorator on the content side:
@@ -81,20 +87,28 @@ export function withUpload(driver: FlowDriver, metaOf: () => UploadHostMeta | nu
     ...(driver.handover !== undefined ? { handover: (req, signal) => driver.handover!(req, signal) } : {}),
     upload: async (req: UploadDriverRequest, signal: AbortSignal): Promise<UploadOutcome> => {
       // Side-effect guard, same rule as the DOM driver's act (flow-dom.ts): cancellation must never
-      // let a queued upload out. This only covers the pre-send window — once ct:performUpload is
-      // out, the background fetch runs to its own timeout (no cancel channel; conservative
-      // semantics keep a possibly-sent request unretried either way).
+      // let a queued upload out. Past this guard the run may still be cancelled while the hop is
+      // out (flow paused / deleted / replaced, route left, page unload) — that cancellation is
+      // forwarded as ct:cancelUpload so the background stops the request instead of letting a
+      // request nobody wants any more run to its deadline. The request may already have left the
+      // device by then: it is never retried either way, and the run is already stopping, so this
+      // request's own outcome is never observed.
       if (signal.aborted) throw new DriverFailure('upload', 'aborted', req.url);
       const meta = metaOf();
       if (meta === null) throw new DriverFailure('upload', 'unsupported', req.url);
+      const uploadId = newUploadId();
+      const onCancel = (): void => {
+        void sendRuntimeMessage({ type: 'ct:cancelUpload', uploadId }).catch(() => undefined);
+      };
+      signal.addEventListener('abort', onCancel, { once: true });
       let res;
       try {
         res = await sendRuntimeMessage(
           {
             type: 'ct:performUpload',
+            uploadId,
             flowId: meta.flowId,
             flowDraftHash: meta.flowDraftHash,
-            ...(meta.dryRun ? { dryRun: true } : {}),
             url: req.url,
             method: req.method,
             payload: req.payload,
@@ -106,8 +120,13 @@ export function withUpload(driver: FlowDriver, metaOf: () => UploadHostMeta | nu
         );
       } catch {
         // The hop timed out or the worker died mid-fetch: the outcome is unknown — treated as a
-        // network failure, never retried (the request may already have landed)
+        // network failure, never retried (the request may already have landed). The background may
+        // still be working towards the fetch, and this run will never read its answer: stop it the
+        // same way a cancellation would (a dead worker has no registration left — a no-op there)
+        onCancel();
         return { ok: false, reason: 'upload-network', detail: req.url };
+      } finally {
+        signal.removeEventListener('abort', onCancel);
       }
       if (res === undefined) return { ok: false, reason: 'upload-network', detail: req.url };
       if (!res.ok) {
@@ -134,7 +153,9 @@ function utf8Bytes(text: string): number {
 
 const fail = (reason: UploadFailureReason, detail: string): UploadOutcome => ({ ok: false, reason, detail });
 
-// AbortError counts as a timeout: the only abort source is the node's own AbortSignal.timeout
+// Both abort sources of a request's one controller count as a timeout — "possibly sent": the
+// node's own deadline (TimeoutError) and a run cancellation reaching the in-flight request
+// (AbortError; the run is already stopping, so that outcome is never observed)
 const isTimeoutAbort = (error: unknown): boolean =>
   error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError');
 
@@ -167,6 +188,34 @@ async function readBodyBounded(resp: Response, maxBytes: number): Promise<string
   return new TextDecoder().decode(merged);
 }
 
+// An unread body keeps its connection until it is consumed, cancelled or collected, and nothing
+// else releases it once the outcome is known (the request's deadline is cleared with it): every
+// path that leaves the body unread cancels it outright. Cancelling is not reading — none of it is
+// parsed or kept
+function discardBody(resp: Response): void {
+  void resp.body?.cancel().catch(() => undefined);
+}
+
+// One controller per request: the deadline arms here and spans the whole fetch, body included,
+// and a run cancellation aborts the same controller from the outside. A plain controller + timer
+// instead of AbortSignal.timeout / AbortSignal.any — the Chrome 114 baseline predates .any()
+export async function performUpload(
+  req: UploadDriverRequest,
+  credential: ResolvedUploadCredential | null,
+  cancel?: AbortController,
+): Promise<UploadOutcome> {
+  const controller = cancel ?? new AbortController();
+  const deadline = setTimeout(
+    () => controller.abort(new DOMException('upload deadline', 'TimeoutError')),
+    req.timeoutMs,
+  );
+  try {
+    return await fetchUpload(req, credential, controller.signal);
+  } finally {
+    clearTimeout(deadline);
+  }
+}
+
 // The one network call of the feature. Transport policy is hard-coded, not configurable:
 //   redirect 'error'   — a 3xx is a failure: the credential header never follows a redirect to a
 //                        second destination and a POST is never replayed as a GET
@@ -176,9 +225,10 @@ async function readBodyBounded(resp: Response, maxBytes: number): Promise<string
 // Serialization and the request-size cap happen BEFORE fetch (zero egress on overflow). The
 // error body of a non-2xx is never read or parsed (PRD §4.2); the success body is read only when
 // the node declared capture, streamed under the cap.
-export async function performUpload(
+async function fetchUpload(
   req: UploadDriverRequest,
   credential: ResolvedUploadCredential | null,
+  signal: AbortSignal,
 ): Promise<UploadOutcome> {
   const headers: Record<string, string> = {};
   if (credential !== null) headers[credential.headerName] = credential.value;
@@ -201,7 +251,7 @@ export async function performUpload(
       method: req.method,
       headers,
       ...(body === undefined ? {} : { body }),
-      signal: AbortSignal.timeout(req.timeoutMs),
+      signal,
       redirect: 'error',
       credentials: 'omit',
       cache: 'no-store',
@@ -210,12 +260,21 @@ export async function performUpload(
     if (isTimeoutAbort(error)) return fail('upload-timeout', req.url);
     return fail('upload-network', req.url);
   }
-  if (resp.status < 200 || resp.status > 299) return fail('upload-status', String(resp.status));
-  if (req.captureMaxBytes === undefined) return { ok: true, status: resp.status };
+  if (resp.status < 200 || resp.status > 299) {
+    discardBody(resp);
+    return fail('upload-status', String(resp.status));
+  }
+  if (req.captureMaxBytes === undefined) {
+    discardBody(resp);
+    return { ok: true, status: resp.status };
+  }
   const declared = resp.headers.get('content-length');
   if (declared !== null) {
     const length = Number(declared);
-    if (Number.isFinite(length) && length > req.captureMaxBytes) return fail('upload-response-too-large', req.url);
+    if (Number.isFinite(length) && length > req.captureMaxBytes) {
+      discardBody(resp);
+      return fail('upload-response-too-large', req.url);
+    }
   }
   let captured: string | null;
   try {
@@ -231,18 +290,33 @@ export async function performUpload(
   return { ok: true, status: resp.status, body: captured };
 }
 
+// In-flight uploads by their nonce. handlePerformUpload registers its controller at its entry —
+// before the first await — so a cancel that lands while the binding checks are still reading
+// storage already finds its target. Worker memory only, nothing persisted: a terminated worker
+// takes its own fetches down with it, and a cancel naming an unknown (settled or never seen) id is
+// a no-op
+const inFlightUploads = new Map<string, { controller: AbortController; tabId: number | undefined }>();
+
+export function cancelUpload(uploadId: string): void {
+  inFlightUploads.get(uploadId)?.controller.abort();
+}
+
+// Closing the tab: the content script's own ct:cancelUpload may not get out of a dying document
+export function abortUploadsByTab(tabId: number): void {
+  for (const entry of inFlightUploads.values()) {
+    if (entry.tabId === tabId) entry.controller.abort();
+  }
+}
+
 // The ct:performUpload adjudication (DEC-support-http-002/003/006) — the background router only
 // forwards the sender origin it alone knows. Check chain, in order:
 //   1. shape — the payload guard already ran in onMessage; the same rule is re-applied here so
 //      this handler can never become a generic proxy for a caller that bypassed the guard;
-//   2. binding — an AUTOMATIC run must come from this site's enabled flow at its current draft
-//      hash AND the (url, method, credentialName) triple must be one of that flow's own declared
-//      upload steps: a credential can only ever travel to a destination the validated flow names.
-//      A DRY RUN carries the editor's flow (possibly unsaved, its id not in the store, its hash
-//      not any saved draft), so it passes on sender trust alone — deliberately LOOSER than
-//      ct:getInputSnapshot's dryRun path (which still requires the flow in the store and a site
-//      match): a dry-run upload is a real upload (DEC-support-http-006), so this is the dry-run
-//      leg's security-relevant trust decision, not a borrowed precedent;
+//   2. binding — the request must come from this site's enabled flow at its current draft hash AND
+//      the (url, method, credentialName) triple must be one of that flow's own declared upload
+//      steps: a credential can only ever travel to a destination the validated flow names. There
+//      is no looser leg: the extension has no preview entry (baseline FR7), so nothing legitimate
+//      ever sends on behalf of a flow that is not the enabled, current one;
 //   3. credential — resolved BEFORE any network: a missing name fails with zero egress.
 // `flowsOf` is injectable so the chain is unit-testable without the background entrypoint.
 export type PerformUploadMessage = Extract<ExtensionMessage, { type: 'ct:performUpload' }>;
@@ -251,9 +325,14 @@ export async function handlePerformUpload(
   msg: PerformUploadMessage,
   origin: string,
   flowsOf: () => Promise<Flow[]> = loadFlows,
+  tabId?: number,
 ): Promise<ExtensionResponse> {
   if (!isUploadRequestShape(msg as unknown as Record<string, unknown>)) return { ok: false, reason: 'bad-request' };
-  if (msg.dryRun !== true) {
+  // A replayed nonce must not displace (or later delete) a live request's registration
+  if (inFlightUploads.has(msg.uploadId)) return { ok: false, reason: 'bad-request' };
+  const controller = new AbortController();
+  inFlightUploads.set(msg.uploadId, { controller, tabId });
+  try {
     const flow = (await flowsOf()).find((r) => r.id === msg.flowId);
     if (flow === undefined || flow.site !== origin || flow.status !== 'enabled' || flowDraftHash(flow) !== msg.flowDraftHash) {
       return { ok: false, reason: 'flow-mismatch' };
@@ -262,25 +341,28 @@ export async function handlePerformUpload(
       (d) => d.url === msg.url && d.method === msg.method && d.credential === msg.credentialName,
     );
     if (!declared) return { ok: false, reason: 'flow-mismatch' };
+    let credential: ResolvedUploadCredential | null = null;
+    if (msg.credentialName !== undefined) {
+      credential = await resolveUploadCredential(msg.credentialName);
+      if (credential === null) return { ok: false, reason: 'credential-missing', detail: msg.credentialName };
+    }
+    const outcome = await performUpload(
+      {
+        url: msg.url,
+        method: msg.method,
+        payload: msg.payload,
+        ...(msg.credentialName !== undefined ? { credentialName: msg.credentialName } : {}),
+        timeoutMs: msg.timeoutMs,
+        ...(msg.captureMaxBytes !== undefined ? { captureMaxBytes: msg.captureMaxBytes } : {}),
+      },
+      credential,
+      controller,
+    );
+    if (!outcome.ok) return { ok: false, reason: outcome.reason, ...(outcome.detail !== undefined ? { detail: outcome.detail } : {}) };
+    return { ok: true, upload: { status: outcome.status, ...(outcome.body !== undefined ? { body: outcome.body } : {}) } };
+  } finally {
+    inFlightUploads.delete(msg.uploadId);
   }
-  let credential: ResolvedUploadCredential | null = null;
-  if (msg.credentialName !== undefined) {
-    credential = await resolveUploadCredential(msg.credentialName);
-    if (credential === null) return { ok: false, reason: 'credential-missing', detail: msg.credentialName };
-  }
-  const outcome = await performUpload(
-    {
-      url: msg.url,
-      method: msg.method,
-      payload: msg.payload,
-      ...(msg.credentialName !== undefined ? { credentialName: msg.credentialName } : {}),
-      timeoutMs: msg.timeoutMs,
-      ...(msg.captureMaxBytes !== undefined ? { captureMaxBytes: msg.captureMaxBytes } : {}),
-    },
-    credential,
-  );
-  if (!outcome.ok) return { ok: false, reason: outcome.reason, ...(outcome.detail !== undefined ? { detail: outcome.detail } : {}) };
-  return { ok: true, upload: { status: outcome.status, ...(outcome.body !== undefined ? { body: outcome.body } : {}) } };
 }
 
 // RFC 7230 token syntax for the header name, minus the names fetch itself forbids (and the proxy-/

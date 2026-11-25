@@ -22,6 +22,8 @@ import {
 } from '@/lib/flow-schema';
 import type { StepNode } from '@/lib/step-schema';
 import {
+  abortUploadsByTab,
+  cancelUpload,
   deleteUploadCredential,
   handlePerformUpload,
   isValidUploadCredentialValue,
@@ -93,11 +95,13 @@ function fakeDriver(opts: { reads?: Record<string, unknown>; upload?: FlowDriver
 }
 
 // A Response whose body is a stream that records whether anything ever pulled from it — the
-// "error body is never read" and "no capture → body never read" promises are observable only here.
+// "error body is never read" and "no capture → body never read" promises are observable only here —
+// and whether an unread body was released (cancelled) instead of being left to hold its connection.
 // highWaterMark 0: the default strategy pre-pulls one chunk at construction regardless of readers,
 // which would make the flag meaningless.
-function streamResponse(chunks: string[], status = 200, headers: Record<string, string> = {}): { resp: Response; pulled: () => boolean } {
+function streamResponse(chunks: string[], status = 200, headers: Record<string, string> = {}): { resp: Response; pulled: () => boolean; cancelled: () => boolean } {
   let pulled = false;
+  let cancelled = false;
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>(
     {
@@ -107,10 +111,13 @@ function streamResponse(chunks: string[], status = 200, headers: Record<string, 
         if (next === undefined) controller.close();
         else controller.enqueue(encoder.encode(next));
       },
+      cancel() {
+        cancelled = true;
+      },
     },
     { highWaterMark: 0 },
   );
-  return { resp: new Response(stream, { status, headers }), pulled: () => pulled };
+  return { resp: new Response(stream, { status, headers }), pulled: () => pulled, cancelled: () => cancelled };
 }
 
 beforeEach(() => {
@@ -270,20 +277,25 @@ describe('performUpload', () => {
     expect(calls[1]!.headers).toEqual({ 'Content-Type': 'application/json' });
   });
 
-  it('without capture the response body is never read; the outcome carries no body', async () => {
-    const { resp, pulled } = streamResponse(['should-not-be-read']);
+  it('without capture the response body is never read — and is released rather than left holding its connection; the outcome carries no body', async () => {
+    const { resp, pulled, cancelled } = streamResponse(['should-not-be-read']);
     install(() => resp);
     const out = await performUpload(req(), credential);
     expect(out).toEqual({ ok: true, status: 200 });
     expect(pulled()).toBe(false);
+    // An unread body owns its connection until it is consumed, cancelled or collected. The
+    // request's own deadline is cleared once the outcome is known, so it can no longer be the
+    // thing that lets go of the body
+    expect(cancelled()).toBe(true);
   });
 
-  it('non-2xx → upload-status with the code as detail; the error body is never read or parsed (PRD §4.2)', async () => {
-    const { resp, pulled } = streamResponse(['{"error":"nope"}'], 500);
+  it('non-2xx → upload-status with the code as detail; the error body is never read or parsed (PRD §4.2) but is released', async () => {
+    const { resp, pulled, cancelled } = streamResponse(['{"error":"nope"}'], 500);
     install(() => resp);
     const out = await performUpload(req({ captureMaxBytes: MAX_UPLOAD_CAPTURE_BYTES }), credential);
     expect(out).toEqual({ ok: false, reason: 'upload-status', detail: '500' });
     expect(pulled()).toBe(false);
+    expect(cancelled()).toBe(true);
     install(() => jsonResponse(302, {}));
     expect(await performUpload(req(), credential)).toEqual({ ok: false, reason: 'upload-status', detail: '302' });
   });
@@ -300,6 +312,31 @@ describe('performUpload', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('the deadline is the node\'s own timeoutMs, armed when the request starts: an endpoint that never answers is cut off exactly then — a shorter constant would misreport a slow-but-alive endpoint as timed out', async () => {
+    // The one case that exercises the real deadline: every other timeout above has the fetch stub
+    // throw TimeoutError itself, so a wrong delay here would stay green everywhere else
+    vi.useFakeTimers();
+    try {
+      install(
+        () =>
+          new Promise<Response>((_, reject) => {
+            lastInit?.signal?.addEventListener('abort', () => reject(lastInit!.signal!.reason), { once: true });
+          }),
+      );
+      const timeoutMs = 7_000;
+      const pending = performUpload(req({ timeoutMs }), credential);
+      await vi.advanceTimersByTimeAsync(timeoutMs - 1);
+      // One tick short: still waiting on the endpoint
+      expect(lastInit?.signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(lastInit?.signal?.aborted).toBe(true);
+      expect(await pending).toEqual({ ok: false, reason: 'upload-timeout', detail: DEST });
+      expect(calls).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a request over the payload cap fails BEFORE fetch (zero egress) for both methods', async () => {
     install(() => new Response(null, { status: 200 }));
     const big = 'x'.repeat(MAX_UPLOAD_PAYLOAD_BYTES + 1);
@@ -309,8 +346,11 @@ describe('performUpload', () => {
   });
 
   it('a response over the capture cap fails without truncation — by Content-Length shortcut and by streamed size alike', async () => {
-    install(() => new Response('x', { status: 200, headers: { 'content-length': String(MAX_UPLOAD_CAPTURE_BYTES + 1) } }));
+    const oversized = streamResponse(['x'], 200, { 'content-length': String(MAX_UPLOAD_CAPTURE_BYTES + 1) });
+    install(() => oversized.resp);
     expect(await performUpload(req({ captureMaxBytes: MAX_UPLOAD_CAPTURE_BYTES }), credential)).toEqual({ ok: false, reason: 'upload-response-too-large', detail: DEST });
+    expect(oversized.pulled()).toBe(false);
+    expect(oversized.cancelled()).toBe(true);
     const half = 'y'.repeat(40_000);
     const { resp } = streamResponse([half, half]);
     install(() => resp);
@@ -418,6 +458,7 @@ describe('handlePerformUpload', () => {
   const flow = makeFlow(seq(readScalar('orderNo', 'orderNo'), uploadNode({ credential: CRED, payload: { orderNo: { ref: 'vars.orderNo' } } })));
   const msg = (over: Partial<PerformUploadMessage> = {}): PerformUploadMessage => ({
     type: 'ct:performUpload',
+    uploadId: 'up-1',
     flowId: flow.id,
     flowDraftHash: flowDraftHash(flow),
     url: DEST,
@@ -427,6 +468,26 @@ describe('handlePerformUpload', () => {
     timeoutMs: 5000,
     ...over,
   });
+
+  // A fetch that never answers on its own: every call records its signal and stays pending until
+  // that signal aborts — the only way a real in-flight request can end before its deadline
+  function hangFetch(): { signals: AbortSignal[]; reached: () => Promise<void> } {
+    const signals: AbortSignal[] = [];
+    const waiters: Array<() => void> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const signal = init?.signal ?? null;
+        if (signal !== null) signals.push(signal);
+        waiters.shift()?.();
+        if (signal?.aborted) return Promise.reject(signal.reason);
+        return new Promise<Response>((_, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+      }),
+    );
+    return { signals, reached: () => new Promise<void>((resolve) => { waiters.push(resolve); }) };
+  }
 
   beforeEach(async () => {
     calls = [];
@@ -465,12 +526,77 @@ describe('handlePerformUpload', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('a dry run passes on sender trust alone (the editor flow may be unsaved) and still resolves the credential first', async () => {
-    expect(await handlePerformUpload(msg({ flowId: 'draft-not-in-store', dryRun: true }), SITE)).toEqual({ ok: false, reason: 'credential-missing', detail: CRED });
-    expect(calls).toHaveLength(0);
+  it('a forged dry-run flag no longer loosens the binding: the extension has no preview entry (baseline FR7), so a request for anything but the enabled, current flow is flow-mismatch with zero egress — flag or not', async () => {
     await saveUploadCredential({ name: CRED, headerName: 'X-API-Key', value: 'k' });
-    expect(await handlePerformUpload(msg({ flowId: 'draft-not-in-store', dryRun: true }), SITE)).toEqual({ ok: true, upload: { status: 201 } });
-    expect(calls[0]!.headers).toEqual({ 'X-API-Key': 'k', 'Content-Type': 'application/json' });
+    // The flag is not even part of the message any more; a sender that adds it must get nothing for it
+    const forged = (over: Partial<PerformUploadMessage>): PerformUploadMessage => ({ ...msg(over), dryRun: true } as PerformUploadMessage);
+    expect(await handlePerformUpload(forged({ flowId: 'draft-not-in-store' }), SITE)).toEqual({ ok: false, reason: 'flow-mismatch' });
+    expect(await handlePerformUpload(forged({ url: 'https://attacker.example.net/steal' }), SITE)).toEqual({ ok: false, reason: 'flow-mismatch' });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('a cancel landing mid-flight stops the request: its signal is aborted, the refusal carries no captured body and the request is not retried', async () => {
+    await saveUploadCredential({ name: CRED, headerName: 'Authorization', value: 'Bearer tok' });
+    const hang = hangFetch();
+    const inFlight = hang.reached();
+    const pending = handlePerformUpload(msg({ captureMaxBytes: MAX_UPLOAD_CAPTURE_BYTES }), SITE, undefined, 7);
+    await inFlight;
+    cancelUpload('up-1');
+    expect(hang.signals[0]!.aborted).toBe(true);
+    // The reason itself is not pinned: a cancelled run is already stopping and never reads it
+    const res = await pending;
+    expect(res).toMatchObject({ ok: false, detail: DEST });
+    expect(res).not.toHaveProperty('upload');
+    expect(hang.signals).toHaveLength(1);
+  });
+
+  it('a cancel landing BEFORE the fetch starts is not lost: the request is registered before the handler\'s first await, so the fetch only ever sees an already-aborted signal (zero egress)', async () => {
+    await saveUploadCredential({ name: CRED, headerName: 'Authorization', value: 'Bearer tok' });
+    const hang = hangFetch();
+    const inFlight = hang.reached();
+    const pending = handlePerformUpload(msg(), SITE, undefined, 7);
+    cancelUpload('up-1');
+    await inFlight;
+    expect(hang.signals[0]!.aborted).toBe(true);
+    expect((await pending)?.ok).toBe(false);
+  });
+
+  it('the registration lives exactly as long as the request: a replayed nonce is refused while in flight and accepted again once the first one settled', async () => {
+    await saveUploadCredential({ name: CRED, headerName: 'Authorization', value: 'Bearer tok' });
+    const hang = hangFetch();
+    const inFlight = hang.reached();
+    const first = handlePerformUpload(msg(), SITE, undefined, 7);
+    await inFlight;
+    // Displacing a live registration would strand the live request and let the replay's cleanup delete it
+    expect(await handlePerformUpload(msg(), SITE, undefined, 7)).toEqual({ ok: false, reason: 'bad-request' });
+    expect(hang.signals).toHaveLength(1);
+    cancelUpload('up-1');
+    await first;
+    vi.stubGlobal('fetch', recordingFetch(calls, () => new Response('RCPT', { status: 201 })));
+    expect(await handlePerformUpload(msg(), SITE, undefined, 7)).toEqual({ ok: true, upload: { status: 201 } });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('abortUploadsByTab stops only that tab\'s requests; an unknown id is a no-op and another request\'s cancel leaves a live one alone', async () => {
+    await saveUploadCredential({ name: CRED, headerName: 'Authorization', value: 'Bearer tok' });
+    const hang = hangFetch();
+    // Started one after the other so the recorded signals map to the requests unambiguously
+    const firstInFlight = hang.reached();
+    const first = handlePerformUpload(msg(), SITE, undefined, 7);
+    await firstInFlight;
+    const secondInFlight = hang.reached();
+    const second = handlePerformUpload(msg({ uploadId: 'up-2' }), SITE, undefined, 8);
+    await secondInFlight;
+    cancelUpload('never-seen');
+    cancelUpload('up-2');
+    expect(hang.signals[0]!.aborted).toBe(false);
+    expect(hang.signals[1]!.aborted).toBe(true);
+    abortUploadsByTab(99);
+    expect(hang.signals[0]!.aborted).toBe(false);
+    abortUploadsByTab(7);
+    expect(hang.signals[0]!.aborted).toBe(true);
+    expect((await first)?.ok).toBe(false);
+    expect((await second)?.ok).toBe(false);
   });
 
   it('a payload that fails the shared shape rule is bad-request even if it somehow bypassed the message guard', async () => {
@@ -483,7 +609,7 @@ describe('handlePerformUpload', () => {
     const open = makeFlow(seq(uploadNode({ id: 'u2' })), { id: 'r_open' });
     await flowStoreItem.setValue(buildFlowStore([open]));
     const res = await handlePerformUpload(
-      { type: 'ct:performUpload', flowId: open.id, flowDraftHash: flowDraftHash(open), url: DEST, method: 'POST', payload: {}, timeoutMs: 1000 },
+      { type: 'ct:performUpload', uploadId: 'up-open', flowId: open.id, flowDraftHash: flowDraftHash(open), url: DEST, method: 'POST', payload: {}, timeoutMs: 1000 },
       SITE,
     );
     expect(res).toEqual({ ok: true, upload: { status: 201 } });
@@ -595,22 +721,58 @@ describe('withUpload decorator', () => {
     };
   });
 
-  const meta = { flowId: 'r_up', flowDraftHash: 'h1', dryRun: false };
+  const meta = { flowId: 'r_up', flowDraftHash: 'h1' };
   const req: UploadDriverRequest = { url: DEST, method: 'POST', payload: { a: 'x' }, credentialName: CRED, timeoutMs: 5000, captureMaxBytes: MAX_UPLOAD_CAPTURE_BYTES };
 
   it('sends ct:performUpload with the run identity and the request — no header fields — and maps the success response', async () => {
     const driver = withUpload(fakeDriver(), () => meta);
     expect(await driver.upload!(req, new AbortController().signal)).toEqual({ ok: true, status: 200, body: 'RCPT' });
-    expect(sent).toEqual([{ type: 'ct:performUpload', flowId: 'r_up', flowDraftHash: 'h1', ...req }]);
+    expect(sent).toEqual([{ type: 'ct:performUpload', uploadId: expect.any(String), flowId: 'r_up', flowDraftHash: 'h1', ...req }]);
     expect(Object.keys(sent[0] as object)).not.toContain('headers');
   });
 
-  it('marks dry runs explicitly and omits optional fields that are absent', async () => {
-    const driver = withUpload(fakeDriver(), () => ({ ...meta, dryRun: true }));
+  it('omits optional fields that are absent and carries no dry-run marker — the background binds every request alike', async () => {
+    const driver = withUpload(fakeDriver(), () => meta);
     reply = { ok: true, upload: { status: 204 } };
     const slim: UploadDriverRequest = { url: DEST, method: 'GET', payload: {}, timeoutMs: 100 };
     expect(await driver.upload!(slim, new AbortController().signal)).toEqual({ ok: true, status: 204 });
-    expect(sent[0]).toEqual({ type: 'ct:performUpload', flowId: 'r_up', flowDraftHash: 'h1', dryRun: true, url: DEST, method: 'GET', payload: {}, timeoutMs: 100 });
+    expect(sent[0]).toEqual({ type: 'ct:performUpload', uploadId: expect.any(String), flowId: 'r_up', flowDraftHash: 'h1', url: DEST, method: 'GET', payload: {}, timeoutMs: 100 });
+  });
+
+  it('each request carries its own 128-bit nonce — the background keys its in-flight registration by it', async () => {
+    const driver = withUpload(fakeDriver(), () => meta);
+    await driver.upload!(req, new AbortController().signal);
+    await driver.upload!(req, new AbortController().signal);
+    const ids = sent.map((m) => (m as { uploadId: string }).uploadId);
+    expect(ids[0]).toMatch(/^[0-9a-f]{32}$/);
+    expect(ids[1]).not.toBe(ids[0]);
+  });
+
+  it('a cancellation while the hop is in flight forwards exactly one ct:cancelUpload naming that request; a hop that settled first forwards none', async () => {
+    const runtime = fakeBrowser.runtime as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    // The upload hop stays pending until released; any other message answers at once
+    let release: (value: unknown) => void = () => undefined;
+    runtime.sendMessage = (msg: unknown) => {
+      sent.push(msg);
+      if ((msg as { type: string }).type !== 'ct:performUpload') return Promise.resolve({ ok: true });
+      return new Promise((resolve) => { release = resolve; });
+    };
+    const controller = new AbortController();
+    const pending = withUpload(fakeDriver(), () => meta).upload!(req, controller.signal);
+    const { uploadId } = sent[0] as { uploadId: string };
+    controller.abort();
+    expect(sent.slice(1)).toEqual([{ type: 'ct:cancelUpload', uploadId }]);
+    release({ ok: true, upload: { status: 200 } });
+    expect(await pending).toEqual({ ok: true, status: 200 });
+
+    // Settled first: the listener left with the hop, so a later abort forwards nothing
+    sent = [];
+    const later = new AbortController();
+    const hop = withUpload(fakeDriver(), () => meta).upload!(req, later.signal);
+    release({ ok: true, upload: { status: 200 } });
+    expect(await hop).toEqual({ ok: true, status: 200 });
+    later.abort();
+    expect(sent).toHaveLength(1);
   });
 
   it('maps refusals verbatim; a lost hop (no receiver / throw / malformed) is upload-network — never a retry', async () => {
@@ -625,7 +787,27 @@ describe('withUpload decorator', () => {
     expect(await driver.upload!(req, new AbortController().signal)).toEqual({ ok: false, reason: 'upload-network', detail: DEST });
     throwOnSend = new Error('Message ct:performUpload timed out');
     expect(await driver.upload!(req, new AbortController().signal)).toEqual({ ok: false, reason: 'upload-network', detail: DEST });
-    expect(sent).toHaveLength(5);
+    // Five requests, never a sixth: a lost hop is not retried. The trailing message is the stop
+    // for the timed-out hop (next test)
+    const types = sent.map((m) => (m as { type: string }).type);
+    expect(types).toEqual(['ct:performUpload', 'ct:performUpload', 'ct:performUpload', 'ct:performUpload', 'ct:performUpload', 'ct:cancelUpload']);
+  });
+
+  it('a hop that gives up forwards the cancel too: the background may still be on its way to the fetch or still waiting on it, and this run will never read the answer', async () => {
+    const driver = withUpload(fakeDriver(), () => meta);
+    throwOnSend = new Error('Message ct:performUpload timed out');
+    expect(await driver.upload!(req, new AbortController().signal)).toEqual({ ok: false, reason: 'upload-network', detail: DEST });
+    const { uploadId } = sent[0] as { uploadId: string };
+    expect(sent.slice(1)).toEqual([{ type: 'ct:cancelUpload', uploadId }]);
+    // Nothing in flight, nothing to stop: no receiver means the background never got the request,
+    // and an answer — even a malformed one — means it is already done
+    sent = [];
+    throwOnSend = null;
+    reply = undefined;
+    await driver.upload!(req, new AbortController().signal);
+    reply = { ok: true };
+    await driver.upload!(req, new AbortController().signal);
+    expect(sent.map((m) => (m as { type: string }).type)).toEqual(['ct:performUpload', 'ct:performUpload']);
   });
 
   it('an aborted signal never lets a queued upload out — zero messages, DriverFailure aborted (same guard as the DOM act)', async () => {

@@ -7,6 +7,6 @@
 | support-native-messaging | core | 本机通道流程交接（Chrome Native Messaging） | P0 | 2026-09-30 | [core/support-native-messaging.md](core/support-native-messaging.md) |
 | cross-page-flow | core | 跨页流程（同站顺序跨页续跑） | P0 | 2026-10-02 | [core/cross-page-flow.md](core/cross-page-flow.md) |
 | form-support | core | 运行前输入与流程复用（流程输入表单） | P1 | 2026-10-03（补发布；能力已随 v1.1.0 于 2026-10-02 交付） | [core/form-support.md](core/form-support.md) |
-| support-http | core | 流程 HTTP 上报数据采集（受约束步骤树 · 上报请求步骤） | P1 | 2026-11-02 | [core/support-http.md](core/support-http.md) |
+| support-http | core | 流程 HTTP 上报数据采集（受约束步骤树 · 上报请求步骤） | P1 | 2026-11-02（2026-11-25 修订：上报无预演路径、运行取消中止进行中的上报请求） | [core/support-http.md](core/support-http.md) |
 | herald-support | auth | Herald 鉴权支持（服务级访问门禁 · 默认启用） | P0 | 2026-10-09（2026-10-15 修订：空间级排除口径由组织绑定空间重建，见 space-permissions） | [auth/herald-support.md](auth/herald-support.md) |
 | space-permissions | auth | 空间权限与角色（组织绑定空间 · 一次性邀请码 · 成员管理） | P0 | 2026-10-15 | [auth/space-permissions.md](auth/space-permissions.md) |

@@ -16,6 +16,8 @@ import { createLogger } from '@/lib/logger';
 import { openWelcomePage } from '@/lib/import-page';
 import { connectNativeChannel, isNativeChannelConnected } from '@/lib/native-messaging';
 import {
+  abortUploadsByTab,
+  cancelUpload,
   deleteUploadCredential,
   handlePerformUpload,
   listUploadCredentials,
@@ -372,10 +374,14 @@ async function handleContent(
     }
     // Upload execution (DEC-support-http-002/003/006): the only place the extension fetches a
     // flow-declared destination. The whole check chain (defensive shape re-check → flow binding
-    // and destination pinning for automatic runs → credential resolution BEFORE any network)
-    // lives in lib/flow-upload.ts; only the sender origin is forwarded here
+    // and destination pinning → credential resolution BEFORE any network) lives in
+    // lib/flow-upload.ts; only the sender facts (origin, tab id) are forwarded here.
+    // ct:cancelUpload stops a request the content side's run no longer wants
     case 'ct:performUpload':
-      return handlePerformUpload(msg, origin);
+      return handlePerformUpload(msg, origin, loadFlows, sender.tab?.id);
+    case 'ct:cancelUpload':
+      cancelUpload(msg.uploadId);
+      return { ok: true };
     case 'ct:claimBusiness': {
       const granted = await claimBusinessInstance(
         businessClaimKey(msg.site, msg.flowId, msg.businessKey),
@@ -446,10 +452,12 @@ export default defineBackground(() => {
   // inside lib/native-messaging.ts. Chrome launches the host on this connect.
   connectNativeChannel();
 
-  // Closing the source tab cancels its waiting run's in-flight handovers (registered synchronously
-  // in main — no permission required; the event wakes the worker)
+  // Closing the source tab cancels its waiting run's in-flight handovers and stops that tab's
+  // in-flight uploads (registered synchronously in main — no permission required; the event wakes
+  // the worker)
   browser.tabs.onRemoved.addListener((closedTabId) => {
     void cancelHandoversByTab(closedTabId);
+    abortUploadsByTab(closedTabId);
   });
 
   // Any alarm (a schedule's next occurrence or the timed-start janitor) just wakes the worker:

@@ -179,7 +179,7 @@ An `upload` node sends data the flow has already read (and its input values) to 
 - `capture.into` stores the response body text (up to 64 KiB) in `vars.<into>` as a scalar slot for later `if`/`assert` predicates and value references. The response is data only — the extension never interprets it. Without `capture`, the body is not read at all.
 - Success is any `2xx` status. A non-`2xx` status, an unreachable destination, a redirect, a timeout (`timeoutMs`), a response over the capture limit, or a request body/query over 64 KiB fails the run conservatively at this node and the failure line names the node, the `upload` stage and the reason; the request is never retried.
 - When the same business instance must not be uploaded twice, declare `businessKey` as for submit-like flows: an upload-carrying flow with a `businessKey` takes the per-session business claim; without one it runs on every trigger.
-- In a cross-page flow, put the upload where its data is complete; captured slots travel across a later `navigate` like any other slot. A dry run from the side panel performs the upload for real, exactly like a previewed submit.
+- In a cross-page flow, put the upload where its data is complete; captured slots travel across a later `navigate` like any other slot.
 
 ## Budget and validation
 

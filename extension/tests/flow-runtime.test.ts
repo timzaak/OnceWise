@@ -1,12 +1,16 @@
 // P2 runtime host contract (§0.1): single-run mutex per document, runId-stamped event log with node
 // ids / loop iteration paths / terminal reasons, cancellation settling as 'cancelled'.
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createFlowRuntime,
   type FlowLogEvent,
 } from '@/lib/flow-runtime';
 import { DriverFailure, type FlowDriver, type FlowRunInput } from '@/lib/flow-compiler';
 import type { StepNode } from '@/lib/step-schema';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function seqSteps(): StepNode {
   return {
@@ -48,6 +52,23 @@ describe('createFlowRuntime', () => {
     for (const e of events) expect(e.runId).toBe('run-42');
     const end = events[events.length - 1]!;
     expect(end).toMatchObject({ type: 'run-end', outcome: 'completed', executed: 2 });
+  });
+
+  it('the default run id needs no secure context: on an http flow site the content script has no crypto.randomUUID, and a run that cannot mint its id never starts', async () => {
+    const real = globalThis.crypto;
+    vi.stubGlobal('crypto', { getRandomValues: real.getRandomValues.bind(real) });
+    // The precondition this test exists for, checked rather than assumed
+    expect(typeof crypto.randomUUID).toBe('undefined');
+    const events: FlowLogEvent[] = [];
+    const runtime = createFlowRuntime({ driver: () => okDriver, onEvent: (e) => events.push(e) });
+    const first = runtime.tryStart({ steps: seqSteps() } satisfies FlowRunInput);
+    if (!first.started) throw new Error('expected the run to start without a secure context');
+    const second = runtime.tryStart({ steps: seqSteps() } satisfies FlowRunInput);
+    expect(second).toEqual({ started: false, reason: 'busy', activeRunId: first.runId });
+    expect((await first.result).outcome).toBe('completed');
+    // Still a v4 UUID, exactly what randomUUID would have minted on an https site
+    expect(first.runId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    for (const e of events) expect(e.runId).toBe(first.runId);
   });
 
   it('rejects a second start while a run is active (busy documents skip, never queue)', async () => {
