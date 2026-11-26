@@ -393,10 +393,6 @@ fn script_body(script_id: &str) -> Value {
     json!({ "id": script_id, "name": "F", "flowContent": {"v": 1} })
 }
 
-// ---------------------------------------------------------------------------
-// w01 — org-bound creation and role visibility
-// ---------------------------------------------------------------------------
-
 // Covers US-WP-001: creating a space without a key binds a Herald organization with the
 // creator as owner — atomically (a Herald failure leaves nothing behind), with myRole/myUserId
 // visible on create and get; key-addressed creation coexists unchanged; replay converges for
@@ -568,10 +564,6 @@ async fn w01_org_bound_creation_and_role_visibility() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// w02 — invite lifecycle
-// ---------------------------------------------------------------------------
-
 // Covers US-WP-002/003: one-time invite codes — single atomic consumption, 24 h validity,
 // several codes coexisting, invalid/expired/used distinctions, concurrent redemption letting
 // exactly one in, unauthenticated attempts not consuming, and members re-redeeming converging
@@ -687,10 +679,6 @@ async fn w02_invite_lifecycle() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// w03 — role-gated access to scripts
-// ---------------------------------------------------------------------------
-
 // Covers US-WP-004: read semantics stay open to every member, writes and management need the
 // admin tier (403 SPACE_ROLE_REQUIRED with a distinguishable code), promotion opens writes and
 // demotion closes them on the very next request.
@@ -792,14 +780,13 @@ async fn w03_role_gated_access() {
     assert_eq!(error_code(&body), "SPACE_ROLE_REQUIRED");
 }
 
-// ---------------------------------------------------------------------------
-// w04 — member management and protections
-// ---------------------------------------------------------------------------
-
 // Covers US-WP-005/006: the live member list (display fields, roles, owner marker), removal
-// taking effect on the removed member's next request, owner protection (removal, demotion,
-// self-exit), ownership transfer as one atomic step, member self-exit, missing targets answering
-// 404, and the last-admin guard in Herald's documented anomalous state.
+// taking effect on the removed member's next request and voiding the invites outstanding for
+// the space (old codes never readmit, a refused removal voids nothing, only a code issued
+// after the removal admits the removed member again), owner protection (removal, demotion,
+// self-exit), ownership transfer as one atomic step, member self-exit (which leaves
+// outstanding invites valid), missing targets answering 404, and the last-admin guard in
+// Herald's documented anomalous state.
 #[tokio::test]
 async fn w04_member_management_and_protections() {
     let _suite = SUITE.lock().await;
@@ -871,6 +858,11 @@ async fn w04_member_management_and_protections() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(error_code(&body), "SPACE_ROLE_REQUIRED");
 
+    // Codes outstanding when b is removed: one standing in for a code b still holds, one for
+    // a code meant for someone else.
+    let held_code = issue_invite(&app.app, &owner, space).await;
+    let spare_code = issue_invite(&app.app, &owner, space).await;
+
     // Removal is near-immediate: the removed member's next request is denied.
     let (status, body) = remove_member(&app.app, &owner, space, &b_id).await;
     assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
@@ -893,6 +885,17 @@ async fn w04_member_management_and_protections() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(error_code(&body), "MEMBER_NOT_FOUND");
 
+    // Re-entry closure: every code outstanding before the removal is voided with it. The
+    // removed member — and anyone else holding one — is told it is invalid, never already
+    // used.
+    for (bearer, code) in [(&b, &held_code), (&b, &spare_code), (&c, &held_code)] {
+        let (status, body) = redeem(&app.app, Some(bearer), code).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert_eq!(error_code(&body), "INVITE_INVALID");
+    }
+    // A code issued after the removal is outstanding across the refusals below.
+    let reissue_code = issue_invite(&app.app, &owner, space).await;
+
     // Owner protection: no removal, no demotion, no self-exit.
     let (status, body) = remove_member(&app.app, &a, space, &owner_id).await;
     assert_eq!(status, StatusCode::CONFLICT);
@@ -907,6 +910,13 @@ async fn w04_member_management_and_protections() {
     let (status, body) = set_member_role(&app.app, &owner, space, &a_id, "owner").await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(error_code(&body), "INVALID_INPUT");
+
+    // A refused removal voids nothing: the code outstanding across the refusals still admits
+    // the removed member — only old codes are closed, so a newly issued one is the admin's
+    // explicit way back in.
+    let (status, body) = redeem(&app.app, Some(&b), &reissue_code).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["myRole"], json!("member"));
 
     // Only the owner may transfer; the target must be a member.
     let (status, body) = transfer(&app.app, &a, space, &owner_id).await;
@@ -938,12 +948,14 @@ async fn w04_member_management_and_protections() {
         "the previous owner must land on the admin tier in the same step"
     );
 
-    // Self-exit: a read-only member may leave on their own addressing.
+    // Self-exit: a read-only member may leave on their own addressing. It is not a removal —
+    // a code outstanding across it stays valid (c rejoins with it below).
     let space_b = "sp-w04-000000000002";
     create_org_space(&app.app, &owner, space_b).await;
     let code = issue_invite(&app.app, &owner, space_b).await;
     let (status, body) = redeem(&app.app, Some(&c), &code).await;
     assert_eq!(status, StatusCode::OK, "{body}");
+    let rejoin_code = issue_invite(&app.app, &owner, space_b).await;
     let (status, body) = remove_member(&app.app, &c, space_b, &c_id).await;
     assert_eq!(
         status,
@@ -965,7 +977,6 @@ async fn w04_member_management_and_protections() {
     // other admin-tier member), the last admin can neither leave nor be demoted. c rejoins and
     // is promoted first.
     let (org_b, _) = herald.org_of(space_b).await.expect("org");
-    let rejoin_code = issue_invite(&app.app, &owner, space_b).await;
     let (status, body) = redeem(&app.app, Some(&c), &rejoin_code).await;
     assert_eq!(status, StatusCode::OK, "rejoin for the promotion: {body}");
     let (status, body) = set_member_role(&app.app, &owner, space_b, &c_id, "admin").await;
@@ -980,10 +991,6 @@ async fn w04_member_management_and_protections() {
     assert_eq!(status, StatusCode::CONFLICT, "last-admin demotion: {body}");
     assert_eq!(error_code(&body), "SPACE_LAST_ADMIN_PROTECTED");
 }
-
-// ---------------------------------------------------------------------------
-// w05 — deletion cascade
-// ---------------------------------------------------------------------------
 
 // Covers US-WP-007 deletion semantics for org-bound spaces: deleting is an admin-tier act that
 // removes the Herald organization (memberships cascade there), invalidates outstanding invites
@@ -1094,10 +1101,6 @@ async fn w05_deletion_cascade() {
     create_org_space(&app.app, &owner, space).await;
 }
 
-// ---------------------------------------------------------------------------
-// w06 — fail-closed and identity invalidation
-// ---------------------------------------------------------------------------
-
 // Covers US-WP-009: every space-permissions operation fails closed while Herald is down (the invite
 // code is not consumed), a disabled member account is rejected at the gate on its next
 // request, and the public endpoints never depend on the provider.
@@ -1178,10 +1181,6 @@ async fn w06_fail_closed_and_identity_invalidation() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["myRole"], json!("member"));
 }
-
-// ---------------------------------------------------------------------------
-// w07 — configuration fail-fast
-// ---------------------------------------------------------------------------
 
 // Covers US-WP-008: a herald-mode deployment missing HERALD_ORG_API_KEY fails at startup with
 // the variable named, the three console preparation steps and the AUTH_MODE=none exit — and no
@@ -1283,10 +1282,6 @@ async fn w07_org_api_key_fail_fast() {
         }
     ));
 }
-
-// ---------------------------------------------------------------------------
-// w08 — legacy and none mode: zero change
-// ---------------------------------------------------------------------------
 
 // Covers US-WP-007: on a herald deployment the key-addressed flow keeps working byte for byte
 // next to the new surface (join by key, peer read/write, BAD_SPACE_KEY distinguishable from the

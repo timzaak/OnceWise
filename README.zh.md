@@ -12,7 +12,7 @@ OnceWise Flow 自动化重复的网页操作——反复填写的表单、多步
 - **本地优先**——流程、设置与版本历史全部保存在浏览器本地存储；无账号、无分析、无追踪
 - **按站点生效**——流程只在其编写时指定的站点上运行
 - **你始终掌控**——每条流程到达时一律处于停用状态；由你检查、由你启用，可回滚最近 10 版历史
-- **可选自托管同步**——把选定流程以带版本的脚本分享给同事与设备；没有它扩展照常工作
+- **可选同步**——把选定流程以带版本的脚本分享给同事与设备，可用官方托管服务或自建部署；没有它扩展照常工作
 
 ## 快速开始
 
@@ -30,7 +30,7 @@ OnceWise Flow 自动化重复的网页操作——反复填写的表单、多步
 
 ## 目录结构
 
-- `extension/` — Chrome MV3 扩展（WXT + React）：流程工作台 sidepanel、运行前输入表单、同站跨页续跑、dry-run、「同步」页签
+- `extension/` — Chrome MV3 扩展（WXT + React）：流程工作台 sidepanel、运行前输入表单、同站跨页续跑、定时计划、「同步」页签
 - `backend/` — oncewise-ai-sync 数据同步服务（axum + PostgreSQL；密钥空间无账号体系，Herald 门禁部署下另有按角色与邀请码管理的组织绑定空间）
 - `skills/` — 三个 Agent Skills（`oncewise-setup` / `oncewise-flow` / `oncewise-message`）及其交接所用的本机消息宿主（根目录 `.claude-plugin/marketplace.json` 将三者声明为同一插件）
 - `demo/` — Playwright 扩展集成测试

@@ -6,6 +6,7 @@
 > 2026-09-30 修订：流程交接通道切换为 Chrome Native Messaging 本机通道（见 [`support-native-messaging.md`](support-native-messaging.md)）——US-SSBA-008 由 US-NM-002 取代，US-SSBA-005 场景 2 按 US-NM-003 修订，US-SSBA-007 的交付引用按本机通道理解；其余故事不变。
 > 2026-10-02 修订：放开同站顺序跨页（见 [`cross-page-flow.md`](cross-page-flow.md)）——US-SSBA-010 新增跨页继续场景（场景 7），US-SSBA-004/US-SSBA-002 增补跨页注记；跨页完整故事见 US-CPF-001。其余故事不变。
 > 2026-11-02 修订：受约束步骤树新增上报请求步骤（见 [`support-http.md`](support-http.md)）——US-SSBA-010 步骤词汇扩展，US-SSBA-003 步骤词汇与失败环节注记，US-SSBA-002 失败环节类型注记；上报完整故事见 US-HTP-001～004。其余故事不变。
+> 2026-11-25 修订：触发模型新增定时触发（见 [`support-scheduler.md`](support-scheduler.md)）——US-SSBA-010 触发面增加定时来源，US-SSBA-004 防重放边界覆盖定时与手动并发，US-SSBA-002 失败提示通道同时承载定时错过与到点门禁失败；定时完整故事见 US-SCH-001～005。其余故事不变。
 
 ## 用户故事
 
@@ -173,6 +174,7 @@ Then 运行在到达的声明页继续执行，直到最后一页完成；同次
 
 > 跨页完整语义（新标签页变体、页间等待超时、意外中断保守取消、跨页防重放、失败页定位）的验收标准见 [`cross-page-flow.md`](cross-page-flow.md)（US-CPF-001）。
 > 2026-11-02：步骤树词汇新增上报请求节点（把已采集数据上报到流程声明的 https 端点），完整验收标准见 [`support-http.md`](support-http.md)（US-HTP-001～004）。
+> 2026-11-25：触发面增加定时来源——已启用流程可建立设备本机定时计划，到点在匹配标签页或自动前台打开的入口页执行，进入同一运行管线；页面特征门禁仍是启动前提，错过不补跑（完整验收标准见 [`support-scheduler.md`](support-scheduler.md) US-SCH-001～003）。
 
 ### 故事 6：提交类动作自动执行且按业务实例防重放 [US-SSBA-004]
 
@@ -214,6 +216,7 @@ Then 同一业务实例只有一个执行者完成提交；另一侧不重复提
 ```
 
 > 2026-10-02：业务实例占用跨页面保持——跨页运行中断或失败后，同一单据的再次进入不重放；继续执行时复核业务标识，不同或歧义即取消（跨页防重放见 [`cross-page-flow.md`](cross-page-flow.md) US-CPF-001 场景 4/5）。
+> 2026-11-25：防重放边界覆盖定时与手动并发——定时运行与手动触发共用单运行锁与业务实例占用，同一业务实例不重复提交；多计划同时到点各自独立，同业务实例按占用串行（见 [`support-scheduler.md`](support-scheduler.md) US-SCH-004）。
 
 ### 故事 7：查看实际触发失败原因 [US-SSBA-002]
 
@@ -249,6 +252,7 @@ Then 不新增失败提示
 
 > 2026-10-02：跨页流程的失败明细增加页定位（失败发生在哪一页），与节点、循环位置、环节叠加（见 [`cross-page-flow.md`](cross-page-flow.md) US-CPF-001 场景 3/6）。
 > 2026-11-02：失败环节类型覆盖上报请求（网络不可达、非成功状态、等待超时、响应超限、凭据缺失，见 [`support-http.md`](support-http.md) US-HTP-002 场景 3）。
+> 2026-11-25：失败提示通道同时承载定时触发的错过与到点门禁失败（页面不符、输入未就绪），同样成功后清除、浏览器重启后不再可见（见 [`support-scheduler.md`](support-scheduler.md) US-SCH-003）。
 
 ### 故事 8：流程管理与维护 [US-SSBA-005]
 

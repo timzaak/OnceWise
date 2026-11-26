@@ -83,11 +83,13 @@ export default function SyncMembersView({ spaceId, spaceName, myRole, myUserId, 
   }, [load]);
 
   // Every member operation re-pulls the list afterwards: the list is both the verification
-  // path for an uncertain outcome and the immediate reflection of the change
+  // path for an uncertain outcome and the immediate reflection of the change. `onApplied` runs
+  // once the op has taken effect — or may have, on an uncertain outcome
   const runOp = async (
     action: () => Promise<ExtensionResponse | undefined>,
     fallback: string,
     confirmText?: string,
+    onApplied?: () => void,
   ) => {
     if (confirmText !== undefined && !window.confirm(confirmText)) return;
     setBusy(true);
@@ -99,12 +101,15 @@ export default function SyncMembersView({ spaceId, spaceName, myRole, myUserId, 
         // is the verification path, so re-pull it; the notice lands AFTER the reload so a
         // successful re-pull cannot wipe the failure feedback with its setNotice(null)
         if (res !== undefined && (res.reason === 'timeout' || res.reason === 'operation-uncertain')) {
+          onApplied?.();
           await load();
         }
         setNotice(text);
         return;
       }
       setNotice(null);
+      // Depends on the op's effect alone, so it never waits behind the re-pull below
+      onApplied?.();
       await load();
       onChanged();
     } finally {
@@ -222,6 +227,9 @@ export default function SyncMembersView({ spaceId, spaceName, myRole, myUserId, 
                         () => call({ type: 'sp:syncRemoveMember', spaceId, userId: m.userId }),
                         t('sync.error.generic'),
                         t('sync.members.confirmRemove', { name: identityOf(m) }),
+                        // A removal voids the space's outstanding codes — a code shown here
+                        // from an earlier issue is one of them
+                        () => setInvite(null),
                       )
                     }
                   >

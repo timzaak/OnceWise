@@ -12,7 +12,7 @@ Same page, same form, same twenty clicks, every day — OnceWise Flow does them 
 - **Local-first** — flows, settings and version history stay in your browser; no accounts, no analytics, no tracking
 - **Site-scoped** — a flow only runs on the site it was written for
 - **You stay in charge** — every flow arrives disabled; you review it, enable it yourself, and can roll back through a 10-version history
-- **Optional self-hosted sync** — share selected flows as versioned scripts across devices and teammates; the extension works fully without it
+- **Optional sync** — share selected flows as versioned scripts across devices and teammates, through the official hosted service or your own deployment; the extension works fully without it
 
 ## Get started
 
@@ -30,7 +30,7 @@ The full walkthrough — source-code build, MCP setup, native-host troubleshooti
 
 ## Repository layout
 
-- `extension/` — Chrome MV3 extension (WXT + React): flow workbench sidepanel, pre-run input forms, same-site cross-page continuation, dry-run, sync tab
+- `extension/` — Chrome MV3 extension (WXT + React): flow workbench sidepanel, pre-run input forms, same-site cross-page continuation, timed schedules, sync tab
 - `backend/` — oncewise-ai-sync data-sync service (axum + PostgreSQL; key spaces with no account system, plus org-bound spaces with roles and invites on Herald-gated deployments)
 - `skills/` — the three Agent Skills (`oncewise-setup` / `oncewise-flow` / `oncewise-message`) and the native-messaging host they hand over through (declared as one plugin in `.claude-plugin/marketplace.json`)
 - `demo/` — Playwright extension integration tests

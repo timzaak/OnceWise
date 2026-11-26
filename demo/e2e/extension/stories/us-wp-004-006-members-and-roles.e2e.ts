@@ -4,7 +4,7 @@ import { dropHeraldOwnerMembership, startHeraldServer } from '../herald'
 import {
   ackOnboarding, autoAcceptDialogs, clickLeaveViaRow, connectAndExpectSignIn, createSpaceViaUi,
   demoFlowJson, demoteToMember, expectFlowStatus, expectLeaveProtectedRefusal, issueAnotherInvite,
-  issueInviteAndReadCode, joinSpaceViaUi, leaveSpaceViaRow, memberCard,
+  inviteCard, issueInviteAndReadCode, joinSpaceViaUi, leaveSpaceViaRow, memberCard,
   expectMemberRow, expectMemberRowButtonsAbsent, expectNoShareCodeRow, expectReadOnlyScriptDetail,
   expectReadOnlyScriptsView, expectSpaceAccessDenied, expectSpaceRoleBadge, flowCardLocation,
   openFlowsTab, openScriptDetail, openSpaceMembers, prepareParticipant,
@@ -23,7 +23,9 @@ import {
 // T2 US-WP-005 场景 1/2：owner 提升成员 → 被提升者重进即可写（保存/发布成功）→ 第三成员见
 // 新版本提示照常拉取；随后降级 → 其下一次进入写入口隐藏。
 // T3 US-WP-005 场景 3：移除近即时生效——被移除者下一次访问「无访问权」文案、本机数据与条目
-// 保留、可忘记；旧码不能重入（已用码 409）。
+// 保留、可忘记；旧码不能重入（已用码 409；移除前签发、尚未使用的码随移除作废，按「无效」拒绝）。
+// T3b US-WP-005 场景 3 的结果不确定面：移除请求已提交但应答丢失——面板按「结果不确定」复拉核对，且不再把
+// 已随移除作废的码当有效码展示。
 // T4 US-WP-005 场景 4 + US-WP-006 场景 2：owner 行无移除/降级（UI 面即保护）、非 owner 无转移
 // 入口；owner 自退 409；最后管理员档保护沿后端 w04 的异常态构造（删除 owner 成员行）后自退 409。
 // T5 US-WP-006 场景 1：所有权一步转移——成员列表即时翻转（新 owner 标记、旧 owner=admin）、
@@ -62,6 +64,29 @@ async function joinAsMember(
   await prepareParticipant(p, email, origin)
   await joinSpaceViaUi(p.page, invite, { timeout: 30_000 })
   await expectSpaceRoleBadge(p.page, spaceName, 'member')
+}
+
+// 让后台发出的成员移除请求「服务端已提交、应答丢失」：真实 fetch 先拿到服务端应答，再挂起到调用方的
+// 截止时间——面板按「结果不确定」处理，而服务端的移除与作废已经落地。
+async function loseMemberRemovalAnswer(context: import('@playwright/test').BrowserContext): Promise<void> {
+  const worker = context.serviceWorkers().find(w => w.url().startsWith('chrome-extension://'))
+  if (worker === undefined) throw new Error('扩展 service worker 不在运行，无法注入故障')
+  await worker.evaluate(() => {
+    const scope = self as unknown as { fetch: typeof fetch }
+    const real = scope.fetch.bind(self)
+    scope.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await real(input, init)
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      const isMemberRemoval = (init?.method ?? 'GET').toUpperCase() === 'DELETE'
+        && /\/api\/spaces\/[^/]+\/members\/[^/?]+$/.test(url)
+      if (!isMemberRemoval) return response
+      return await new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
+        })
+      })
+    }) as typeof fetch
+  })
 }
 
 test('T1 只读成员：浏览与拉取照常；写与管理入口隐藏并显示只读提示', async ({
@@ -186,6 +211,8 @@ test('T3 移除近即时生效：下一次访问无权限、本机数据保留�
   let c: Participant | null = null
   try {
     const inviteC = await ownerPrep(page, context, extensionId, server.origin, 'Revoke Space', 'Doomed Script')
+    // 移除之前签发、从未使用的在途码——代表被移除者可能仍持有的旧码
+    const heldInvite = await issueAnotherInvite(page, inviteC)
 
     c = await launchParticipant(demoHeadless, 'us-wp-004 C')
     await joinAsMember(c, EMAIL_C, server.origin, inviteC, 'Revoke Space')
@@ -211,11 +238,54 @@ test('T3 移除近即时生效：下一次访问无权限、本机数据保留�
     await submitJoinCode(c.page, inviteC)
     await expect(c.page.locator('p.sp-error', { hasText: /already been used|已被使用/ })).toBeVisible({ timeout: 30_000 })
 
+    // 移除前签发、尚未使用的邀请码随移除一并作废：C 即使仍持有在途码，也按「邀请码无效」被拒
+    await submitJoinCode(c.page, heldInvite)
+    await expect(c.page.locator('p.sp-error', { hasText: /not valid|无效/ })).toBeVisible({ timeout: 30_000 })
+
     // 本机清单条目可自行忘记：忘记后行消失（本机流程保留）
     await spaceGroup(c.page, 'Revoke Space').getByRole('button', { name: /^(Forget|忘记)$/ }).click()
     await expect(spaceGroup(c.page, 'Revoke Space')).toHaveCount(0, { timeout: 15_000 })
     await openFlowsTab(c.page)
     await expect(flowCardLocation(c.page, 'Doomed Script flow')).toBeVisible()
+  } finally {
+    await c?.dispose()
+    await server.cleanup()
+  }
+})
+
+test('T3b 移除应答丢失（结果不确定）：列表核对为已移除，面板清掉已作废的邀请码', async ({
+  page, context, extensionId, demoHeadless,
+}) => {
+  test.setTimeout(360_000)
+  const { server } = await startHeraldServer([EMAIL_A, EMAIL_C])
+  autoAcceptDialogs(page)
+  let c: Participant | null = null
+  try {
+    const inviteC = await ownerPrep(page, context, extensionId, server.origin, 'Lost Answer Space', 'Doomed Script')
+
+    c = await launchParticipant(demoHeadless, 'us-wp-004 C')
+    await joinAsMember(c, EMAIL_C, server.origin, inviteC, 'Lost Answer Space')
+
+    // 重开成员视图刷新列表；签发一枚留在面板上的码——移除会让它随之作废
+    await openSyncTab(page)
+    await openSpaceMembers(page, 'Lost Answer Space')
+    await expectMemberRow(page, 'us-wp-004-c', 'member')
+    const shownInvite = await issueInviteAndReadCode(page)
+    await expect(inviteCard(page).locator('input[readonly]')).toHaveValue(shownInvite)
+
+    await loseMemberRemovalAnswer(context)
+    await memberCard(page, 'us-wp-004-c').getByRole('button', { name: /^(Remove|移除)$/ }).click()
+    // 结果不确定 → 面板复拉列表核对：服务端确已移除
+    await expect(memberCard(page, 'us-wp-004-c')).toHaveCount(0, { timeout: 60_000 })
+    await expect(page.locator('p.sp-error', { hasText: /timed out after it was sent|发出后超时/ })).toBeVisible()
+
+    // 面板不再把这枚已作废的码当有效码展示
+    await expect(inviteCard(page).locator('input[readonly]')).toHaveCount(0)
+
+    // 服务端侧：C 凭这枚移除前签发的码不能重入
+    await openSyncTab(c.page)
+    await submitJoinCode(c.page, shownInvite)
+    await expect(c.page.locator('p.sp-error', { hasText: /not valid|无效/ })).toBeVisible({ timeout: 30_000 })
   } finally {
     await c?.dispose()
     await server.cleanup()

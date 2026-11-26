@@ -1,16 +1,19 @@
 // Org-bound space member and invite endpoints (herald mode only — routes/mod.rs mounts this
 // module exclusively there). Membership and role facts live only in Herald and are proxied
 // live: nothing is stored locally and no member identity reaches a log line. The only local
-// state is the invite-code hash table. Two spots deliberately hold a database transaction
+// state is the invite-code hash table. Three spots deliberately hold a database transaction
 // across Herald round trips: org-bound creation (the tx holds the freshly inserted space
-// row — no other tx can contend for it) and invite redemption (the tx holds the invite row's
-// lock — only same-code requests queue behind it). Both trade a bounded hold for "commit
-// implies a complete state; failure leaves zero residue and never burns a code". The
-// redemption hold spans up to two Herald calls (10 s timeout each) on one pool connection
-// (pool max 8), so concurrent stalled redemptions — Herald black-holed while enough
-// different codes redeem — can occupy the whole pool and stall unrelated key-space traffic
-// for the timeout window. Accepted: moving the Herald calls outside the tx would reorder
-// the used/expired/member decisions and their error priorities.
+// row — no other tx can contend for it), invite redemption (the tx holds the invite row's
+// lock — only same-code requests queue behind it) and member removal (the tx holds the
+// deleted rows of the space's outstanding invites — only redemptions of those codes queue
+// behind it). All trade a bounded hold for "commit implies a complete state; failure leaves
+// zero residue and never burns a code". The redemption hold spans up to two Herald calls
+// (10 s timeout each) on one pool connection (pool max 8), so concurrent stalled
+// redemptions — Herald black-holed while enough different codes redeem — can occupy the
+// whole pool and stall unrelated key-space traffic for the timeout window. Accepted: moving
+// the Herald calls outside the tx would reorder the used/expired/member decisions and their
+// error priorities. The removal hold spans one Herald call behind the admin tier, so stalled
+// removals are bounded by the number of admins acting at once.
 
 use std::collections::HashMap;
 
@@ -63,6 +66,12 @@ fn require_uuid_shape(value: &str) -> Result<(), ApiError> {
     }
 }
 
+/// The path id is accepted in any hex case while the caller's own id arrives in the form
+/// Herald reports it, so self-addressing is judged case-insensitively.
+fn is_self_addressed(target: &str, caller: &str) -> bool {
+    target.eq_ignore_ascii_case(caller)
+}
+
 /// 32 base62 characters from rejection-sampled CSPRNG bytes (values ≥ 248 = 62·4 are dropped,
 /// so the alphabet mapping stays unbiased). The full wire form "{spaceId}#iv-{body}" is what
 /// gets hashed — the space prefix inside the hash pins a code to its space.
@@ -98,6 +107,21 @@ pub(crate) fn parse_invite_code(raw: &str) -> Result<(String, String), ApiError>
         return Err(invalid());
     }
     Ok((space_id.to_string(), body.to_string()))
+}
+
+/// Void every invite of the space that nobody has redeemed — a voided code then answers
+/// INVITE_INVALID like any unknown one. Redeemed rows are left alone: their answers are
+/// refusals already.
+async fn void_outstanding_invites(
+    executor: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
+    space_id: &str,
+) -> Result<(), ApiError> {
+    sqlx::query("DELETE FROM space_invites WHERE space_id = $1 AND used_at IS NULL")
+        .bind(space_id)
+        .execute(executor)
+        .await
+        .map(|_| ())
+        .map_err(ApiError::internal)
 }
 
 /// The caller's resolved entry into an org-bound space: the organization id plus the caller's
@@ -549,7 +573,9 @@ pub async fn update_space_member_role(
 ///
 /// Removing someone else is an admin-tier capability; `target = self` is open to any member.
 /// Owner and last-admin-tier protections (including self-exit) are enforced by Herald and
-/// surface as 409s.
+/// surface as 409s. A removal also voids every invite of the space still unredeemed — all of
+/// them predate it, so one in the removed member's hands would readmit them; anyone still to
+/// join needs a newly issued code. Self-exit is not a removal and voids nothing.
 #[utoipa::path(
     delete,
     path = "/api/spaces/{spaceId}/members/{userId}",
@@ -560,7 +586,7 @@ pub async fn update_space_member_role(
     ),
     security(("bearer_auth" = [])),
     responses(
-        (status = 204, description = "Member removed / self left"),
+        (status = 204, description = "Member removed / self left; a removal also voids every invite of the space that is still unredeemed"),
         (status = 400, body = ErrorBodyDto, description = "INVALID_INPUT: key-addressed space or non-UUID target"),
         (status = 401, body = ErrorBodyDto, description = "AUTH_REQUIRED"),
         (status = 403, body = ErrorBodyDto, description = "SPACE_ACCESS_DENIED / SPACE_ROLE_REQUIRED (removing someone else as a read-only member)"),
@@ -578,7 +604,7 @@ pub async fn remove_space_member(
         return Err(ApiError::AuthRequired);
     };
     require_uuid_shape(&user_id)?;
-    let self_removal = user_id == identity.user_id;
+    let self_removal = is_self_addressed(&user_id, &identity.user_id);
     let need = if self_removal {
         SpaceAccess::Read
     } else {
@@ -608,9 +634,39 @@ pub async fn remove_space_member(
     } else {
         Some(identity.user_id.as_str())
     };
-    org.remove_member(&entry.org_id, &user_id, actor)
-        .await
-        .map_err(map_org_error)?;
+    if self_removal {
+        org.remove_member(&entry.org_id, &identity.user_id, actor)
+            .await
+            .map_err(map_org_error)?;
+    } else {
+        // The void shares one transaction with the Herald call so the two land together or
+        // not at all: a removal Herald refuses (409) rolls the void back, and a concurrent
+        // redemption of a voided code queues on the deleted row and then finds none
+        // (INVITE_INVALID) — there is no moment at which the member is gone and their code
+        // still redeems.
+        let mut tx = write_transaction(&state.pool).await?;
+        void_outstanding_invites(&mut *tx, &space_id).await?;
+        org.remove_member(&entry.org_id, &user_id, actor)
+            .await
+            .map_err(map_org_error)?;
+        if let Err(err) = tx.commit().await {
+            // The Herald removal above cannot roll back with the local transaction. Void the
+            // codes again outside it, so a local failure still closes the re-entry path; if
+            // that fails too, the residue is an operations problem, logged without any
+            // member identity.
+            if void_outstanding_invites(&state.pool, &space_id)
+                .await
+                .is_err()
+            {
+                tracing::warn!(
+                    action = "remove_member_void_retry",
+                    space = %space_id,
+                    "local commit failed and voiding the outstanding invites failed — codes issued before the removal are still redeemable"
+                );
+            }
+            return Err(ApiError::internal(err));
+        }
+    }
     tracing::info!(action = "remove_member", space = %space_id, self_removal, "member removed");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -736,6 +792,20 @@ mod tests {
                 "{bad:?} must be INVALID_INPUT"
             );
         }
+    }
+
+    #[test]
+    fn self_addressing_ignores_hex_case() {
+        // A removal voids the space's outstanding invites while a self-exit voids nothing, so
+        // a case variant of the caller's own id must still read as self-addressed.
+        assert!(is_self_addressed(
+            "0F0A6C6E-5F2F-4C9E-9A2B-3D4E5F6A7B8C",
+            "0f0a6c6e-5f2f-4c9e-9a2b-3d4e5f6a7b8c"
+        ));
+        assert!(!is_self_addressed(
+            "0f0a6c6e-5f2f-4c9e-9a2b-3d4e5f6a7b8d",
+            "0f0a6c6e-5f2f-4c9e-9a2b-3d4e5f6a7b8c"
+        ));
     }
 
     #[test]

@@ -53,7 +53,7 @@
 
 ### 2.3 依赖项
 - 用户自有 AI 工具与流程交接通道（Agent Skill + 本机通道，见 [`core/support-native-messaging.md`](support-native-messaging.md)）——多页流程的产出、校验与保存沿用该通道
-- 既有触发与防重放模型（入口页两类触发、业务实例占用）——跨页能力在其上扩展，不另建机制
+- 既有触发与防重放模型（字段变化、进入页面两类触发与业务实例占用；定时触发见 [`core/support-scheduler.md`](support-scheduler.md)）——跨页能力在其上扩展，不另建机制
 - 受控测试页本地环境（本地静态页面，无外部服务依赖）
 
 ---

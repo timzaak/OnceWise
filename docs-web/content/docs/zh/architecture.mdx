@@ -3,7 +3,7 @@ title: 架构
 description: 仓库如何分层、各部分跑在哪里，以及为什么这样组合。
 ---
 
-一个仓库装着四个可部署件：Chrome 扩展、可选的同步后端、把 AI 工具与扩展连起来的 agent skills，以及本文档站。一切都围绕同一个立场构建：浏览器是数据主体，唯一的远程组件是你自己选择指向的同步服务器。
+一个仓库装着四个可部署件：Chrome 扩展、可选的同步后端、把 AI 工具与扩展连起来的 agent skills，以及本文档站。一切都围绕同一个立场构建：浏览器是数据主体，唯一的远程组件是同步服务器——默认是官方托管服务，也可以是自建部署。
 
 ```mermaid
 flowchart LR
@@ -15,7 +15,7 @@ flowchart LR
     ct["内容脚本<br/>(步骤引擎)"]
     page["目标页面"]
   end
-  sync["oncewise-ai-sync<br/>(可选，自托管)"]
+  sync["oncewise-ai-sync<br/>(可选的同步服务器)"]
 
   agent -- "Chrome DevTools MCP:<br/>检查、验证" --> page
   agent -- "client.mjs（本机 IPC）" --> host
@@ -23,7 +23,7 @@ flowchart LR
   bg -- "按流程站点注入" --> ct
   ct -- "读取与操作" --> page
   sp -- "启用、输入、历史" --> bg
-  bg -- "脚本与版本<br/>（仅在配置时）" --> sync
+  bg -- "脚本与版本<br/>（仅在显式同步操作时）" --> sync
 ```
 
 ## 仓库布局
@@ -49,7 +49,7 @@ WXT + React，四个入口：
 - **sidepanel**——单击工具栏图标看到的工作台：流程列表、带输入与启用控制的编辑器、版本历史、"用 AI 优化"授权、同步页签。
 - **import 页面**——AI 交付的确认面，附带一个只有启用/暂停开关的紧凑流程列表。
 
-`lib/` 约 29 个模块，分三个家族：`flow-*`（schema、编译器、DOM 驱动、试运行展示）、`import-*`（交接接收）、`sync-*`（API 客户端、存储、Herald 登录）。Vitest 单测与 `lib/` 逐文件对应；故事级验收在 `demo/e2e/extension/` 的 Playwright 套件，用自管理的 fixture 加载真实构建产物。
+`lib/` 的 TypeScript 模块分三个家族——`flow-*`（schema、编译器、DOM 驱动、运行期、定时计划、上报）、`import-*`（交接接收）、`sync-*`（API 客户端、存储、Herald 登录）——另有 `storage.ts`、`messaging.ts`、`i18n.ts` 等独立模块。Vitest 单测与 `lib/` 逐文件对应；故事级验收在 `demo/e2e/extension/` 的 Playwright 套件，用自管理的 fixture 加载真实构建产物。
 
 两个值得知道的设计取舍：
 

@@ -49,6 +49,8 @@ A page fingerprint is a narrow, stable fragment: `urlIncludes` matches a substri
 
 Each flow starts at most once per document and business instance, and submit-like flows additionally claim the business instance for the browser session, so the same order is never submitted twice.
 
+A flow can also start on a **schedule**. A schedule is not part of the flow file: you create it per device in the flow details in the side panel (a daily or weekly wall-clock time, or a fixed interval, plus the entry URL), and the next due time is shown in its row. When it is due, the extension runs the flow in an already-open matching tab, or opens the entry URL in a foreground tab; the page still has to pass the flow's fingerprint, and the run goes through the same pipeline as a manual trigger. A due time missed because the browser was not running is reported and not replayed. Schedules stay on the device that created them — they are neither synced nor versioned with the flow.
+
 ## Step kinds
 
 | `kind` | Behavior |
@@ -78,7 +80,7 @@ A flow can declare typed inputs instead of hardcoding values that change between
 
 Types are `text`, `number`, `single`, `checkbox`, `date`, `time` and `multi`. You fill and save the values in the flow details in the side panel; the definitions travel with the flow, but your values stay on your device and are excluded from sync and logs. Steps consume them through references — `"value": { "ref": "inputs.phone" }` in a `setInputValue` action, for example; a bare string `"inputs.phone"` would be literal text.
 
-Saving input values does not start a run. The enabled flow still waits for its trigger, and a run uses the input snapshot taken at start. If an attempt was skipped because a required input was missing, save the values and re-enter (or reload) the entry page to trigger again.
+Saving input values does not start a run. The enabled flow still waits for its trigger, and a run uses the input snapshot taken at start. If an attempt was skipped because a required input was missing, save the values and re-enter (or reload) the entry page to trigger again. A scheduled run reads the saved values when it is due; a missing or invalid required input skips that run with a notice naming the field.
 
 ## Cross-page wizards
 

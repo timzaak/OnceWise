@@ -167,7 +167,7 @@
 | 预演上报语义 | 原结论：预演（dry-run）执行到上报步骤真实发送，与既有"预演提交即真实提交"完全一致（同一状态机、同一真实副作用、同一业务占用），不新增副作用桩。2026-11-25 修订：通用预演入口已按基线 FR7 移除，上报不存在预演路径，后台对全部上报请求统一执行流程绑定与目的地钉扎校验 | §4.1、§5.1 FR2 | 用户 2026-11-01 确认；2026-11-25 用户裁决（评审遗留 R2） |
 | 上报请求取消 | 运行被取消时进行中的上报请求随即中止（内容侧取消消息 + 后台在途登记表；关闭标签页随标签页关闭中止）；已发出的请求可能已送达，不重试 | §4.1、§5.1 FR2 | 用户 2026-11-25 裁决（评审遗留 R10） |
 
-> 沿用的基线决策（站点范围、AI 与扩展职责、高风险动作语义、启用与交付边界、受约束步骤树运行期）与跨能力决策（跨页范围与中断、定时触发协同、设备本机归属模式、输入边界与异常处理）已内化于对应正式 PRD 的产品事实，本 PRD 不重复登记。
+> 沿用的基线决策（站点范围、AI 与扩展职责、高风险动作语义、启用与交付边界、受约束步骤树运行期）与跨能力决策（跨页范围与中断、定时触发协同、设备本机归属模式、输入边界与异常处理）已内化于对应正式 PRD 的产品事实——基线见 [`core/self-service-browser-automation.md`](self-service-browser-automation.md)，跨页见 [`core/cross-page-flow.md`](cross-page-flow.md)，定时触发协同见 [`core/support-scheduler.md`](support-scheduler.md)，输入边界见 [`core/form-support.md`](form-support.md)；本 PRD 不重复登记。
 
 ---
 
@@ -176,6 +176,7 @@
 - 基线 PRD：[`core/self-service-browser-automation.md`](self-service-browser-automation.md)（本能力扩展其步骤词汇并修订 §4.1 数据边界与 §6 网络表述）
 - 跨页能力 PRD：[`core/cross-page-flow.md`](cross-page-flow.md)
 - 输入能力 PRD：[`core/form-support.md`](form-support.md)
+- 定时执行 PRD：[`core/support-scheduler.md`](support-scheduler.md)（三类触发中的定时来源；上报凭据沿用其设备本机归属模式）
 - 同步能力 PRD：[`core/data-sync.md`](data-sync.md)（"仅同步流程定义"边界不变）
 - 流程格式文档：`skills/oncewise-flow/references/flow-format.md`（与扩展校验器同一事实源，含上报步骤小节）
 - 隐私政策与商店声明：[`docs/privacy-policy.md`](../../privacy-policy.md)、[`docs/store-listing/privacy-declarations.md`](../../store-listing/privacy-declarations.md)

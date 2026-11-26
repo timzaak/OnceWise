@@ -3,7 +3,7 @@ title: Architecture
 description: How the repository is laid out, what runs where, and why the pieces were put together this way.
 ---
 
-One repository holds four deployable pieces: a Chrome extension, an optional sync backend, the agent skills that glue an AI tool to the extension, and this documentation site. Everything is built around one position: the browser is the data master, and the only remote component is a sync server you choose to point at.
+One repository holds four deployable pieces: a Chrome extension, an optional sync backend, the agent skills that glue an AI tool to the extension, and this documentation site. Everything is built around one position: the browser is the data master, and the only remote component is a sync server — the official hosted one by default, or a deployment of your own.
 
 ```mermaid
 flowchart LR
@@ -15,7 +15,7 @@ flowchart LR
     ct["Content script<br/>(step engine)"]
     page["Target page"]
   end
-  sync["oncewise-ai-sync<br/>(optional, self-hosted)"]
+  sync["oncewise-ai-sync<br/>(optional sync server)"]
 
   agent -- "Chrome DevTools MCP:<br/>inspect, verify" --> page
   agent -- "client.mjs (local IPC)" --> host
@@ -23,7 +23,7 @@ flowchart LR
   bg -- "injects per flow site" --> ct
   ct -- "reads and acts" --> page
   sp -- "enable, inputs, history" --> bg
-  bg -- "scripts + versions<br/>(only if configured)" --> sync
+  bg -- "scripts + versions<br/>(only on explicit sync actions)" --> sync
 ```
 
 ## Repository layout
@@ -49,7 +49,7 @@ WXT + React, four entrypoints:
 - **sidepanel** — the workbench you see when clicking the toolbar icon: flow list, editor with inputs and enable controls, version history, the Optimize-with-AI grant, and the Sync tab.
 - **import page** — the confirmation surface for AI deliveries, plus a compact flow list with enable/pause toggles.
 
-`lib/` holds about 29 modules in three families: `flow-*` (schema, compiler, DOM driver, dry-run presentation), `import-*` (handover intake), and `sync-*` (API client, storage, Herald sign-in). Vitest unit tests mirror `lib/` file-for-file; story-level acceptance lives in the Playwright suite under `demo/e2e/extension/`, which loads the real build output against self-managed fixtures.
+`lib/` holds the extension's TypeScript modules in three families — `flow-*` (schema, compiler, DOM driver, runtime, schedules, upload), `import-*` (handover intake) and `sync-*` (API client, storage, Herald sign-in) — plus standalone modules such as `storage.ts`, `messaging.ts` and `i18n.ts`. Vitest unit tests mirror `lib/` file-for-file; story-level acceptance lives in the Playwright suite under `demo/e2e/extension/`, which loads the real build output against self-managed fixtures.
 
 Two design calls worth knowing:
 

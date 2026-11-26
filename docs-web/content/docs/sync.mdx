@@ -1,9 +1,9 @@
 ---
 title: Sync and spaces
-description: Share selected flows as versioned scripts with teammates via space codes or one-time invites, through an optional self-hosted sync server.
+description: Share selected flows as versioned scripts with teammates via space codes or one-time invites, through an optional sync server — the official hosted service or your own deployment.
 ---
 
-Sync is optional. The extension is local-first: your browser storage is the data master, and everything in [Flows](./flows) works with no server at all. What sync adds is one thing — a place to hand a flow to a teammate as a versioned script, without either of you creating an account.
+Sync is optional. The extension is local-first: your browser storage is the data master, and everything in [Flows](./flows) works with no server at all. What sync adds is one thing — a place to hand a flow to a teammate as a versioned script. The extension itself has no accounts; where a server asks you to sign in, you sign in with an account on that server.
 
 ## Model
 
@@ -16,11 +16,11 @@ Sync is optional. The extension is local-first: your browser storage is the data
 
 Key spaces treat every code holder as an equal: read, write, rename, publish, delete. That fits small mutually-trusting teams; it is not a permission system. If you lose the code, you lose the space — the server keeps no recovery channel, by design.
 
-Org-bound spaces replace the shared secret with roles. The creator is the **owner**; **admins** write, publish and manage members; plain **members** are read-only — they browse and pull exactly like anyone else, and the write and management entries do not appear on their side. Membership is judged live on every request: removing someone takes effect on their next access, and their old invites cannot get them back in. The owner cannot be removed or demoted, a change that would leave the space without any admin is refused, and ownership transfers in one step with the previous owner dropping to admin.
+Org-bound spaces replace the shared secret with roles. The creator is the **owner**; **admins** write, publish and manage members; plain **members** are read-only — they browse and pull exactly like anyone else, and the write and management entries do not appear on their side. Membership is judged live on every request: removing someone takes effect on their next access, and their old invites cannot get them back in — removing a member also voids every invite of the space that is still unused, so issue new ones for anyone still to join. The owner cannot be removed or demoted, a change that would leave the space without any admin is refused, and ownership transfers in one step with the previous owner dropping to admin.
 
 ## Turning sync on
 
-Open the side panel's **Sync** tab and enter the server URL (an [oncewise-ai-sync](./self-hosting) deployment, run by you or someone you trust). The extension probes the server's sign-in mode first:
+Open the side panel's **Sync** tab. A fresh install comes pre-configured for the **official service** — a hosted [oncewise-ai-sync](./self-hosting) deployment run by the extension developer, with no address to enter; sign in there to use it. To use your own server instead, switch **Server type** to **Self-hosted service** and enter its URL (a deployment run by you or someone you trust). Whichever you connect to, the scripts you save into a space live on that server and are governed by its operator — the developer for the official service, or whoever runs your deployment. The extension probes the server's sign-in mode first:
 
 - A server deployed with the default Herald gate shows a login card; signing in opens the server's authorization window once, and the session renews silently afterwards. Credentials live in your browser's local storage.
 - A server deployed with `AUTH_MODE=none` skips sign-in entirely and takes you straight to the spaces.
